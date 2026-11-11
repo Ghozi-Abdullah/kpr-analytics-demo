@@ -225,7 +225,7 @@ function ensureDialog() {
   if (!('closedBy' in HTMLDialogElement.prototype)) {
     dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
   }
-  dlg.addEventListener('close', () => watcher?.disconnect());
+  dlg.addEventListener('close', () => { watcher?.disconnect(); document.documentElement.classList.remove('is-modal'); });
   return dlg;
 }
 
@@ -464,7 +464,10 @@ export function openMapPopout(opts) {
     d.querySelector('[data-mp-close]').addEventListener('click', close);
   };
 
-  if (!d.open) d.showModal();
+  if (!d.open) {
+    document.documentElement.classList.add('is-modal');
+    d.showModal();
+  }
   if (opts.load) {
     loading();
     opts.load().then((res) => { if (!d.open) return; data = res; render(); }).catch((err) => {

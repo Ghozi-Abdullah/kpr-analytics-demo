@@ -219,7 +219,7 @@
 .pop-tabs button[aria-pressed="true"] span { background: rgb(255 255 255 / .2); }
 .pop-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.pop-kpis { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.pop-kpis { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
 .pop-kpis > div { display: grid; align-content: start; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); }
 .pop-kpis dt { font-size: 12px; color: var(--muted); }
 .pop-kpis dd { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
@@ -238,18 +238,33 @@
 .pop-card > p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
 .pop-card > :is(ul, div) { margin-top: 12px; }
 .pop-none { margin-top: 10px !important; }
-.day-bars { display: flex; align-items: flex-end; gap: 3px; height: 84px; }
-.day-bars i { flex: 1; min-width: 0; border-radius: 3px 3px 0 0; background: var(--cakrawala); opacity: .6; }
-.day-bars i:last-child { opacity: 1; background: var(--nusantara); }
-.day-bars i.zero { background: var(--line-2); opacity: 1; }
-.pop-trend-axis { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: var(--muted); }
-.pop-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
-.pop-bars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; align-items: baseline; }
-.pop-bars-name { font-size: 12.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pop-bars-val { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.pop-bars-bar { grid-column: 1 / -1; display: block; height: 7px; border-radius: 99px; background: var(--line-soft); overflow: hidden; }
-.pop-bars-bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
-.pop-bars .late .pop-bars-bar i { background: var(--warn-dot); }
+.pop-say { margin: 6px 0 0 !important; font-size: 15px !important; font-weight: 650; color: var(--ink) !important; }
+.pop-say.is-up { color: var(--warn) !important; }
+.pop-say.is-down, .pop-say.is-good { color: var(--good) !important; }
+.pop-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.pop-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pop-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.pop-chart { position: relative; height: 200px; margin-top: 6px !important; }
+
+.pop-chase { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.pop-chase button {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 0; border-radius: 12px; background: var(--surface-2); font: inherit; text-align: left; color: var(--ink); cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line-soft); transition: background .15s, box-shadow .15s;
+}
+.pop-chase button:hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.pop-chase button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pop-chase button > svg { color: var(--accent); }
+.pop-chase-no { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pop-chase-name { display: grid; min-width: 0; font-size: 13px; font-weight: 600; }
+.pop-chase-name small, .pop-chase-fact small { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.pop-chase-fact { display: grid; justify-items: end; font-size: 12.5px; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+.pop-chase-fact b { font-weight: 700; color: var(--ink); }
+.pop-chase-fact b.late-t { color: var(--warn); }
+@media (max-width: 560px) {
+  .pop-chase button { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .pop-chase-fact { grid-column: 2 / -1; justify-items: start; text-align: left; }
+}
 .pop-table-wrap { overflow-x: auto; }
 .pop-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .pop-table th, .pop-table td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); text-align: right; white-space: nowrap; }

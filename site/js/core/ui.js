@@ -37,6 +37,7 @@ export function openDetail({ title, subtitle = '', html, footer = '', tone = '' 
     dlg.setAttribute('aria-labelledby', 'detail-dialog-title');
     dlg.setAttribute('closedby', 'any');
     document.body.appendChild(dlg);
+    dlg.addEventListener('close', () => document.documentElement.classList.remove('is-modal'));
     if (!('closedBy' in HTMLDialogElement.prototype)) {
       dlg.addEventListener('click', (e) => {
         if (e.target !== dlg) return;
@@ -51,7 +52,10 @@ export function openDetail({ title, subtitle = '', html, footer = '', tone = '' 
       <button class="icon-btn" type="button" data-close aria-label="Tutup">${icon('close')}</button></div>
     <div class="dialog-body detail-body" tabindex="-1">${html}</div>${footer ? `<div class="detail-foot">${footer}</div>` : ''}`;
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
-  if (!dlg.open) dlg.showModal();
+  if (!dlg.open) {
+    document.documentElement.classList.add('is-modal');
+    dlg.showModal();
+  }
   dlg.querySelector('.detail-body').scrollTop = 0;
   return dlg;
 }

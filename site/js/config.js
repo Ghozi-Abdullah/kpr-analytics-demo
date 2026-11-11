@@ -114,6 +114,10 @@ export const SLA_SKIP_PROSES = ['ditolak', 'tolak'];
 export const SLA_DETAIL_DAYS = 30;
 export const SLA_DETAIL_TOP = 8;
 export const SLA_CARD_RANGE = { analisa: 'umur', cair: 'lama' };
+export const SLA_FLOW_NEXT = { prakarsa: 'analisa', analisa: 'putusan', putusan: 'cair' };
+export const SLA_FLOW_RECENT = 7;
+export const SLA_CHASE_TOP = 5;
+export const SLA_CHASE_MIN = 3;
 export const SLA_STAGE_COLOR = { prakarsa: '#71C5E8', analisa: '#307FE2', putusan: '#0857C3', cair: '#06357A' };
 export const SLA_CRS_ORDER = ['Risiko sangat rendah', 'Risiko rendah', 'Risiko cukup rendah', 'Risiko sedang',
   'Risiko perlu mendapat perhatian', 'Risiko cukup tinggi', 'Risiko tinggi'];
