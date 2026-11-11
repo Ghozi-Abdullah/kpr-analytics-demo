@@ -1,5 +1,6 @@
 dialog { width: min(780px, calc(100vw - 32px)); max-height: min(82vh, 780px); padding: 0; border: 0; border-radius: 22px; background: var(--surface); color: var(--ink); box-shadow: 0 40px 90px rgb(0 0 0 / .28); }
-dialog::backdrop { background: rgb(0 0 0 / .26); backdrop-filter: blur(3px); }
+dialog::backdrop { background: rgb(11 33 71 / .34); }
+html:has(dialog[open]) :is(.board, .page-hero) :is(*, *::before, *::after) { animation-play-state: paused !important; }
 .dialog-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 22px 12px; }
 .dialog-head h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.015em; }
 .dialog-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
