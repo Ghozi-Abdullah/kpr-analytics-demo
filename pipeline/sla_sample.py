@@ -17,6 +17,9 @@ JOBS = {"Fix Income": [("KPR Perorangan PNS / BUMN", 35, "payroll"), ("KPR Peror
         "Non Fix Income": [("KPR Perorangan Profesional", 35, "nonpayroll"), ("KPR Perorangan Wiraswasta", 65, "sme")]}
 SEED = 20261110
 WINDOW_DAYS = 125
+PER_DAY = 41.6
+SPREAD_RECENT = 0.7
+SPREAD_EVEN = 0.9
 WEEKEND_KEEP = 0.55
 CAIR_FLOOR = 0.08
 CAIR_CURVE = 1.3
@@ -29,9 +32,9 @@ def _month_progress(d: date) -> float:
     days = calendar.monthrange(d.year, d.month)[1]
     return (d.day - 1) / max(1, days - 1)
 
-def _work_day(r: random.Random, start0: date) -> date:
+def _work_day(r: random.Random, start0: date, span: int, spread: float) -> date:
     while True:
-        d = start0 + timedelta(days=int((WINDOW_DAYS + 1) * (r.random() ** 0.7)))
+        d = start0 + timedelta(days=int((span + 1) * (r.random() ** spread)))
         if d.weekday() < 5 or r.random() < WEEKEND_KEEP:
             return d
 
@@ -59,9 +62,13 @@ def _rising_cair(rows: list[dict], today: date) -> None:
         for row, day in zip(group, slots):
             row["tgl_cair"] = day
 
-def simulate(pairs: list[tuple[str, str]], today: date, count: int = 5200, seed: int = SEED, hours: bool = True) -> list[dict]:
+def simulate(pairs: list[tuple[str, str]], today: date, count: int | None = None, seed: int = SEED, hours: bool = True,
+             start: date | None = None) -> list[dict]:
     r = random.Random(seed)
-    start0 = today - timedelta(days=WINDOW_DAYS)
+    start0 = start or today - timedelta(days=WINDOW_DAYS)
+    span = (today - start0).days
+    spread = SPREAD_EVEN if start else SPREAD_RECENT
+    count = count or round(PER_DAY * span)
     rows = []
     for n in range(1, count + 1):
         ro, kanca = r.choice(pairs)
@@ -73,7 +80,7 @@ def simulate(pairs: list[tuple[str, str]], today: date, count: int = 5200, seed:
             typ = "lnp"
         nominal = round(max(80.0, r.lognormvariate(math.log(520), 0.55)), 1) * 1_000_000
         clf = nominal > 900_000_000 or r.random() < 0.15
-        start = _work_day(r, start0)
+        start = _work_day(r, start0, span, spread)
         slow = 1.6 if income == "Non Fix Income" else 1.0
         d1 = max(0, int(r.expovariate(1 / (1.6 * slow))))
         d2 = max(0, int(r.expovariate(1 / ((2.6 if clf else 1.7) * slow))))

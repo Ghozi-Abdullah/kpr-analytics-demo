@@ -15,7 +15,7 @@ import sla_sample
 
 SEED = 20261104
 START = date(2026, 1, 1)
-END = date(2026, 11, 3)
+END = date(2026, 10, 31)
 PORTFOLIO_LAST_MONTH = (2026, 10)
 
 RO_NAMES = ["Region 01 / Medan", "Region 02 / Pekanbaru", "Region 03 / Padang", "Region 04 / Palembang",
@@ -189,7 +189,7 @@ def simulate_performance():
         s[3] = max(0.15, 1 - sum(s[:3]))
 
     months = {}
-    for y, m in month_iter(2025, 12, END.year, END.month):
+    for y, m in month_iter(*prev_month(START.year, START.month), END.year, END.month):
         D = calendar.monthrange(y, m)[1]
         work = [is_workday(date(y, m, d)) for d in range(1, D + 1)]
         common_disb = [rng.lognormvariate(0, 0.5) * (rng.uniform(1.8, 2.6) if rng.random() < 0.1 else 1.0) for _ in range(D)]
@@ -479,7 +479,7 @@ def sla_rows():
     upper = lambda t: re.sub(r"\s+", " ", t).upper()
     kanwil = lambda ro: "KANWIL " + upper(re.sub(r"^.*/\s*", "", ro))
     rows = []
-    for x in sla_sample.simulate(pairs, END, seed=SEED + 7, hours=False):
+    for x in sla_sample.simulate(pairs, END, start=START, seed=SEED + 7, hours=False):
         n = x["no"]
         dt = lambda d: as_dt(d) if d else None
         fmt = {k: (None if x[f"delta_{k}"] is None else ("<3 hari" if x[f"delta_{k}"] <= 3 else ">3 hari"))
