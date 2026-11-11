@@ -244,7 +244,7 @@ function segmentLabels({ horizontal, fmtFn, min = 14 }) {
   return {
     display: (ctx) => {
       const v = ctx.dataset.data[ctx.dataIndex];
-      if (!Number.isFinite(v) || v <= 0 || !ctx.chart.isDatasetVisible(ctx.datasetIndex)) return false;
+      if (!Number.isFinite(v) || v === 0 || !ctx.chart.isDatasetVisible(ctx.datasetIndex)) return false;
       if (ctx.chart.data.datasets.filter((d, k) => ctx.chart.isDatasetVisible(k)).length < 2) return false;
       const el = ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex];
       if (!el) return false;

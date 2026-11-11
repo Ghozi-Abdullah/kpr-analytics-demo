@@ -4,7 +4,7 @@ import { pick, seg, onSeg, searchPick, bindSearchPick } from '../core/controls.j
 import { sortableTable, openDetail } from '../core/ui.js';
 import { daysInMonth, shiftMonth, weekday } from '../core/dates.js';
 import { icon } from '../core/icons.js';
-import { SLA_STAGES, SLA_TARGET_HARI, SLA_AGE_BUCKETS, SLA_TYPE_LABEL, SLA_DETAIL_DAYS, SLA_DETAIL_TOP, SLA_CARD_RANGE, SLA_STAGE_COLOR } from '../config.js';
+import { SLA_STAGES, SLA_TARGET_HARI, SLA_TYPE_LABEL, SLA_DETAIL_DAYS, SLA_DETAIL_TOP, SLA_CARD_RANGE, SLA_STAGE_COLOR, SLA_FLOW_NEXT, SLA_FLOW_RECENT, SLA_CHASE_TOP, SLA_CHASE_MIN } from '../config.js';
 import { barChart, SERIES } from '../charts/charts.js';
 import { loadSla } from '../services/datasets.js';
 import { ACTIVE_STAGES, stageById, filterRows, tally, byStage, groupTally, activeRows, hasAge, filterDaily, byDate, lastDays, shiftDay, dayTotals } from '../models/sla-model.js';
@@ -91,12 +91,6 @@ function bindTilt(scene) {
   });
 }
 
-function dayBars(values, dates, what) {
-  const max = Math.max(...values, 1);
-  return `<span class="day-bars" role="img" aria-label="${esc(what)} per hari, ${fmt.dateShort(dates[0])} sampai ${fmt.dateShort(dates.at(-1))}: total ${fmt.num(sum(values))} berkas">${values.map((v, i) =>
-    `<i style="height:${Math.max(v ? 10 : 4, (v / max) * 100).toFixed(0)}%"${v ? '' : ' class="zero"'} title="${fmt.dateShort(dates[i])}: ${fmt.num(v)} berkas"></i>`).join('')}</span>`;
-}
-
 export function slaContext(model, sel, { linked = false } = {}) {
   const scoped = filterRows(model, sel, { stage: false });
   const rows = sel.tahap ? scoped.filter((r) => r.stage === sel.tahap) : scoped;
@@ -155,38 +149,80 @@ const popCard = (title, html, note = '', wide = false) => `<section class="pop-c
 const popTable = (columns, rows) => `<div class="pop-table-wrap"><table class="pop-table"><thead><tr>${columns.map((c) => `<th scope="col">${esc(c)}</th>`).join('')}</tr></thead>
   <tbody>${rows.map((r) => `<tr><th scope="row">${r[0]}</th>${r.slice(1).map((v) => `<td>${v}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
-function barList(items) {
-  if (!items.length) return '<p class="pop-none">Tidak ada berkas.</p>';
-  const max = Math.max(...items.map((i) => i.value), 1);
-  return `<ul class="pop-bars">${items.map((i) => `<li${i.late ? ' class="late"' : ''}><span class="pop-bars-name">${esc(i.label)}</span><span class="pop-bars-val">${i.text}</span>
-    <span class="pop-bars-bar"><i style="width:${((i.value / max) * 100).toFixed(1)}%"></i></span></li>`).join('')}</ul>`;
+function flowCard(s, c) {
+  const dates = lastDays(c.end, SLA_DETAIL_DAYS);
+  if (!dates.length) return { html: '', mount: () => {} };
+  const next = stageById(SLA_FLOW_NEXT[s.id]);
+  const masuk = dayTotals(c.cells, dates, s.id);
+  const keluar = next ? dayTotals(c.cells, dates, next.id) : null;
+  const recent = (list, from = -SLA_FLOW_RECENT, to) => sum(list.slice(from, to));
+  let say;
+  let detail;
+  if (next) {
+    const net = recent(masuk) - recent(keluar);
+    const tone = net > 0 ? 'is-up' : net < 0 ? 'is-down' : '';
+    say = `<p class="pop-say ${tone}">${net > 0 ? `Antrean ${esc(s.label)} bertambah ${fmt.num(net)} berkas` : net < 0 ? `Antrean ${esc(s.label)} berkurang ${fmt.num(-net)} berkas` : `Antrean ${esc(s.label)} tetap`} dalam ${SLA_FLOW_RECENT} hari terakhir.</p>`;
+    detail = `${SLA_FLOW_RECENT} hari terakhir: masuk ${fmt.num(recent(masuk))}, keluar ${fmt.num(recent(keluar))}. ${SLA_DETAIL_DAYS} hari: masuk ${fmt.num(sum(masuk))}, keluar ${fmt.num(sum(keluar))}.`;
+  } else {
+    const now = recent(masuk);
+    const before = recent(masuk, -2 * SLA_FLOW_RECENT, -SLA_FLOW_RECENT);
+    const change = before ? (now - before) / before : null;
+    const tone = change > 0 ? 'is-good' : change < 0 ? 'is-up' : '';
+    say = `<p class="pop-say ${tone}">Pencairan ${SLA_FLOW_RECENT} hari terakhir ${fmt.num(now)} berkas${ok(change) ? `, ${change >= 0 ? 'naik' : 'turun'} ${fmt.pct(Math.abs(change), 0)} dibanding ${SLA_FLOW_RECENT} hari sebelumnya` : ''}.</p>`;
+    detail = `${SLA_DETAIL_DAYS} hari terakhir: ${fmt.num(sum(masuk))} berkas cair.`;
+  }
+  const inLabel = next ? `Masuk ${s.label}` : 'Cair';
+  const outLabel = next ? `Keluar: ${next.event.toLowerCase()}` : '';
+  const legendHtml = `<div class="pop-legend"><span><i style="background:${SLA_STAGE_COLOR[s.id]}"></i>${esc(inLabel)}${next ? ' (ke atas)' : ' per hari'}</span>${next ? `<span><i style="background:${SLA_STAGE_COLOR[next.id]}"></i>${esc(outLabel)} (ke bawah)</span>` : ''}</div>`;
+  const html = `<section class="pop-card wide"><h3>${next ? 'Arus berkas' : 'Pencairan'} ${SLA_DETAIL_DAYS} hari terakhir</h3>${say}<p>${esc(detail)}</p>${legendHtml}
+    <div class="pop-chart"><canvas id="pop-flow" role="img" aria-label="${esc(`${inLabel}${next ? ` dan ${outLabel.toLowerCase()}` : ''} per hari, ${fmt.dateShort(dates[0])} sampai ${fmt.dateShort(dates.at(-1))}`)}"></canvas></div></section>`;
+  const mount = (dlg) => barChart(dlg.querySelector('#pop-flow'), {
+    labels: dates.map((d) => fmt.dateShort(d)),
+    stacked: !!next, segments: !!next, valueLabels: next ? false : 'auto', sort: false,
+    labelFormat: (v) => fmt.num(Math.abs(v)),
+    series: [
+      { label: inLabel, color: SLA_STAGE_COLOR[s.id], data: masuk },
+      ...(next ? [{ label: outLabel, color: SLA_STAGE_COLOR[next.id], data: keluar.map((v) => -v) }] : []),
+    ],
+    format: (v) => `${fmt.num(Math.abs(v))} berkas`,
+    tickFormat: (v) => fmt.num(Math.abs(v)),
+    title: (pts) => dayTitle(dates[pts[0].dataIndex]),
+    footer: next ? { label: 'Selisih', value: (pts) => { const n = pts.reduce((t, x) => t + (x.parsed.y || 0), 0); return `${n > 0 ? '+' : ''}${fmt.num(n)} berkas`; } } : undefined,
+  });
+  return { html, mount };
 }
 
-function trendCard(title, values, dates, what) {
-  const peak = values.indexOf(Math.max(...values));
-  const note = sum(values) ? `Total ${fmt.num(sum(values))} berkas. Paling ramai ${fmt.dateShort(dates[peak])}: ${fmt.num(values[peak])} berkas.` : 'Belum ada berkas di rentang ini.';
-  return popCard(title, `<div class="pop-trend">${dayBars(values, dates, what)}<div class="pop-trend-axis"><span>${fmt.dateShort(dates[0])}</span><span>${fmt.dateShort(dates.at(-1))}</span></div></div>`, note, true);
-}
-
-function splitCard(title, rows, key, s, label = (k) => k || 'Tidak diisi') {
-  const g = groupTally(rows, key);
-  const items = [...g].map(([k, t]) => ({
-    label: label(k), value: t.berkas,
-    text: s.active ? `${fmt.num(t.berkas)} berkas, ${fmt.num(t.late)} lewat SLA` : `${fmt.num(t.berkas)} berkas, ${rp(t.cair)}`,
-  })).sort((a, b) => b.value - a.value).slice(0, SLA_DETAIL_TOP);
-  return popCard(title, barList(items), g.size > SLA_DETAIL_TOP ? `${SLA_DETAIL_TOP} terbanyak dari ${g.size}.` : '');
-}
-
-function rankCard(title, rows, key, s, c) {
-  const g = groupTally(rows, key);
-  const list = [...g].filter(([k]) => k).sort((a, b) => (s.active ? b[1].late - a[1].late : 0) || b[1].berkas - a[1].berkas);
-  const name = (k) => (key === 'kanca' ? `${esc(k)}<small>${esc(shortRo(c.model.kancaRo.get(k) || ''))}</small>` : esc(shortRo(k)));
-  const columns = s.active ? [key === 'kanca' ? 'Kantor cabang' : 'RO', 'Berkas', 'Lewat SLA', 'Terlama'] : [key === 'kanca' ? 'Kantor cabang' : 'RO', 'Berkas', 'Nominal cair', 'Prakarsa sampai cair'];
-  const body = list.slice(0, SLA_DETAIL_TOP).map(([k, t]) => (s.active
-    ? [name(k), fmt.num(t.berkas), t.late ? `<b class="late-t">${fmt.num(t.late)}</b>` : '0', days(t.umurMax)]
-    : [name(k), fmt.num(t.berkas), rp(t.cair), days(t.lamaAvg)]));
-  const note = list.length > SLA_DETAIL_TOP ? `${SLA_DETAIL_TOP} teratas dari ${fmt.num(list.length)}, diurutkan dari ${s.active ? 'yang paling banyak lewat SLA' : 'berkas terbanyak'}.` : '';
-  return popCard(title, list.length ? popTable(columns, body) : '<p class="pop-none">Tidak ada berkas.</p>', note);
+function chaseCard(s, rows, c) {
+  const all = [...groupTally(rows, 'kanca')].filter(([k]) => k);
+  let list;
+  let title;
+  let note;
+  let facts;
+  if (s.active) {
+    const late = all.filter(([, t]) => t.late > 0).sort((a, b) => b[1].late - a[1].late || (b[1].umurMax ?? 0) - (a[1].umurMax ?? 0));
+    list = late.length ? late : all.sort((a, b) => (b[1].umurMax ?? 0) - (a[1].umurMax ?? 0));
+    title = late.length ? 'Perlu dikejar' : 'Semua masih dalam SLA';
+    note = late.length
+      ? `Kantor cabang dengan berkas lewat SLA terbanyak di tahap ${s.label}. Klik untuk memfilter halaman ke kantor cabang itu.`
+      : `Belum ada berkas lewat ${SLA_TARGET_HARI} hari. Ini kantor cabang dengan berkas paling lama.`;
+    facts = (t) => [`<b class="${t.late ? 'late-t' : ''}">${fmt.num(t.late)}</b> lewat SLA dari ${fmt.num(t.berkas)} berkas`, `terlama ${span(t.umurMax)}`];
+  } else {
+    list = all.filter(([, t]) => t.lamaN >= SLA_CHASE_MIN).sort((a, b) => (b[1].lamaAvg ?? 0) - (a[1].lamaAvg ?? 0));
+    title = 'Paling lama sampai cair';
+    note = `Kantor cabang dengan rata-rata prakarsa sampai cair paling lama (minimal ${SLA_CHASE_MIN} berkas cair). Klik untuk memfilter halaman.`;
+    facts = (t) => [`rata-rata <b>${span(t.lamaAvg)}</b>`, `${fmt.num(t.berkas)} berkas cair`];
+  }
+  const top = list.slice(0, SLA_CHASE_TOP);
+  const body = top.length
+    ? `<ol class="pop-chase">${top.map(([k, t], i) => {
+      const [main, sub] = facts(t);
+      const ro = c.model.kancaRo.get(k) || '';
+      return `<li><button type="button" data-kanca="${esc(k)}" data-ro="${esc(ro)}"><span class="pop-chase-no">${i + 1}</span>
+        <span class="pop-chase-name">${esc(k)}<small>${esc(shortRo(ro))}</small></span>
+        <span class="pop-chase-fact"><span>${main}</span><small>${sub}</small></span>${icon('arrow-right', 14)}</button></li>`;
+    }).join('')}</ol>`
+    : '<p class="pop-none">Tidak ada berkas di tahap ini.</p>';
+  return popCard(title, body, note, true);
 }
 
 const stageTabs = (current) => `<div class="pop-tabs" role="group" aria-label="Pilih tahap">${SLA_STAGES.map((s) =>
@@ -196,8 +232,6 @@ function openStage(id, api, c) {
   const s = stageById(id);
   const rows = c.scoped.filter((r) => r.stage === id);
   const t = tally(rows);
-  const dates = lastDays(c.end, SLA_DETAIL_DAYS);
-  const trend = dayTotals(c.cells, dates, id);
   const month = c.end.slice(0, 7);
   const kpis = s.active ? [
     { label: 'Berkas di tahap ini', value: fmt.num(t.berkas) },
@@ -213,21 +247,8 @@ function openStage(id, api, c) {
     { label: 'Prakarsa sampai cair', value: span(t.lamaAvg), sub: `rata-rata, tercepat ${span(t.lamaMin)}, terlama ${span(t.lamaMax)}` },
     { label: `Cair di ${fmt.month(month)}`, value: fmt.num(monthCount(c, id, month)), sub: 'berkas' },
   ];
-  const buckets = SLA_AGE_BUCKETS.map((b, i) => {
-    const from = i ? SLA_AGE_BUCKETS[i - 1].max : -1;
-    const n = sum(rows.filter((r) => hasAge(r) && r.umur > from && r.umur <= b.max).map((r) => r.berkas || 0));
-    return { label: b.label, value: n, text: `${fmt.num(n)} berkas`, late: from >= SLA_TARGET_HARI };
-  });
-  const typeLabel = (k) => SLA_TYPE_LABEL[String(k).toLowerCase()] || k || 'Tidak diisi';
-  const html = `${stageTabs(id)}${kpiTiles(kpis)}<div class="pop-grid">
-    ${trendCard(`${s.event} per hari, ${SLA_DETAIL_DAYS} hari terakhir`, trend, dates, s.event)}
-    ${s.active ? popCard('Umur berkas', barList(buckets), `Kuning berarti sudah lewat SLA ${SLA_TARGET_HARI} hari.`) : splitCard('Type', rows, 'type', s, typeLabel)}
-    ${splitCard('Jenis pendapatan', rows, 'pendapatan', s)}
-    ${rankCard('Regional Office', rows, 'ro', s, c)}
-    ${rankCard('Kantor cabang', rows, 'kanca', s, c)}
-    ${splitCard('Putusan', rows, 'putusan', s, (k) => (k || 'Tidak diisi').replace(/^Putusan\s+/i, ''))}
-    ${splitCard('Jenis KPR', rows, 'jenis_kpr', s)}
-  </div>`;
+  const flow = flowCard(s, c);
+  const html = `${stageTabs(id)}${kpiTiles(kpis)}<div class="pop-grid">${flow.html}${chaseCard(s, rows, c)}</div>`;
   const on = c.sel.tahap === id;
   const apply = c.linked ? 'Buka di halaman SLA' : on ? 'Tampilkan semua tahap' : `Tampilkan ${s.label} saja di halaman`;
   const dlg = openDetail({
@@ -235,7 +256,12 @@ function openStage(id, api, c) {
     subtitle: `${s.note}. ${[c.scope, c.sel.bulan ? `prakarsa ${fmt.month(c.sel.bulan)}` : ''].filter(Boolean).join(', ')}, posisi ${fmt.date(c.model.snapshot)}.`,
     html, footer: `<button type="button" class="btn primary" data-apply>${esc(apply)}</button>`,
   });
+  flow.mount(dlg);
   dlg.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => openStage(b.dataset.tab, api, c)));
+  dlg.querySelectorAll('[data-kanca]').forEach((b) => b.addEventListener('click', () => {
+    dlg.close();
+    act(api, c, { ro: b.dataset.ro || c.sel.ro, kanca: b.dataset.kanca, tahap: id });
+  }));
   dlg.querySelector('[data-apply]').addEventListener('click', () => { dlg.close(); act(api, c, { tahap: on && !c.linked ? '' : id }); });
 }
 
