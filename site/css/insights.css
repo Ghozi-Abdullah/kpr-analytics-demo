@@ -1,0 +1,49 @@
+.panel-analysis { background: var(--surface); }
+.insights { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; scrollbar-width: thin; }
+.insights-tally { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.tally { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--surface-2); font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.tally i { width: 7px; height: 7px; border-radius: 2px; background: var(--slate); }
+.tally.tone-negative i { background: var(--bad); }
+.tally.tone-risk i { background: var(--warn-dot); }
+.tally.tone-positive i { background: var(--good); }
+
+.insight-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 10px; align-items: stretch; }
+@container (min-width: 700px) { .insight.is-lead { grid-column: 1 / -1; } .insight.is-lead .insight-title { font-size: 18px; max-width: 70ch; } }
+.insight article { display: flex; flex-direction: column; gap: 8px; height: 100%; padding: 14px 16px 12px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.insight-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.insight-kind { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.insight-kind svg { color: var(--accent); }
+.insight-tone { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.insight-tone::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--slate); }
+.tone-negative .insight-tone { color: var(--bad); }
+.tone-negative .insight-tone::before { background: var(--bad); }
+.tone-risk .insight-tone { color: var(--warn); }
+.tone-risk .insight-tone::before { background: var(--warn-dot); }
+.tone-positive .insight-tone { color: var(--good); }
+.tone-positive .insight-tone::before { background: var(--good); }
+.insight-title { margin: 0; font-size: 14.5px; line-height: 1.45; font-weight: 500; color: var(--ink); text-wrap: pretty; }
+.insight-title b, .insight-evidence b, .insight-implication b { font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.insight-evidence { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.insight-evidence li { position: relative; padding-left: 13px; }
+.insight-evidence li::before { content: ""; position: absolute; left: 0; top: .72em; width: 6px; height: 1.5px; border-radius: 1px; background: var(--line-2); }
+.insight-implication { margin: 2px 0 0; padding: 9px 11px; border-radius: 12px; background: var(--accent-tint); font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.insight-implication span { display: block; margin-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--accent); }
+.insight-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 2px; }
+.insight-confidence { font-size: 11.5px; color: var(--faint); }
+.insight-confidence[data-level="rendah"] { color: var(--warn); }
+.insight-link { flex: none; font-size: 12px; }
+
+.insight.is-lead article { background: var(--nusantara); box-shadow: none; color: #fff; }
+.insight.is-lead .insight-kind, .insight.is-lead .insight-kind svg, .insight.is-lead .insight-confidence { color: rgb(255 255 255 / .78); }
+.insight.is-lead .insight-kind svg { --icon-fill: rgb(255 255 255 / .28); }
+.insight.is-lead .insight-tone { padding: 2px 8px 2px 6px; border-radius: 999px; background: rgb(255 255 255 / .94); }
+.insight.is-lead .insight-title { font-size: 16.5px; color: #fff; }
+.insight.is-lead .insight-title b, .insight.is-lead .insight-evidence b, .insight.is-lead .insight-implication b { color: #fff; }
+.insight.is-lead .insight-evidence { color: rgb(255 255 255 / .86); }
+.insight.is-lead .insight-evidence li::before { background: rgb(255 255 255 / .5); }
+.insight.is-lead .insight-implication { background: rgb(255 255 255 / .12); color: #fff; }
+.insight.is-lead .insight-implication span { color: var(--mentari); }
+.insight.is-lead .insight-link { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.insight.is-lead .insight-link:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.insights-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--surface-2); font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.insights-note svg { flex: none; margin-top: 1px; color: var(--accent); }

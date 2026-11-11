@@ -1,0 +1,16 @@
+{
+  "name": "kpr-analytics",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Dashboard KPR internal: lokal (Live Server) dan Google Apps Script web app",
+  "type": "module",
+  "scripts": {
+    "build:gas": "node tools/build_gas.mjs",
+    "test:parity": "python pipeline/build_data.py && python tools/dump_xlsx.py .parity && node tools/test_gas_parity.mjs .parity",
+    "test:api": "node tools/test_api.mjs"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "esbuild": "^0.24.2"
+  }
+}
