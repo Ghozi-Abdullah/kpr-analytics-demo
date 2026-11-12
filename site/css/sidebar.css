@@ -126,6 +126,13 @@ body:not(.side-open):not(.tips-off) :is(.side-row, .side-ask, .side-st):is(:hove
 }
 body:not(.side-open) .side-row { width: 46px; }
 @media (max-height: 640px) { :root { --cap: 56px; } .side-nav { gap: 2px; } .side-ask { margin-top: 6px; } }
+@media (min-width: 760px) and (max-height: 520px) {
+  :root { --cap: 30px; }
+  .side { padding-block: 8px; }
+  .side-brand, .side-ask, .side-foot { display: none; }
+  .side-wave { padding-block: calc(var(--cap) + 4px); }
+  .side-row, .side-row .side-ico, .side-indicator { height: 40px; }
+}
 
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;

@@ -8,6 +8,25 @@ export { AuthError };
 
 const cache = new Map();
 const tables = new Map();
+const NAME_FIELDS = ['ro', 'kanca', 'rm'];
+
+export const safeName = (v) => (typeof v === 'string' ? v.replace(/[<>"`]/g, '').replace(/&(?=#?[\w]+;)/g, '') : v);
+
+function cleanNames(data) {
+  if (!data || typeof data !== 'object') return data;
+  if (data.dicts && typeof data.dicts === 'object') {
+    for (const k of NAME_FIELDS) if (Array.isArray(data.dicts[k])) data.dicts[k] = data.dicts[k].map(safeName);
+  }
+  if (data.ro && typeof data.ro === 'object' && !Array.isArray(data.ro)) {
+    for (const k of Object.keys(data.ro)) if (Array.isArray(data.ro[k])) data.ro[k] = data.ro[k].map(safeName);
+  }
+  if (data.ro_mismatch && typeof data.ro_mismatch === 'object') {
+    for (const g of Object.values(data.ro_mismatch)) {
+      if (g && typeof g === 'object') for (const k of Object.keys(g)) if (Array.isArray(g[k])) g[k] = g[k].map(safeName);
+    }
+  }
+  return data;
+}
 
 function gasCall(fn, ...args) {
   return new Promise((resolve, reject) => {
@@ -46,6 +65,8 @@ async function apiCall(action, payload = {}) {
   if (body.ok) return body.data;
   if (body.error === 'AUTH') { dropSession(); throw new AuthError('Sesi login berakhir. Silakan masuk lagi.'); }
   if (body.error === 'DENIED') throw new AccessError(`Akun ${body.email || 'ini'} belum ada di daftar akses dashboard.`);
+  if (body.error === 'BUSY') throw new Error('Server sedang membatasi permintaan. Tunggu satu menit lalu muat ulang.');
+  if (body.error === 'BAD') throw new Error('Permintaan ditolak server karena formatnya tidak sesuai.');
   throw gasError(new Error(body.error || body.message || 'Kesalahan tidak dikenal'));
 }
 
@@ -101,9 +122,9 @@ export function load(paths) {
   const missing = paths.filter((p) => !cache.has(p));
   if (missing.length) {
     if (MODE !== 'local') {
-      for (const p of missing) cache.set(p, gasFetch(p));
+      for (const p of missing) cache.set(p, gasFetch(p).then(cleanNames));
     } else {
-      for (const p of missing) cache.set(p, fetchLocal(p));
+      for (const p of missing) cache.set(p, fetchLocal(p).then(cleanNames));
     }
     for (const p of missing) cache.get(p).catch(() => cache.delete(p));
   }
@@ -142,7 +163,7 @@ export async function getVersion() {
 export async function boot() {
   if (MODE !== 'local') {
     const res = await remote('getBoot');
-    const meta = await decodePayload(res.meta);
+    const meta = cleanNames(await decodePayload(res.meta));
     cache.set('meta.json', Promise.resolve(meta));
     return { email: res.email || '', meta, layouts: res.layouts || {}, mode: MODE };
   }

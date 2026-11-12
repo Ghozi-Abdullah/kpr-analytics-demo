@@ -104,8 +104,20 @@ Aturan:
 | Summary | Baris Performance (Kartu KPI, Growth OS harian, Peta Indonesia, Penjelasan Performance), baris Realisasi (Realisasi per bulan, Per sumber, Penjelasan Realisasi), baris Portofolio (Tren OS portofolio, Kualitas portofolio, Penjelasan Portofolio), lalu baris SLA (Progres berkas), lalu Analisis lengkap dan Outlook dan kebutuhan di paling bawah | Capaian RO per KPI, Kualitas kredit per bulan, Kualitas portofolio per bulan, Peta risiko RO, Laju disburse, Komersial dan Subsidi, Sinyal |
 | Performance | Kartu KPI, Growth OS harian, Kuadran RM, Produktivitas RM, Disburse kumulatif, SML harian, NPL harian, Laju disburse, Peta risiko RO, Outlook dan kebutuhan, Peta Indonesia, Peringkat RO, Insight analitik | Kontribusi pertumbuhan OS, Disburse per RM per RO, Sinyal |
 | Portofolio | Segmen, Pohon, Tren bulanan segmen, Kualitas per bulan, Peta Indonesia, Kualitas per RO, Kantor cabang %NPL tertinggi, Insight analitik | Kualitas kredit, Komersial dan Subsidi, Tier developer, Matriks kategori, FI dan NFI |
-| SLA | Progres berkas (kartu ala kartu poker berisi jumlah berkas dan nominal, Analisa dan Cair juga dengan Min, rata-rata, Maks, di atas meja roadmap, dibagikan lalu dibalik saat pertama tampil, ikut miring mengikuti kursor, dengan pop-out detail), Progres harian (batang bertumpuk per tanggal dengan warna palet brand dan angka di tiap potongan, kotak total dan rata-rata per hari yang bisa diklik untuk menyembunyikan proses, klik batang untuk detail hari itu), SLA per jenis pendapatan, Putusan Cabang dan CLF, Kantor cabang lewat SLA, Komposisi berkas (Pekerjaan, Pendapatan) | - |
+| SLA | Progres berkas (kartu ala kartu poker berisi jumlah berkas dan nominal, Analisa dan Cair juga dengan Min, rata-rata, Maks, di atas meja roadmap, dibagikan lalu dibalik saat pertama tampil, ikut miring mengikuti kursor, dengan pop-out tindak lanjut: arus masuk dan keluar 30 hari serta 5 kantor cabang yang perlu dikejar), Progres harian (batang bertumpuk per tanggal dengan warna palet brand dan angka di tiap potongan, kotak total dan rata-rata per hari yang bisa diklik untuk menyembunyikan proses, klik batang untuk detail hari itu), SLA per jenis pendapatan, Putusan Cabang dan CLF, Kantor cabang lewat SLA, Komposisi berkas (Pekerjaan, Pendapatan) | - |
 | Realisasi | Ringkasan per sumber (7, 6, atau 5 sumber), Kumulatif harian, Kalender, Peringkat RM, Peringkat kantor cabang, Peta Indonesia, Realisasi per RO, Tujuan kredit, Dev Local Champion, Insight analitik | Realisasi per bulan (chart), Pola per tanggal, Tren bulanan per sumber |
+
+## 6a. HP dan tablet
+
+| Ukuran | Perilaku |
+| --- | --- |
+| HP tegak (320 sampai 412 px) | Panel bertumpuk, navigasi di bawah, filter satu baris yang bisa digeser, tombol Atur panel disembunyikan. Kartu Progres berkas 2 kolom dengan baris Min/Rata-rata/Maks bertumpuk. Grafik per RO memanjang, Kumulatif harian satu kolom. Pop-out tampil layar penuh, peta pop-out di atas daftar kantor cabang. |
+| HP miring (sekitar 844×390) | Sidebar ringkas berisi menu saja, filter satu baris, menu filter pindah ke atas tombol bila ruang di bawah kurang. |
+| Tablet tegak (768 sampai 820 px) | Panel bertumpuk 1 sampai 2 kolom, kartu Progres berkas 2×2. |
+| Tablet miring (1024 sampai 1366 px) | Tata letak grid seperti desktop. Huruf kartu Progres berkas mengecil mengikuti lebar kartu. Daftar peringkat peta tetap di samping peta. |
+
+Layar sentuh: legenda, tautan, dan judul kolom tabel punya area sentuh minimal 24 px. Pemeriksaan otomatis memastikan
+tidak ada geser samping, zoom-out otomatis, teks terpotong, atau konten keluar panel di semua ukuran di atas.
 
 ## 7. Rencana uji pakai (5 orang, 30 menit per orang)
 

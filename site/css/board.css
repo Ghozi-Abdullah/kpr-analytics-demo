@@ -74,6 +74,11 @@ body.is-editing .work { grid-template-columns: minmax(0, 1fr) 280px; }
 .board.stack .panel-fit .segcards { min-height: 96px; }
 .board.stack .panel-fit .panel-body { flex: none; }
 .board.stack .board-cells, .board.stack .panel-placeholder { display: none; }
+@media (max-width: 400px) { .board.stack .panel { height: max(260px, calc(var(--h) * 50px)); } }
+.board.stack .panel.panel-grow { height: auto; min-height: 240px; }
+.board.stack .panel-grow .panel-body { flex: none; }
+.board.stack .panel-grow .chart-box { flex: none; height: 240px; }
+.board.stack .panel-grow .chart-box.bar-rows { height: calc(var(--bars) * 26px + 24px); }
 
 .palette { position: sticky; top: 64px; max-height: calc(100vh - 104px); overflow: auto; padding: 16px 12px 12px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow); }
 .palette-head { padding: 0 6px 10px; }

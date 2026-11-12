@@ -58,14 +58,17 @@ function rsaVerify_(signingInput, signatureB64, jwk) {
   return em === expected;
 }
 
+var JWKS_REFRESH_GAP_SEC = 300;
+
 function googleKeys_(forceRefresh) {
   var cache = CacheService.getScriptCache();
-  var cached = forceRefresh ? null : cache.get('google_jwks');
-  if (cached) return JSON.parse(cached);
+  var cached = cache.get('google_jwks');
+  if (cached && (!forceRefresh || cache.get('google_jwks_fresh'))) return JSON.parse(cached);
   var res = UrlFetchApp.fetch(GOOGLE_CERTS_URL, { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('Kunci publik Google tidak bisa diambil (' + res.getResponseCode() + ').');
   var keys = JSON.parse(res.getContentText()).keys || [];
   cache.put('google_jwks', JSON.stringify(keys), 21600);
+  cache.put('google_jwks_fresh', '1', JWKS_REFRESH_GAP_SEC);
   return keys;
 }
 
@@ -100,6 +103,7 @@ function verifyIdToken_(token, clientId, now) {
   }
   if (GOOGLE_ISSUERS.indexOf(claims.iss) < 0) throw AuthFail_('AUTH');
   if (claims.aud !== clientId) throw AuthFail_('AUTH');
+  if (claims.azp && claims.azp !== clientId) throw AuthFail_('AUTH');
   if (!(Number(claims.exp) > t - 60)) throw AuthFail_('AUTH');
   if (claims.iat && Number(claims.iat) > t + 300) throw AuthFail_('AUTH');
   if (!(claims.email_verified === true || claims.email_verified === 'true') || !claims.email) throw AuthFail_('AUTH');

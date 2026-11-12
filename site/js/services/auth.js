@@ -6,7 +6,8 @@ const PENDING = 'kpr.auth.pending';
 const HINT = 'kpr.auth.hint';
 
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
-export const API_MODE = !!API.url && !!API.clientId && !LOCAL_HOSTS.includes(location.hostname);
+export const isLocalHost = () => LOCAL_HOSTS.includes(location.hostname);
+export const API_MODE = !!API.url && !!API.clientId && !isLocalHost();
 
 export class AuthError extends Error {}
 

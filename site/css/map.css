@@ -39,14 +39,20 @@
   .map-wrap { grid-template-columns: minmax(0, 1fr) 190px; gap: 10px; }
 }
 @container (max-width: 600px) {
-  .map-wrap { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 1fr) auto; }
-  .map-side { max-height: 220px; }
+  .map-wrap { grid-template-columns: minmax(0, 1fr) 168px; gap: 10px; }
+  .board.stack .map-wrap { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 1fr) auto; }
+  .board.stack .map-side { max-height: 220px; }
 }
 .board.stack .panel-fit .map-wrap, .board.stack .map-wrap { min-height: 520px; }
 .indonesia-map .map-leader { fill: none; stroke: var(--ink-2); stroke-width: .8; opacity: .55; vector-effect: non-scaling-stroke; pointer-events: none; }
 .indonesia-map .map-dot { fill: var(--ink); stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
 .map-top .segmented { max-width: 100%; flex-wrap: wrap; min-width: 0; }
-@container (max-width: 520px) { .map-top .segmented label span { padding-inline: 9px; } .map-note { display: none; } }
+@container (max-width: 520px) {
+  .map-top .segmented label span { padding-inline: 9px; }
+  .map-note { display: none; }
+  .map-top .segmented { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 92px), 1fr)); width: 100%; border-radius: 14px; }
+  .map-top .segmented span { height: 100%; display: grid; place-items: center; text-align: center; line-height: 1.2; border-radius: 11px; }
+}
 .map-canvas { container-type: size; }
 .indonesia-map .map-swatch { stroke: #fff; stroke-width: 1.4px; vector-effect: non-scaling-stroke; }
 .map-key .split-key i { background: linear-gradient(to top, #A3C6F0 0 40%, #2468CC 40%); }
@@ -129,7 +135,9 @@ button.mp-kanca:hover { text-decoration: underline; }
 .mp-empty { text-align: center !important; color: var(--muted); }
 .mp-loading { padding: 8px 22px 22px; }
 @media (max-width: 900px) {
-  .mp-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) minmax(260px, 1fr); overflow: auto; }
+  .mp-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(300px, 1fr); overflow: auto; }
+  .mp-map { min-height: auto; }
+  .mp-canvas { flex: none; height: clamp(260px, 42dvh, 420px); }
 }
 @media (max-width: 640px) {
   .map-popout { width: 100vw; height: 100dvh; border-radius: 0; }

@@ -90,7 +90,7 @@
 }
 @keyframes picker-in { from { opacity: 0; translate: 0 -4px; } to { opacity: 1; translate: 0 0; } }
 
-.picker-popover { position: fixed; inset: auto; margin: 0; width: 300px; max-height: 380px; padding: 8px; border: 0; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 20px 50px -12px rgb(0 0 0 / .25); overflow: hidden; display: none; }
+.picker-popover { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); max-height: 380px; padding: 8px; border: 0; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 20px 50px -12px rgb(0 0 0 / .25); overflow: hidden; display: none; }
 .picker-popover:popover-open { display: flex; flex-direction: column; }
 .picker-search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border-radius: 10px; background: var(--chip); color: var(--muted); }
 .picker-search input { flex: 1; border: 0; background: transparent; font: inherit; color: var(--ink); outline: none; min-width: 0; }
@@ -101,7 +101,7 @@
 .picker-list li[aria-selected="true"] { color: var(--accent); font-weight: 500; }
 .picker-empty { color: var(--muted); cursor: default; }
 
-.segmented { display: inline-flex; gap: 2px; padding: 3px; margin: 0; border: 0; border-radius: 999px; background: #E8E8ED; }
+.segmented { position: relative; display: inline-flex; gap: 2px; padding: 3px; margin: 0; border: 0; border-radius: 999px; background: #E8E8ED; }
 .segmented legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .segmented label { position: relative; }
 .segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }

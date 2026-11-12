@@ -212,11 +212,18 @@ function topVisibleAt(chart, i) {
 function totalAt(chart, i) {
   return chart.data.datasets.reduce((t, ds, d) => t + (chart.isDatasetVisible(d) && Number.isFinite(ds.data[i]) ? ds.data[i] : 0), 0);
 }
+function roomyRows(chart) {
+  const area = chart.chartArea;
+  const n = chart.data.labels?.length || 1;
+  return !area || (area.bottom - area.top) / n >= 14;
+}
+
 function barLabels({ horizontal, stacked, fmtFn }) {
   return {
     display: (ctx) => {
       const ds = ctx.dataset;
       if (!ds.$lab || ds.$lab === 'none' || !Number.isFinite(ds.data[ctx.dataIndex])) return false;
+      if (horizontal && !roomyRows(ctx.chart)) return false;
       if (stacked) return ctx.datasetIndex === topVisibleAt(ctx.chart, ctx.dataIndex);
       if (horizontal) return ds.data.length <= 16 ? true : 'auto';
       const shown = ctx.chart.data.datasets.filter((d, k) => d.$lab === 'main' && d.type !== 'line' && ctx.chart.isDatasetVisible(k)).length || 1;
@@ -375,6 +382,10 @@ export function barChart(canvas, {
   valueLabels = 'auto', axis = true, tickFormat, labelFormat, refs = [], sort: sortTip = null, segments = false,
 }) {
   if (onClick) canvas.parentNode.classList.add('clickable');
+  const rowsBox = horizontal && (labels?.length || 0) > 6;
+  canvas.parentNode.classList.toggle('bar-rows', rowsBox);
+  if (rowsBox) canvas.parentNode.style.setProperty('--bars', labels.length);
+  if (rowsBox) canvas.closest('.panel')?.classList.add('panel-grow');
   const valueAxis = horizontal ? 'x' : 'y';
   const catAxis = horizontal ? 'y' : 'x';
   const n = labels?.length || 0;
@@ -508,11 +519,12 @@ export function donutChart(canvas, { items, format = (v) => fmt.num(v), share = 
 
 export function bubbleChart(canvas, { points, xFormat, yFormat, xTitle, yTitle, refX = null, onClick }) {
   if (onClick) canvas.parentNode.classList.add('clickable');
+  const shrink = Math.min(1, Math.max(0.55, (canvas.parentNode.clientWidth || 560) / 560));
   return mount(canvas, {
     type: 'bubble',
     data: {
       datasets: points.map((p) => ({
-        label: p.label, data: [{ x: p.x, y: p.y, r: p.r }], $color: p.color, $rows: p.rows,
+        label: p.label, data: [{ x: p.x, y: p.y, r: p.r * shrink }], $color: p.color, $rows: p.rows,
         backgroundColor: `${p.color}CC`, borderColor: C.surface, borderWidth: 2, hoverBorderWidth: 2, hoverBackgroundColor: p.color,
       })),
     },

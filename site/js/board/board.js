@@ -125,7 +125,7 @@ export class Board {
   createEl(id) {
     const d = this.defs.get(id);
     const el = document.createElement('section');
-    el.className = `panel${d.variant ? ` panel-${d.variant}` : ''}${d.fit ? ' panel-fit' : ''}`;
+    el.className = `panel${d.variant ? ` panel-${d.variant}` : ''}${d.fit ? ' panel-fit' : ''}${d.grow ? ' panel-grow' : ''}`;
     el.dataset.id = id;
     el.id = `panel-${id}`;
     el.setAttribute('aria-labelledby', `panel-${id}-title`);

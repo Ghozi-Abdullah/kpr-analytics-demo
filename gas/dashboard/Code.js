@@ -1,9 +1,11 @@
-var VIEWS = ['ringkasan', 'performance', 'portofolio', 'realisasi'];
+var VIEWS = ['ringkasan', 'performance', 'portofolio', 'realisasi', 'sla'];
 var PATH_RE = /^(meta|perf_daily|perf_kuadran|portfolio_index|portfolio_trend|realisasi_daily|dim_kanca|sla|sla_daily)\.json$|^portfolio\/\d{4}-\d{2}\.json$/;
+var LAYOUT_ID_RE = /^[a-z][a-z0-9-]{0,39}$/;
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('KPR Analytics')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
@@ -25,7 +27,7 @@ function readData_(paths) {
   paths.forEach(function (p) { want[p] = []; });
   for (var i = 1; i < values.length; i += 1) {
     var r = values[i];
-    if (want[r[0]]) want[r[0]].push([Number(r[1]), String(r[2]), String(r[3])]);
+    if (Object.prototype.hasOwnProperty.call(want, r[0])) want[r[0]].push([Number(r[1]), String(r[2]), String(r[3])]);
   }
   var out = {};
   Object.keys(want).forEach(function (p) {
@@ -52,7 +54,7 @@ function getBoot() {
 
 function getBundle(paths) {
   if (!Array.isArray(paths) || !paths.length || paths.length > 24) throw new Error('Permintaan data tidak valid.');
-  paths.forEach(function (p) { if (typeof p !== 'string' || !PATH_RE.test(p)) throw new Error('Nama data tidak dikenal: ' + p); });
+  paths.forEach(function (p) { if (typeof p !== 'string' || !PATH_RE.test(p)) throw new Error('Nama data tidak dikenal.'); });
   return readData_(paths);
 }
 
@@ -62,10 +64,30 @@ function saveLayout(view, text) {
   agg_();
   var props = PropertiesService.getUserProperties();
   if (!text) { props.deleteProperty('layout.' + view); return true; }
-  var parsed = JSON.parse(text);
-  if (!parsed || !Array.isArray(parsed.items) || parsed.items.length > 40) throw new Error('Format tata letak tidak valid.');
-  props.setProperty('layout.' + view, text);
+  var clean = cleanLayout_(text);
+  if (!clean) throw new Error('Format tata letak tidak valid.');
+  props.setProperty('layout.' + view, clean);
   return true;
+}
+
+function cleanLayout_(text) {
+  var parsed;
+  try { parsed = JSON.parse(text); } catch (err) { return null; }
+  if (!parsed || typeof parsed.v !== 'number' || !Array.isArray(parsed.items) || parsed.items.length > 40) return null;
+  var items = [];
+  for (var i = 0; i < parsed.items.length; i += 1) {
+    var it = parsed.items[i];
+    if (!it || typeof it.id !== 'string' || !LAYOUT_ID_RE.test(it.id)) return null;
+    var cell = { id: it.id };
+    var keys = ['x', 'y', 'w', 'h'];
+    for (var k = 0; k < keys.length; k += 1) {
+      var n = it[keys[k]];
+      if (typeof n !== 'number' || n % 1 !== 0 || n < 0 || n > 400) return null;
+      cell[keys[k]] = n;
+    }
+    items.push(cell);
+  }
+  return JSON.stringify({ v: parsed.v, items: items });
 }
 
 function getVersion() {

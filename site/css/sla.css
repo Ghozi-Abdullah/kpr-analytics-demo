@@ -54,7 +54,8 @@
 }
 
 .flow-card {
-  position: relative; display: block; height: 100%; max-height: 300px; aspect-ratio: 5 / 7; max-width: 100%; padding: 0; border: 0; border-radius: 14px;
+  position: relative; display: block; height: 100%; max-height: 300px; aspect-ratio: 5 / 7; max-width: 100%; min-width: 0; padding: 0; border: 0; border-radius: 14px;
+  container: card / inline-size;
   background: transparent; color: var(--ink); font: inherit; text-align: center; cursor: pointer;
   transform-style: preserve-3d; transform-origin: 50% 100%; transform: rotateX(var(--rx, 4deg)) rotateY(var(--ry, 0deg));
   box-shadow: 0 1px 2px rgb(11 33 71 / .08), 0 20px 34px -20px rgb(8 87 195 / .5);
@@ -90,7 +91,7 @@
 .card-body { position: relative; display: grid; justify-items: center; gap: 2px; padding: 0 12px; min-width: 0; }
 .flow-name { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 650; color: var(--ink); }
 .flow-name i { flex: none; width: 10px; height: 10px; border-radius: 3px; }
-.flow-value { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; font-size: clamp(28px, 2.7vw, 38px); font-weight: 650; line-height: 1.05; letter-spacing: -0.03em; color: var(--ink-tone); font-variant-numeric: tabular-nums; }
+.flow-value { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 6px; margin-top: 4px; font-size: clamp(22px, 15cqi, 34px); font-weight: 650; line-height: 1.05; letter-spacing: -0.03em; color: var(--ink-tone); font-variant-numeric: tabular-nums; }
 .flow-unit { font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
 .flow-cap { margin-bottom: 1px; font-size: 11px; color: var(--muted); }
 .flow-amount { justify-self: stretch; display: grid; justify-items: center; gap: 0; margin-top: 8px; padding: 5px 10px 6px; border-radius: 10px; background: rgb(var(--tone) / .13); }
@@ -154,6 +155,23 @@
   .flow-card, .flow-card:hover { transform: none; translate: none; }
   .flow-hint { margin-left: 0; }
   .flow.is-intro .flow-deal { animation: none; }
+}
+@container card (max-width: 205px) {
+  .card-face { padding-inline: 9px; }
+  .card-body { padding-inline: 2px; }
+  .card-corner.end { display: none; }
+  .flow-name { font-size: 13px; gap: 6px; }
+  .flow-unit { font-size: 11.5px; }
+  .flow-amount { margin-top: 6px; padding: 4px 6px 5px; }
+  .flow-amount b { font-size: 14.5px; }
+  .flow-cap { font-size: 10.5px; }
+  .flow-range { margin-top: 6px; padding-top: 6px; font-size: 11px; }
+  .flow-range > span:not(.flow-cap) { gap: 4px; }
+  .flow-range em { white-space: nowrap; }
+}
+@container card (max-width: 150px) {
+  .flow-range { gap: 3px; }
+  .flow-range > span:not(.flow-cap) { display: grid; justify-content: stretch; justify-items: center; gap: 0; line-height: 1.25; }
 }
 @media (prefers-reduced-motion: reduce) {
   .flow :is(.flow-line b, .flow-float),

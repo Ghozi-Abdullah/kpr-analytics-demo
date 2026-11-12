@@ -11,14 +11,24 @@ export function pick({ id, label, options, value, on = false }) {
     <ul class="picker-menu" id="${id}-menu" popover="auto" role="listbox" tabindex="-1" aria-labelledby="${id}-label">${items}</ul></div>`;
 }
 
+function fitVertically(r, pop) {
+  pop.style.maxHeight = '';
+  const natural = pop.offsetHeight;
+  const below = innerHeight - r.bottom - 14;
+  const above = r.top - 14;
+  const down = natural <= below || below >= above;
+  const room = Math.max(140, down ? below : above);
+  const h = Math.min(natural, room);
+  if (natural > room) pop.style.maxHeight = `${Math.floor(room)}px`;
+  pop.style.top = `${down ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+}
+
 function placeBelow(anchor, pop, width) {
   const r = anchor.getBoundingClientRect();
   const w = Math.max(width || 0, r.width);
   pop.style.minWidth = `${Math.round(w)}px`;
-  const h = pop.offsetHeight;
-  const below = r.bottom + 6 + h <= innerHeight - 8 || r.top < h + 14;
   pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
-  pop.style.top = `${below ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+  fitVertically(r, pop);
 }
 
 export function enhancePicks(root) {
@@ -155,11 +165,11 @@ export function bindSearchPick({ id, options, value, allLabel, onChange }) {
     btn.setAttribute('aria-expanded', String(e.newState === 'open'));
     if (e.newState !== 'open') return;
     const r = btn.closest('.picker').getBoundingClientRect();
-    const width = 300;
+    const width = Math.min(300, innerWidth - 16);
     pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - width - 8))}px`;
-    pop.style.top = `${r.bottom + 6}px`;
     q.value = '';
     draw();
+    fitVertically(r, pop);
     q.focus();
   });
   q.addEventListener('input', draw);

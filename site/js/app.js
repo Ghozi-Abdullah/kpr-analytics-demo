@@ -8,7 +8,7 @@ import { startLive, ago, LIVE_INTERVAL } from './services/live.js';
 import { resetHub } from './analytics/data-hub.js';
 import { createAsk } from './ask/engine.js';
 import { createAskDialog } from './ask/ask-dialog.js';
-import { handleRedirect, login, logout, session, hasHint } from './services/auth.js';
+import { handleRedirect, login, logout, session, hasHint, isLocalHost } from './services/auth.js';
 import { initRouter, navigate, route, hrefFor } from './services/router.js';
 import { Board, compact } from './board/board.js';
 import ringkasan from './views/ringkasan.js';
@@ -27,6 +27,26 @@ const S = {
 const askEngine = createAsk();
 let askDialog = null;
 const $ = (id) => document.getElementById(id);
+
+function hideBrokenLogos() {
+  document.querySelectorAll('.page-logo').forEach((img) => {
+    const hide = () => { img.hidden = true; };
+    if (img.complete && !img.naturalWidth) hide();
+    else img.addEventListener('error', hide, { once: true });
+  });
+}
+
+function isFramed() {
+  try { return window.top !== window.self; } catch { return true; }
+}
+
+function showFramed() {
+  $('app').innerHTML = `<main class="gate" role="alert">
+    <span class="gate-ico">${icon('lock', 28)}</span>
+    <h1>Buka dashboard langsung</h1>
+    <p>Demi keamanan, dashboard ini tidak bisa ditampilkan di dalam halaman situs lain.</p>
+    <div class="gate-act"><a class="btn primary" id="open-direct" href="${esc(location.href)}" target="_top" rel="noopener noreferrer">Buka di tab ini</a></div></main>`;
+}
 
 function renderShell() {
   const sideNav = ORDER.map((v) => `<a class="side-row" data-view="${v}" href="${hrefFor(v)}">
@@ -52,7 +72,7 @@ function renderShell() {
     </aside>
     <div class="shell">
       <div class="masthead"><header class="page-header">
-        <img class="page-logo page-logo-start" src="img/logo-danantara.webp" alt="Danantara Indonesia" width="423" height="112" decoding="async" onerror="this.hidden=true">
+        <img class="page-logo page-logo-start" src="img/logo-danantara.webp" alt="Danantara Indonesia" width="423" height="112" decoding="async">
         <button class="ask-trigger" type="button" data-open-ask aria-keyshortcuts="/ Control+K">${icon('ask', 19)}<span>${askHint}</span><kbd>/</kbd></button>
         <div class="page-title">
           <a class="brand" href="${hrefFor('ringkasan')}" data-view="ringkasan"><span class="mark">${icon('logo', 18)}</span>KPR Analytics</a>
@@ -64,7 +84,7 @@ function renderShell() {
           <button class="icon-btn" type="button" id="reload" title="Muat ulang data" aria-label="Muat ulang data">${icon('refresh', 18)}</button>
           <button class="btn" type="button" id="edit" aria-pressed="false">${icon('grid', 17)}<span>Atur panel</span></button>
         </div>
-        <img class="page-logo page-logo-end" src="img/logo-bri.webp" alt="BRI" width="221" height="112" decoding="async" onerror="this.hidden=true">
+        <img class="page-logo page-logo-end" src="img/logo-bri.webp" alt="BRI" width="221" height="112" decoding="async">
       </header></div>
       <div class="filter-bar" id="filter-bar">
         <div class="filters" id="filters" role="group" aria-label="Filter"></div>
@@ -93,6 +113,7 @@ function renderShell() {
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="sr-only" id="live-region" aria-live="assertive"></div>`;
 
+  hideBrokenLogos();
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onDocKey);
   bindSide();
@@ -519,6 +540,7 @@ function onStack(e) {
   const stack = !!e.detail;
   const btn = $('edit');
   btn.disabled = stack;
+  btn.hidden = stack;
   btn.title = stack ? 'Atur panel tersedia di layar yang lebih lebar' : '';
   if (stack && S.editing) setEditing(false);
 }
@@ -668,6 +690,7 @@ async function fontsReady() {
 }
 
 async function start() {
+  if (MODE !== 'gas' && !isLocalHost() && isFramed()) { showFramed(); return; }
   if (MODE === 'api') {
     const r = handleRedirect();
     if (r.status === 'ok') { try { sessionStorage.removeItem('kpr.auth.silent'); } catch {} }

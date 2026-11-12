@@ -154,7 +154,7 @@ export const realWidgets = {
 
   cumGrid: () => ({
     title: 'Kumulatif harian: total dan per sumber', desc: 'Grafik Total di tengah, dikelilingi grafik tiap sumber. Satu garis per bulan',
-    icon: 'grid', w: 12, h: 14, minW: 8, minH: 9,
+    icon: 'grid', w: 12, h: 14, minW: 8, minH: 9, grow: true,
     render(api) {
       const c = R(api);
       const months = c.yearMonths;

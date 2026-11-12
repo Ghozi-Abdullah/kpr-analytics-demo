@@ -40,6 +40,7 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <base target="_top">
 <meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
 <title>KPR Analytics</title>
 <style>${css}</style>
 </head>
