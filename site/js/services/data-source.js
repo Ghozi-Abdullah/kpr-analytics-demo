@@ -36,7 +36,13 @@ function gasCall(fn, ...args) {
   });
 }
 
-export class AccessError extends Error {}
+export class AccessError extends Error {
+  constructor(message, detail = {}) {
+    super(message);
+    this.email = detail.email || '';
+    this.asked = !!detail.asked;
+  }
+}
 
 function gasError(err) {
   const msg = String(err?.message || err?.error || err || '');
@@ -64,11 +70,20 @@ async function apiCall(action, payload = {}) {
   try { body = await res.json(); } catch { throw new Error('Jawaban server tidak terbaca. Pastikan deploy KPR API memakai akses "Anyone".'); }
   if (body.ok) return body.data;
   if (body.error === 'AUTH') { dropSession(); throw new AuthError('Sesi login berakhir. Silakan masuk lagi.'); }
-  if (body.error === 'DENIED') throw new AccessError(`Akun ${body.email || 'ini'} belum ada di daftar akses dashboard.`);
+  if (body.error === 'DENIED') throw new AccessError(`Akun ${body.email || 'ini'} belum ada di daftar akses dashboard.`, body);
+  if (body.error === 'FORBIDDEN') throw new Error('Halaman ini hanya untuk admin.');
   if (body.error === 'BUSY') throw new Error('Server sedang membatasi permintaan. Tunggu satu menit lalu muat ulang.');
-  if (body.error === 'BAD') throw new Error('Permintaan ditolak server karena formatnya tidak sesuai.');
+  if (body.error === 'BAD') throw new Error(body.message || 'Permintaan ditolak server karena formatnya tidak sesuai.');
   throw gasError(new Error(body.error || body.message || 'Kesalahan tidak dikenal'));
 }
+
+export const requestAccess = () => apiCall('requestAccess');
+export const accessApi = {
+  list: () => apiCall('adminList'),
+  save: (user) => apiCall('adminSave', user),
+  remove: (email) => apiCall('adminRemove', { email }),
+  decide: (email, approve) => apiCall('adminDecide', { email, approve }),
+};
 
 function remote(fn, ...args) {
   if (IS_GAS) return gasCall(fn, ...args);
@@ -165,10 +180,10 @@ export async function boot() {
     const res = await remote('getBoot');
     const meta = cleanNames(await decodePayload(res.meta));
     cache.set('meta.json', Promise.resolve(meta));
-    return { email: res.email || '', meta, layouts: res.layouts || {}, mode: MODE };
+    return { email: res.email || '', role: res.role || 'viewer', meta, layouts: res.layouts || {}, mode: MODE };
   }
   const meta = await loadOne('meta.json');
-  return { email: '', meta, layouts: null, mode: 'local' };
+  return { email: '', role: 'viewer', meta, layouts: null, mode: 'local' };
 }
 
 const LAYOUT_VERSION = 13;

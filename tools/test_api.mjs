@@ -25,7 +25,7 @@ function makeToken(claims, { kid = 'kunci-1', key = privateKey } = {}) {
 
 let fetches = 0;
 const store = new Map();
-const props = new Map(Object.entries({ AGG_ID: 'agg', CLIENT_ID, ALLOWED_EMAILS: 'andi@gmail.com,\n budi@gmail.com; @kantor.co.id' }));
+const props = new Map(Object.entries({ AGG_ID: 'agg', CLIENT_ID, ALLOWED_EMAILS: 'andi@gmail.com,\n budi@gmail.com; @kantor.co.id', ADMIN_EMAILS: 'bos@gmail.com' }));
 const cacheMap = new Map();
 const sheetRows = [['path', 'part', 'enc', 'content'], ['meta.json', '0', 'gz64', 'b:AAA'], ['perf_daily.json', '1', 'gz64', 'b:CCC'], ['perf_daily.json', '0', 'gz64', 'b:BBB']];
 const quiet = { log() {}, info() {}, warn() {}, error() {} };
@@ -39,6 +39,7 @@ const ctx = vm.createContext({
     newBlob: (b) => ({ getDataAsString: () => unsigned(b).toString('utf8') }),
   },
   CacheService: { getScriptCache: () => ({ get: (k) => cacheMap.get(k) ?? null, put: (k, v) => cacheMap.set(k, v), remove: (k) => cacheMap.delete(k) }) },
+  LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
   UrlFetchApp: {
     fetch: () => { fetches += 1; return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ keys: [jwk] }) }; },
   },
@@ -135,6 +136,48 @@ for (let i = 0; i < 95; i += 1) rate.push(post({ action: 'version', token: busy 
 expect('pengguna sah dibatasi kalau terlalu sering (90/menit)', rate, (r) => r.slice(0, 90).every((x) => x.ok) && r[94].error === 'BUSY');
 expect('batas per pengguna tidak mengganggu pengguna lain', post({ action: 'version', token: good }), (r) => r.ok);
 expect('token dengan azp lain ditolak', post({ action: 'boot', token: makeToken({ azp: 'lain.apps.googleusercontent.com' }) }), (r) => r.error === 'AUTH');
+clearGuards();
+
+clearGuards();
+const bos = makeToken({ email: 'bos@gmail.com' });
+const tamu = makeToken({ email: 'tamu@gmail.com' });
+const rina = makeToken({ email: 'rina@gmail.com' });
+expect('admin utama masuk dengan peran admin', post({ action: 'boot', token: bos }), (r) => r.ok && r.data.role === 'admin');
+expect('pengguna biasa berperan viewer', post({ action: 'boot', token: good }), (r) => r.ok && r.data.role === 'viewer');
+expect('viewer tidak bisa membuka daftar pengguna', post({ action: 'adminList', token: good }), (r) => r.error === 'FORBIDDEN' && !r.data);
+expect('viewer tidak bisa menambah pengguna', post({ action: 'adminSave', token: good, email: 'jahat@gmail.com', role: 'admin', status: 'active' }), (r) => r.error === 'FORBIDDEN');
+expect('orang luar tidak bisa memanggil aksi admin', post({ action: 'adminSave', token: tamu, email: 'tamu@gmail.com', role: 'admin', status: 'active' }), (r) => r.error === 'DENIED');
+expect('orang luar ditolak dan belum tercatat meminta', post({ action: 'boot', token: tamu }), (r) => r.error === 'DENIED' && r.asked === false);
+expect('orang luar bisa minta akses', post({ action: 'requestAccess', token: tamu }), (r) => r.ok && r.data.status === 'pending');
+expect('minta akses tidak memberi akses', post({ action: 'boot', token: tamu }), (r) => r.error === 'DENIED' && r.asked === true);
+expect('minta akses dua kali tetap satu permintaan', (post({ action: 'requestAccess', token: tamu }), post({ action: 'adminList', token: bos })), (r) => r.ok && r.data.requests.length === 1 && r.data.requests[0].email === 'tamu@gmail.com');
+expect('minta akses tanpa token ditolak', post({ action: 'requestAccess' }), (r) => r.error === 'AUTH');
+expect('admin menyetujui permintaan', post({ action: 'adminDecide', token: bos, email: 'tamu@gmail.com', approve: true }), (r) => r.ok && r.data.requests.length === 0 && r.data.users.some((u) => u.email === 'tamu@gmail.com' && u.role === 'viewer'));
+expect('setelah disetujui langsung bisa masuk', post({ action: 'boot', token: tamu }), (r) => r.ok && r.data.role === 'viewer');
+expect('admin menonaktifkan pengguna', post({ action: 'adminSave', token: bos, email: 'tamu@gmail.com', role: 'viewer', status: 'off' }), (r) => r.ok);
+expect('akun nonaktif langsung terputus walau token masih berlaku', post({ action: 'bundle', token: tamu, paths: ['meta.json'] }), (r) => r.error === 'DENIED');
+expect('akun nonaktif tidak bisa minta akses lagi', post({ action: 'requestAccess', token: tamu }), (r) => r.ok && r.data.status === 'off');
+expect('admin menambah pengguna baru', post({ action: 'adminSave', token: bos, email: ' Rina@Gmail.com ', role: 'viewer', status: 'active' }), (r) => r.ok && r.data.users.some((u) => u.email === 'rina@gmail.com'));
+expect('pengguna baru bisa masuk', post({ action: 'boot', token: rina }), (r) => r.ok);
+expect('admin menaikkan pengguna jadi admin', post({ action: 'adminSave', token: bos, email: 'rina@gmail.com', role: 'admin', status: 'active' }), (r) => r.ok);
+expect('admin baru bisa membuka daftar', post({ action: 'adminList', token: rina }), (r) => r.ok && r.data.log.length > 0);
+expect('admin tidak bisa mengubah akses sendiri', post({ action: 'adminSave', token: rina, email: 'rina@gmail.com', role: 'admin', status: 'off' }), (r) => r.error === 'BAD' && /sendiri/.test(r.message));
+expect('admin tidak bisa menghapus diri sendiri', post({ action: 'adminRemove', token: rina, email: 'rina@gmail.com' }), (r) => r.error === 'BAD');
+expect('admin utama tidak bisa diubah dari halaman', post({ action: 'adminSave', token: rina, email: 'bos@gmail.com', role: 'viewer', status: 'off' }), (r) => r.error === 'BAD');
+expect('admin utama tidak bisa dihapus dari halaman', post({ action: 'adminRemove', token: rina, email: 'bos@gmail.com' }), (r) => r.error === 'BAD');
+expect('email tidak valid ditolak', post({ action: 'adminSave', token: bos, email: '<img src=x onerror=1>@x.com', role: 'viewer', status: 'active' }), (r) => r.error === 'BAD');
+expect('email berupa kunci jebakan ditolak', post({ action: 'adminSave', token: bos, email: '__proto__', role: 'viewer', status: 'active' }), (r) => r.error === 'BAD');
+expect('peran tak dikenal ditolak', post({ action: 'adminSave', token: bos, email: 'x@gmail.com', role: 'root', status: 'active' }), (r) => r.error === 'BAD');
+expect('admin menghapus pengguna', post({ action: 'adminRemove', token: bos, email: 'rina@gmail.com' }), (r) => r.ok && !r.data.users.some((u) => u.email === 'rina@gmail.com'));
+expect('pengguna yang dihapus langsung terputus', post({ action: 'adminList', token: rina }), (r) => r.error === 'DENIED');
+expect('admin menolak permintaan', (post({ action: 'requestAccess', token: rina }), post({ action: 'adminDecide', token: bos, email: 'rina@gmail.com', approve: false })), (r) => r.ok && r.data.requests.length === 0 && !r.data.users.some((u) => u.email === 'rina@gmail.com'));
+expect('menyetujui permintaan yang tidak ada ditolak', post({ action: 'adminDecide', token: bos, email: 'hantu@gmail.com', approve: true }), (r) => r.error === 'BAD');
+expect('riwayat mencatat login dan penolakan', post({ action: 'adminList', token: bos }), (r) => r.ok && r.data.log.some((x) => x[2] === 'masuk') && r.data.log.some((x) => x[2] === 'ditolak') && r.data.log.length <= 60);
+expect('permintaan akses dibatasi jumlahnya', (() => {
+  let last;
+  for (let i = 0; i < 34; i += 1) last = post({ action: 'requestAccess', token: makeToken({ email: `orang${i}@gmail.com` }) });
+  return last;
+})(), (r) => r.error === 'BUSY');
 clearGuards();
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji KPR API lulus.');

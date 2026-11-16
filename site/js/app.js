@@ -3,7 +3,9 @@ import { esc, fmt } from './core/format.js';
 import { toast, announce, openTable, emptyState } from './core/ui.js';
 import { enhancePicks } from './core/controls.js';
 import { downloadPng, destroyCharts } from './charts/charts.js';
-import { boot, MODE, AccessError, AuthError, clearCache, readLayout, writeLayout } from './services/data-source.js';
+import { boot, MODE, AccessError, AuthError, clearCache, readLayout, writeLayout, requestAccess, accessApi } from './services/data-source.js';
+import { loginScreen, deniedScreen } from './views/gate.js';
+import { adminScreen, demoAccessApi } from './views/admin.js';
 import { startLive, ago, LIVE_INTERVAL } from './services/live.js';
 import { resetHub } from './analytics/data-hub.js';
 import { createAsk } from './ask/engine.js';
@@ -287,12 +289,14 @@ function openStatus() {
       ${dropped ? `<small>Kolom yang tidak dibawa ke dashboard:</small><div class="tags">${dropped}</div>` : ''}</div>`;
   }).join('');
   const how = MODE === 'api'
-    ? `<p class="note">Masuk sebagai <b>${esc(S.info.email || '')}</b>. Data dikirim oleh Apps Script setelah login Anda dicek. Tata letak panel tersimpan untuk email ini.</p>
-       <button class="btn" type="button" id="logout">Keluar</button>`
+    ? `<p class="note">Masuk sebagai <b>${esc(S.info.email || '')}</b>${S.info.role === 'admin' ? ' (admin)' : ''}. Data dikirim oleh Apps Script setelah login Anda dicek. Tata letak panel tersimpan untuk email ini.</p>
+       <div class="status-act">${S.info.role === 'admin' ? `<a class="btn" href="#/admin">${icon('users', 16)}Kelola akses</a>` : ''}<button class="btn" type="button" id="logout">Keluar</button></div>`
     : MODE === 'gas'
     ? `<p class="note">Data dibaca dari spreadsheet agregat dengan akun <b>${esc(S.info.email || 'Anda')}</b>. Tata letak panel tersimpan di akun ini. Data diperbarui oleh pemicu terjadwal di project pipeline.</p>`
     : `<p class="note">Mode lokal. Tata letak panel tersimpan di browser ini. Untuk memperbarui data, simpan export spreadsheet ke folder data_raw lalu jalankan:</p>
-       <div class="code">python pipeline/build_data.py</div>`;
+       <div class="code">python pipeline/build_data.py</div>
+       <p class="note">Contoh tampilan untuk versi yang memakai login:</p>
+       <div class="status-act"><a class="btn" href="#/masuk">${icon('lock', 16)}Halaman login</a><a class="btn" href="#/admin">${icon('users', 16)}Halaman admin</a></div>`;
   const checked = S.liveState.checkedAt ? new Date(S.liveState.checkedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'belum';
   const liveWord = { live: 'Aktif', offline: 'Terhenti, perangkat sedang offline', error: 'Gagal menghubungi server, dicoba lagi otomatis', idle: 'Menyiapkan' }[S.liveState.state] || 'Aktif';
   const liveBox = `<div class="live-box"><b>${icon('signal', 16)}Pembaruan otomatis: ${esc(liveWord)}</b>
@@ -648,30 +652,35 @@ function scheduleSave() {
   }, 700);
 }
 
+const STANDALONE_PAGES = ['masuk', 'admin'];
+const hashPage = () => location.hash.replace(/^#\/?/, '').split('?')[0];
+
+function leaveTo(view) {
+  history.replaceState(null, '', `${location.pathname}${location.search}#/${view}`);
+  location.reload();
+}
+
 function showAccessDenied(err) {
   const api = MODE === 'api';
-  $('app').innerHTML = `<main class="gate" role="alert">
-    <span class="gate-ico">${icon('lock', 28)}</span>
-    <h1>Akses belum diberikan</h1>
-    <p>${esc(err.message)} ${api
-    ? 'Minta pemilik dashboard menambahkan email Google Anda ke daftar akses, atau masuk dengan akun lain.'
-    : 'Minta pemilik dashboard menambahkan email Google Anda sebagai <b>Viewer</b> di spreadsheet data agregat, lalu muat ulang halaman ini.'}</p>
-    <div class="gate-act">${api ? '<button class="btn primary" type="button" id="view-switch">Masuk dengan akun lain</button>' : ''}
-      <button class="btn${api ? '' : ' primary'}" type="button" id="reload-after-error">Muat ulang</button></div></main>`;
-  $('reload-after-error').addEventListener('click', () => location.reload());
-  $('view-switch')?.addEventListener('click', () => login({ switchAccount: true }));
+  deniedScreen($('app'), {
+    email: err.email || '',
+    asked: !!err.asked,
+    canAsk: api,
+    note: 'Minta pemilik dashboard menambahkan email Google Anda sebagai Viewer di spreadsheet data agregat, lalu tekan Cek lagi.',
+    onAsk: requestAccess,
+    onSwitch: api ? () => login({ switchAccount: true }) : null,
+    onReload: () => location.reload(),
+  });
 }
 
 function showLogin(message = '') {
-  $('app').innerHTML = `<main class="gate">
-    <span class="gate-ico">${icon('logo', 28)}</span>
-    <h1>KPR Analytics</h1>
-    <p>Dashboard internal. Masuk dengan akun Google yang sudah didaftarkan pemilik dashboard.</p>
-    ${message ? `<p class="gate-msg" role="alert">${esc(message)}</p>` : ''}
-    <div class="gate-act"><button class="btn primary" type="button" id="login">${icon('mail', 17)}Masuk dengan Google</button></div>
-    <p class="gate-note">${icon('lock', 14)}Data baru dikirim setelah server memeriksa login dan email Anda.</p></main>`;
-  $('login').addEventListener('click', () => login());
-  $('login').focus();
+  loginScreen($('app'), { message, onLogin: () => login() });
+}
+
+function showAdmin() {
+  const demo = MODE === 'local';
+  const api = demo ? demoAccessApi() : accessApi;
+  adminScreen($('app'), { api, me: demo ? api.me : session()?.email || '', demo, onBack: () => leaveTo('ringkasan') });
 }
 
 function reauth(message) {
@@ -702,6 +711,12 @@ async function start() {
       return;
     }
   }
+  if (MODE === 'local' && hashPage() === 'masuk') {
+    loginScreen($('app'), { demo: true, onLogin: () => leaveTo('ringkasan') });
+    return;
+  }
+  if (MODE !== 'gas' && hashPage() === 'admin') { showAdmin(); return; }
+  addEventListener('hashchange', () => { if (STANDALONE_PAGES.includes(hashPage())) location.reload(); });
   renderShell();
   try {
     S.info = await boot();
