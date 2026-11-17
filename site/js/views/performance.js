@@ -50,7 +50,7 @@ function stripCard(card, s, lead = false) {
 export const perfWidgets = {
   strip: () => ({
     title: 'KPI utama', desc: 'Enam KPI berjajar seperti kartu Looker: nilai, capaian, target, dan GAP',
-    icon: 'target', w: 12, h: 3, minW: 6, minH: 3, fit: true, variant: 'strip',
+    icon: 'target', w: 12, h: 3, minW: 6, minH: 3, fit: true, snug: true, variant: 'strip',
     render(api) {
       const { slice: s } = api.ctx;
       if (!s) { api.body.innerHTML = empty('Belum ada data Performance di bulan ini'); return; }

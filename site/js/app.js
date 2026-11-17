@@ -337,6 +337,7 @@ async function mount({ view: vid, params }) {
     $('board').setAttribute('aria-busy', 'true');
     S.board = new Board($('board'), {
       defs: new Map(Object.entries(view.widgets)), render: renderWidget, destroy: destroyWidget, commit: onCommit,
+      watch: [document.querySelector('.masthead'), $('filter-bar')],
     });
     $('board').addEventListener('board:stack', onStack);
     onStack({ detail: S.board.stack });

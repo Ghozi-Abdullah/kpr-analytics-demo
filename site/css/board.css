@@ -1,7 +1,7 @@
 .work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 body.is-editing .work { grid-template-columns: minmax(0, 1fr) 280px; }
 #board { position: relative; outline: none; }
-.board { --row: 44px; --gap: 12px; --colw: 80px; --rows: 6; height: calc(var(--rows) * (var(--row) + var(--gap)) - var(--gap)); min-height: 240px; transition: height .25s var(--ease); }
+.board { --row: 44px; --gap: 12px; --colw: 80px; --rows: 6; height: var(--board-h, calc(var(--rows) * (var(--row) + var(--gap)) - var(--gap))); min-height: 240px; transition: height .25s var(--ease); }
 .board-cells {
   position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s;
   background: linear-gradient(to right, rgb(8 87 195 / .055) var(--colw), transparent 0) 0 0 / calc(var(--colw) + var(--gap)) 100%;
@@ -13,8 +13,8 @@ body.is-editing .work { grid-template-columns: minmax(0, 1fr) 280px; }
 .panel, .panel-placeholder {
   position: absolute; left: 0; top: 0;
   width: calc(var(--w) * var(--colw) + (var(--w) - 1) * var(--gap));
-  height: calc(var(--h) * var(--row) + (var(--h) - 1) * var(--gap));
-  transform: translate(calc(var(--x) * (var(--colw) + var(--gap))), calc(var(--y) * (var(--row) + var(--gap))));
+  height: var(--ph, calc(var(--h) * var(--row) + (var(--h) - 1) * var(--gap)));
+  transform: translate(calc(var(--x) * (var(--colw) + var(--gap))), var(--py, calc(var(--y) * (var(--row) + var(--gap)))));
 }
 .panel {
   display: flex; flex-direction: column; padding: 12px 14px 13px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow);

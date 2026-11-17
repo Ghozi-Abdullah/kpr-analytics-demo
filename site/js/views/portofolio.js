@@ -58,7 +58,7 @@ function gapNote(api, c) {
 export const pfWidgets = {
   seg: () => ({
     title: 'Segmen portofolio', desc: 'Delapan segmen dengan nilai, porsi, dan %NPL. Klik untuk memilih segmen',
-    icon: 'layers', w: 12, h: 3, minW: 6, minH: 3, fit: true,
+    icon: 'layers', w: 12, h: 3, minW: 6, minH: 3, fit: true, snug: true,
     render(api) {
       const c = P(api);
       const all = c.base('all');
@@ -77,7 +77,7 @@ export const pfWidgets = {
 
   tree: () => ({
     title: 'Pohon portofolio', desc: 'ALL KPR sampai Tier developer, tiap segmen dengan tabel kategori lengkap (seperti dashboard Looker)',
-    icon: 'tree', w: 12, h: 11, minW: 9, minH: 9, fit: true,
+    icon: 'tree', w: 12, h: 11, minW: 9, minH: 9, fit: true, fitMin: 40,
     render(api) {
       const c = P(api);
       const all = c.base('all');

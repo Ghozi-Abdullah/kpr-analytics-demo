@@ -8,6 +8,9 @@ export const COLS = 12;
 export const ROW = 44;
 export const GAP = 12;
 const STACK_BELOW = 720;
+const FIT_MIN = 36;
+const FIT_MAX = 84;
+const FIT_ROOM = 18;
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export const collides = (a, b) => a.id !== b.id && a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
@@ -49,7 +52,7 @@ export function compact(items, fixedId = null, vacated = null) {
 export const settle = (items, fixedId, vacated) => compact(compact(items, fixedId, vacated));
 
 export class Board {
-  constructor(root, { defs, render, destroy, commit }) {
+  constructor(root, { defs, render, destroy, commit, watch = [] }) {
     Object.assign(this, { root, defs, renderFn: render, destroyFn: destroy, commitFn: commit });
     this.items = [];
     this.els = new Map();
@@ -58,6 +61,9 @@ export class Board {
     this.colW = 80;
     this.session = null;
     this.preview = null;
+    this.fold = 0;
+    this.fitRow = ROW;
+    this.snugRows = new Set();
     root.classList.add('board');
     root.innerHTML = '<div class="board-cells" aria-hidden="true"></div><div class="panel-placeholder" aria-hidden="true" hidden></div>';
     this.ph = root.querySelector('.panel-placeholder');
@@ -66,12 +72,76 @@ export class Board {
     this.onDown = this.onDown.bind(this);
     this.onKey = this.onKey.bind(this);
     this.onClick = this.onClick.bind(this);
+    this.onResize = () => this.paint();
     root.addEventListener('pointerdown', this.onDown);
     root.addEventListener('keydown', this.onKey);
     root.addEventListener('click', this.onClick);
     this.ro = new ResizeObserver(() => this.measure());
     this.ro.observe(root);
+    for (const el of watch) if (el) this.ro.observe(el);
+    addEventListener('resize', this.onResize);
     this.measure();
+  }
+
+  fitFor(items) {
+    const none = { fold: 0, row: ROW, snug: new Set() };
+    if (this.stack || this.editing || !items.length || !this.root.isConnected) return none;
+    const top = this.root.getBoundingClientRect().top + scrollY;
+    const room = innerHeight - top - FIT_ROOM;
+    const flexRows = new Set();
+    for (const i of items) if (!this.defs.get(i.id)?.snug) for (let r = i.y; r < i.y + i.h; r += 1) flexRows.add(r);
+    let best = null;
+    for (const end of [...new Set(items.map((i) => i.y + i.h))].sort((a, b) => a - b)) {
+      if (items.some((i) => i.y < end && i.y + i.h > end)) continue;
+      const zone = items.filter((i) => i.y < end);
+      const flex = [...flexRows].filter((r) => r < end).length;
+      if (!flex) continue;
+      const space = room - (end - 1) * GAP;
+      let row = space / end;
+      if (row > ROW) row = (space - (end - flex) * ROW) / flex;
+      const floor = Math.max(FIT_MIN, ...zone.map((i) => this.defs.get(i.id)?.fitMin || 0));
+      if (row < floor || row > FIT_MAX) continue;
+      if (!best || Math.abs(row - ROW) < Math.abs(best.row - ROW)) best = { fold: end, row };
+    }
+    if (!best) return none;
+    const snug = new Set();
+    for (let r = 0; r < best.fold; r += 1) if (!flexRows.has(r)) snug.add(r);
+    return { ...best, snug };
+  }
+
+  refit() {
+    if (this.session || this.gone) return false;
+    const next = this.fitFor(this.items);
+    const same = next.fold === this.fold && Math.abs(next.row - this.fitRow) < 0.5
+      && next.snug.size === this.snugRows.size && [...next.snug].every((r) => this.snugRows.has(r));
+    if (same) return false;
+    this.fold = next.fold;
+    this.fitRow = next.row;
+    this.snugRows = next.snug;
+    return true;
+  }
+
+  rowHeight(r) {
+    if (r >= this.fold) return ROW;
+    return this.snugRows.has(r) ? Math.min(ROW, this.fitRow) : this.fitRow;
+  }
+
+  rowTop(y) {
+    let top = 0;
+    for (let r = 0; r < y; r += 1) top += this.rowHeight(r) + GAP;
+    return top;
+  }
+
+  span(y, h) {
+    const top = this.rowTop(y);
+    return { top, height: this.rowTop(y + h) - top - GAP };
+  }
+
+  place(el, it) {
+    const { top, height } = this.span(it.y, it.h);
+    for (const k of ['x', 'y', 'w', 'h']) el.style.setProperty(`--${k}`, it[k]);
+    el.style.setProperty('--py', `${top.toFixed(2)}px`);
+    el.style.setProperty('--ph', `${height.toFixed(2)}px`);
   }
 
   measure() {
@@ -89,24 +159,27 @@ export class Board {
   }
 
   paint(items = this.items) {
-    const order = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
-    order.forEach((it, i) => {
-      const el = this.els.get(it.id);
-      if (!el) return;
-      el.style.setProperty('--x', it.x);
-      el.style.setProperty('--y', it.y);
-      el.style.setProperty('--w', it.w);
-      el.style.setProperty('--h', it.h);
-      el.style.order = String(i);
-      el.classList.toggle('wide', it.w >= 7);
-    });
-    this.root.style.setProperty('--rows', Math.max(1, bottomOf(items) + (this.editing ? 3 : 0)));
+    const draw = () => {
+      const order = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+      order.forEach((it, i) => {
+        const el = this.els.get(it.id);
+        if (!el) return;
+        this.place(el, it);
+        el.style.order = String(i);
+        el.classList.toggle('wide', it.w >= 7);
+      });
+      const rows = Math.max(1, bottomOf(items) + (this.editing ? 3 : 0));
+      this.root.style.setProperty('--rows', rows);
+      this.root.style.setProperty('--board-h', `${this.span(0, rows).height.toFixed(2)}px`);
+    };
+    draw();
+    if (items === this.items && this.refit()) draw();
   }
 
   showPh(it) {
     if (!it) { this.ph.hidden = true; return; }
     this.ph.hidden = false;
-    for (const k of ['x', 'y', 'w', 'h']) this.ph.style.setProperty(`--${k}`, it[k]);
+    this.place(this.ph, it);
   }
 
   setItems(items) {
@@ -115,6 +188,7 @@ export class Board {
       const d = this.defs.get(i.id);
       return { ...i, w: clamp(i.w, d.minW || 2, d.maxW || COLS), h: clamp(i.h, d.minH || 2, d.maxH || 14) };
     }));
+    this.refit();
     for (const [id, el] of [...this.els]) {
       if (!this.items.some((i) => i.id === id)) { this.destroyFn(id); el.remove(); this.els.delete(id); }
     }
@@ -396,6 +470,7 @@ export class Board {
   destroy() {
     this.gone = true;
     this.ro.disconnect();
+    removeEventListener('resize', this.onResize);
     for (const id of this.els.keys()) this.destroyFn(id);
     this.els.clear();
     this.root.removeEventListener('pointerdown', this.onDown);
@@ -403,5 +478,6 @@ export class Board {
     this.root.removeEventListener('click', this.onClick);
     this.root.innerHTML = '';
     this.root.classList.remove('editing', 'stack', 'busy');
+    this.root.style.removeProperty('--board-h');
   }
 }

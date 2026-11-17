@@ -66,6 +66,10 @@ Aturan:
 - Saat mode atur aktif, isi panel tidak bisa diklik, sidebar dirapatkan, dan pembaruan data live ditunda sampai selesai.
 - Lebar papan di bawah 900 px: panel ditumpuk satu kolom dan Atur panel dimatikan (tombol abu-abu dengan keterangan).
 - Tata letak disimpan per halaman dan per akun.
+- Di luar mode atur, baris grid di layar pertama diberi tinggi sesuai tinggi jendela supaya panel terbawah berakhir pas di
+  bawah layar. Titik potong dipilih di batas baris yang tidak memotong panel, dengan tinggi baris paling dekat ke 44 px
+  (batas 36 sampai 84 px). Panel bertanda `snug` (kartu KPI, judul baris) tidak dibesarkan, panel bertanda `fitMin`
+  (tabel Realisasi, Pohon portofolio) tidak dikecilkan di bawah batasnya. Saat mode atur aktif semua baris 44 px.
 
 ## 5. Tanya data (spesifikasi singkat)
 

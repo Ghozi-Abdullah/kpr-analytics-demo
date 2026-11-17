@@ -17,19 +17,22 @@ function hideBrokenArt(host) {
   else img.addEventListener('error', hide, { once: true });
 }
 
-function layout(panel, cover = '') {
+function layout(panel, loading = '') {
   return `<main class="auth">
     <div class="auth-device">
+      <div class="auth-leaf auth-leaf-l">
+        <section class="auth-art">${art}</section>
+        ${loading ? `<div class="auth-back" aria-hidden="true">${loading}</div>` : ''}
+      </div>
+      <div class="auth-leaf auth-leaf-r"><section class="auth-panel">${panel}</section></div>
       <span class="auth-hinge" aria-hidden="true"></span>
-      <section class="auth-art">${art}</section>
-      <section class="auth-panel">${panel}</section>
-      ${cover}
     </div>
+    ${loading ? `<div class="auth-splash" aria-hidden="true">${loading}</div>` : ''}
   </main>`;
 }
 
 const G_SRC = ['css/google-g.png', 'css/google-g.svg'];
-const FOLD = { start: 120, close: 900, go: 1750, calm: 650 };
+const FOLD = { start: 120, close: 940, go: 1750, calm: 650 };
 
 function bindGoogleMark(host) {
   const img = host.querySelector('.auth-g');
@@ -45,7 +48,7 @@ function bindGoogleMark(host) {
   if (img.complete && !img.naturalWidth) fail();
 }
 
-function bindSwipe(host, onDone) {
+function bindSwipe(host, onDone, onMove = () => {}) {
   const wrap = host.querySelector('.auth-swipe');
   const knob = wrap.querySelector('.auth-swipe-knob');
   const pad = 6;
@@ -61,6 +64,7 @@ function bindSwipe(host, onDone) {
     x = Math.max(0, Math.min(max, v));
     wrap.style.setProperty('--x', `${x}px`);
     wrap.style.setProperty('--p', max ? (x / max).toFixed(3) : '0');
+    onMove(max ? x / max : 0);
   };
   const finish = () => {
     if (done) return;
@@ -118,14 +122,12 @@ function bindSwipe(host, onDone) {
 export function loginScreen(host, { message = '', demo = false, roles = false, onLogin }) {
   let role = 'viewer';
   const going = demo ? 'Menyiapkan dashboard' : 'Menghubungkan ke Google';
-  const cover = `<section class="auth-cover" aria-hidden="true">
-      <div class="auth-cover-in">
-        <span class="auth-cover-mark">${icon('logo', 30)}</span>
-        <b>KPR Analytics</b>
-        <span class="auth-loader"></span>
-        <small>${going}…</small>
-      </div>
-    </section>`;
+  const loading = `<div class="auth-load">
+      <span class="auth-load-mark">${icon('logo', 30)}</span>
+      <b>KPR Analytics</b>
+      <small>${going}…</small>
+      <span class="auth-load-bar"></span>
+    </div>`;
   host.innerHTML = layout(`
     <div class="auth-box">
       <span class="auth-mark">${icon('logo', 26)}</span>
@@ -154,23 +156,35 @@ export function loginScreen(host, { message = '', demo = false, roles = false, o
         <li>${icon('user-check', 16)}<span>Belum terdaftar? Masuk dulu, lalu kirim permintaan akses ke admin.</span></li>
         <li>${icon('lock', 16)}<span>Data baru dikirim setelah server memeriksa login dan email Anda.</span></li>
       </ul>
-    </div>`, cover);
+    </div>`, loading);
   hideBrokenArt(host);
   bindGoogleMark(host);
   host.querySelectorAll('[data-role]').forEach((b) => b.addEventListener('click', () => {
     role = b.dataset.role;
     host.querySelectorAll('[data-role]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
   }));
+  const root = host.querySelector('.auth');
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wide = matchMedia('(min-width: 900px)');
+  const lift = (p) => { if (!calm && wide.matches) root.style.setProperty('--lift', p.toFixed(3)); };
+  const frame = () => {
+    const knob = host.querySelector('#login').getBoundingClientRect();
+    root.style.setProperty('--ox', `${Math.round(knob.left + knob.width / 2)}px`);
+    root.style.setProperty('--oy', `${Math.round(knob.top + knob.height / 2)}px`);
+    if (!wide.matches) return;
+    const box = root.querySelector('.auth-device').getBoundingClientRect();
+    root.style.setProperty('--fit', Math.min(1, (innerHeight - 32) / (box.height * 1.15)).toFixed(3));
+    if (box.top < 0 || box.bottom > innerHeight) scrollTo({ top: scrollY + box.top + box.height / 2 - innerHeight / 2, behavior: calm ? 'auto' : 'smooth' });
+  };
   bindSwipe(host, () => {
-    const root = host.querySelector('.auth');
-    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
     host.querySelector('#auth-live').textContent = `${going}, tunggu sebentar.`;
     root.setAttribute('aria-busy', 'true');
+    frame();
     setTimeout(() => root.classList.add('is-folding'), calm ? 0 : FOLD.start);
     setTimeout(() => root.classList.add('is-closed'), calm ? 0 : FOLD.close);
     addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); }, { once: true });
     setTimeout(() => onLogin(role), calm ? FOLD.calm : FOLD.go);
-  });
+  }, lift);
   host.querySelector('#login').focus({ preventScroll: true });
 }
 

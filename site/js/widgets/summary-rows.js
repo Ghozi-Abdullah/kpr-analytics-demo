@@ -5,7 +5,7 @@ import { buildInsights, insightText, TONES } from '../analytics/insights.js';
 
 export function sectionWidget({ title, desc, view = '', action = '' }) {
   return {
-    title, desc, icon: 'layers', w: 12, h: 1, minW: 6, minH: 1, maxH: 1, fit: true, variant: 'section',
+    title, desc, icon: 'layers', w: 12, h: 1, minW: 6, minH: 1, maxH: 1, fit: true, snug: true, variant: 'section',
     render(api) {
       const open = view && action
         ? `<button type="button" class="band-open" data-band-open>${esc(action)}${icon('open', 14)}</button>`

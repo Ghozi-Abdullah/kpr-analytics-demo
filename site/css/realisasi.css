@@ -21,6 +21,9 @@
 .realisasi-totals { flex: none; grid-template-columns: minmax(140px, 1.25fr) repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; padding: 2px 2px 8px; }
 .realisasi-totals .tile-body { padding: 8px 12px; }
 .realisasi-total .tile-v { font-size: 22px; }
+.table-wrap:has(> .realisasi-table) { flex: 1 1 auto; min-height: 0; }
+.realisasi-table { height: 100%; }
+.realisasi-table thead tr { height: 1px; }
 .realisasi-table td.on { background: var(--accent-tint); }
 .realisasi-table th, .realisasi-table td { padding: 4.5px 9px; }
 .realisasi-table thead th { text-align: right; }
