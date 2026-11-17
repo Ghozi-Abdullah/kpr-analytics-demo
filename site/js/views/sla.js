@@ -7,7 +7,7 @@ import { icon } from '../core/icons.js';
 import { SLA_STAGES, SLA_TARGET_HARI, SLA_TYPE_LABEL, SLA_DETAIL_DAYS, SLA_DETAIL_TOP, SLA_CARD_RANGE, SLA_STAGE_COLOR, SLA_FLOW_NEXT, SLA_FLOW_RECENT, SLA_CHASE_TOP, SLA_CHASE_MIN } from '../config.js';
 import { barChart, SERIES } from '../charts/charts.js';
 import { loadSla } from '../services/datasets.js';
-import { ACTIVE_STAGES, stageById, filterRows, tally, byStage, groupTally, activeRows, hasAge, filterDaily, byDate, lastDays, shiftDay, dayTotals } from '../models/sla-model.js';
+import { ACTIVE_STAGES, stageById, filterRows, tally, byStage, groupTally, activeRows, hasAge, isLate, filterDaily, byDate, lastDays, shiftDay, dayTotals } from '../models/sla-model.js';
 import { chartBox, canvasOf, stats, empty, donutHtml, mountDonut } from '../widgets/widget-kit.js';
 
 const rp = (v, d = 1) => (ok(v) ? `Rp ${fmt.rupiah(v, d)}` : '–');
@@ -194,6 +194,7 @@ function flowCard(s, c) {
 
 function chaseCard(s, rows, c) {
   const all = [...groupTally(rows, 'kanca')].filter(([k]) => k);
+  const lateRp = new Map([...groupTally(rows.filter(isLate), 'kanca')].map(([k, t]) => [k, t.nominal]));
   let list;
   let title;
   let note;
@@ -205,7 +206,8 @@ function chaseCard(s, rows, c) {
     note = late.length
       ? `Kantor cabang dengan berkas lewat SLA terbanyak di tahap ${s.label}. Klik untuk memfilter halaman ke kantor cabang itu.`
       : `Belum ada berkas lewat ${SLA_TARGET_HARI} hari. Ini kantor cabang dengan berkas paling lama.`;
-    facts = (t) => [`<b class="${t.late ? 'late-t' : ''}">${fmt.num(t.late)}</b> lewat SLA dari ${fmt.num(t.berkas)} berkas`, `terlama ${span(t.umurMax)}`];
+    facts = (t, k) => [`<b class="${t.late ? 'late-t' : ''}">${fmt.num(t.late)}</b> lewat SLA dari ${fmt.num(t.berkas)} berkas`,
+      `plafon ${t.late ? `lewat SLA ${rp(lateRp.get(k))}` : rp(t.nominal)}, terlama ${span(t.umurMax)}`];
   } else {
     list = all.filter(([, t]) => t.lamaN >= SLA_CHASE_MIN).sort((a, b) => (b[1].lamaAvg ?? 0) - (a[1].lamaAvg ?? 0));
     title = 'Paling lama sampai cair';
@@ -215,7 +217,7 @@ function chaseCard(s, rows, c) {
   const top = list.slice(0, SLA_CHASE_TOP);
   const body = top.length
     ? `<ol class="pop-chase">${top.map(([k, t], i) => {
-      const [main, sub] = facts(t);
+      const [main, sub] = facts(t, k);
       const ro = c.model.kancaRo.get(k) || '';
       return `<li><button type="button" data-kanca="${esc(k)}" data-ro="${esc(ro)}"><span class="pop-chase-no">${i + 1}</span>
         <span class="pop-chase-name">${esc(k)}<small>${esc(shortRo(ro))}</small></span>
@@ -238,6 +240,7 @@ function openStage(id, api, c) {
     { label: 'Nominal diajukan', value: rp(t.nominal) },
     { label: 'Tepat SLA', value: fmt.pct(t.onTime, 1), sub: `${fmt.num(t.ok)} berkas paling lama ${SLA_TARGET_HARI} hari` },
     { label: 'Lewat SLA', value: fmt.num(t.late), sub: lateWord, tone: t.late ? 'late' : '' },
+    ...(id === 'analisa' ? [{ label: 'Plafon lewat SLA', value: rp(tally(rows.filter(isLate)).nominal), sub: 'nominal pengajuan', tone: t.late ? 'late' : '' }] : []),
     { label: 'Umur tercepat', value: span(t.umurMin) },
     { label: 'Umur rata-rata', value: span(t.umurAvg) },
     { label: 'Umur terlama', value: span(t.umurMax), tone: ok(t.umurMax) && t.umurMax > SLA_TARGET_HARI ? 'late' : '' },
@@ -248,7 +251,8 @@ function openStage(id, api, c) {
     { label: `Cair di ${fmt.month(month)}`, value: fmt.num(monthCount(c, id, month)), sub: 'berkas' },
   ];
   const flow = flowCard(s, c);
-  const html = `${stageTabs(id)}${kpiTiles(kpis)}<div class="pop-grid">${flow.html}${chaseCard(s, rows, c)}</div>`;
+  const chase = id === 'analisa' || !s.active ? chaseCard(s, rows, c) : '';
+  const html = `${stageTabs(id)}${kpiTiles(kpis)}<div class="pop-grid">${flow.html}${chase}</div>`;
   const on = c.sel.tahap === id;
   const apply = c.linked ? 'Buka di halaman SLA' : on ? 'Tampilkan semua tahap' : `Tampilkan ${s.label} saja di halaman`;
   const dlg = openDetail({
@@ -560,8 +564,71 @@ export const slaWidgets = {
   },
 };
 
+
+function stageMix(rows) {
+  const st = byStage(rows);
+  return ACTIVE_STAGES.map((s) => [s.label, st.get(s.id).berkas]).filter(([, n]) => n).map(([l, n]) => `${l} ${fmt.num(n)}`).join(', ');
+}
+
+export function slaDock(c) {
+  if (!c.model.rows.length) return null;
+  const stage = stageById(c.sel.tahap);
+  const pool = stage?.active ? c.rows : c.active;
+  const late = pool.filter(isLate);
+  const all = tally(pool);
+  const t = tally(late);
+  const scope = [c.sel.kanca || (c.sel.ro ? shortRo(c.sel.ro) : 'Nasional'), stage?.active ? `tahap ${stage.label}` : ''].filter(Boolean).join(', ');
+  if (!t.berkas) {
+    return {
+      key: 'sla', tone: 'ok', icon: 'check', title: 'Semua berkas dalam SLA', label: 'Status SLA',
+      pill: '<b>Semua dalam SLA</b>',
+      sub: `${esc(scope)}, posisi ${fmt.date(c.model.snapshot)}.`,
+      body: `<p class="dock-sum">Tidak ada berkas yang lewat ${SLA_TARGET_HARI} hari. ${fmt.num(all.berkas)} berkas masih berjalan${ok(all.umurMax) ? `, paling lama ${span(all.umurMax)}` : ''}.</p>`,
+    };
+  }
+  const byKanca = (rows) => [...groupTally(rows, 'kanca')].filter(([k]) => k)
+    .sort((a, b) => b[1].berkas - a[1].berkas || b[1].nominal - a[1].nominal)
+    .map(([k, x]) => ({ k, x, mix: stageMix(rows.filter((r) => r.kanca === k)) }));
+  const kancaItem = (r, ro) => `<li><button type="button" class="dock-item" data-kanca="${esc(r.k)}" data-ro="${esc(ro)}">
+      <span class="dock-name">${esc(r.k)}<small>${esc(r.mix)}, terlama ${span(r.x.umurMax)}</small></span>
+      <span class="dock-num"><b>${fmt.num(r.x.berkas)}</b><small>${rp(r.x.nominal)}</small></span>${icon('arrow-right', 14)}</button></li>`;
+  let list;
+  let where;
+  if (c.sel.ro || c.sel.kanca) {
+    const items = byKanca(late);
+    where = `${fmt.num(items.length)} kanca`;
+    list = `<ol class="dock-list">${items.map((r) => kancaItem(r, c.model.kancaRo.get(r.k) || c.sel.ro)).join('')}</ol>`;
+  } else {
+    const ros = [...groupTally(late, 'ro')].filter(([k]) => k).sort((a, b) => b[1].berkas - a[1].berkas || b[1].nominal - a[1].nominal);
+    where = `${fmt.num(ros.length)} RO`;
+    list = `<ol class="dock-list">${ros.map(([ro, x]) => {
+      const items = byKanca(late.filter((r) => r.ro === ro));
+      return `<li class="dock-group">
+        <button type="button" class="dock-item dock-head-item" data-group="${esc(ro)}" aria-expanded="false">
+          <span class="dock-name">${esc(shortRo(ro))}<small>${fmt.num(items.length)} kanca, terlama ${span(x.umurMax)}</small></span>
+          <span class="dock-num"><b>${fmt.num(x.berkas)}</b><small>${rp(x.nominal)}</small></span>${icon('chevron-down', 14)}</button>
+        <ul class="dock-sublist" hidden>
+          ${items.map((r) => kancaItem(r, ro)).join('')}
+          <li><button type="button" class="dock-more" data-ro-only="${esc(ro)}">Tampilkan ${esc(shortRo(ro))} di halaman${icon('arrow-right', 14)}</button></li>
+        </ul>
+      </li>`;
+    }).join('')}</ol>`;
+  }
+  return {
+    key: 'sla', tone: 'late', icon: 'alert', title: 'Berkas lewat SLA', label: 'Peringatan berkas lewat SLA',
+    pill: `<b>${fmt.num(t.berkas)}</b> berkas lewat SLA<small>${rp(t.nominal)}</small>`,
+    sub: `${esc(scope)}, posisi ${fmt.date(c.model.snapshot)}.`,
+    openFirst: matchMedia('(min-width: 900px)').matches,
+    attention: true,
+    body: `<p class="dock-sum"><b class="late-t">${fmt.num(t.berkas)} berkas</b> sudah lebih dari ${SLA_TARGET_HARI} hari di tahapnya, tersebar di ${where}. Total plafon <b>${rp(t.nominal)}</b> (${share(t.berkas, all.berkas)} dari berkas berjalan).</p>
+      ${list}
+      <p class="dock-foot">Angka kanan: jumlah berkas dan plafon (nominal pengajuan) yang lewat SLA. Klik kanca untuk memfilter halaman.</p>`,
+  };
+}
+
 export default {
   id: 'sla', title: 'SLA', icon: 'clock',
+  dock: slaDock,
   load: loadSla,
   normalize(p, m) {
     return {
@@ -608,16 +675,14 @@ export default {
     flow: slaWidgets.flow(),
     daily: slaWidgets.daily(),
     income: slaWidgets.income(),
-    kanca: slaWidgets.kanca(),
     putusan: slaWidgets.putusan(),
     komposisi: slaWidgets.komposisi(),
   },
   layout: [
     { id: 'flow', x: 0, y: 0, w: 12, h: 9 },
     { id: 'daily', x: 0, y: 9, w: 12, h: 10 },
-    { id: 'income', x: 0, y: 19, w: 6, h: 6 },
-    { id: 'putusan', x: 6, y: 19, w: 6, h: 6 },
-    { id: 'kanca', x: 0, y: 25, w: 6, h: 8 },
-    { id: 'komposisi', x: 6, y: 25, w: 6, h: 8 },
+    { id: 'income', x: 0, y: 19, w: 6, h: 7 },
+    { id: 'komposisi', x: 6, y: 19, w: 6, h: 7 },
+    { id: 'putusan', x: 0, y: 26, w: 12, h: 5 },
   ],
 };

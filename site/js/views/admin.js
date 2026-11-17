@@ -101,7 +101,7 @@ function logRows(log) {
   return `<ol class="admin-log">${log.map(([at, email, event]) => `<li><time>${esc(when(at))}</time><b>${esc(email)}</b><span class="${tone(event)}">${esc(event)}</span></li>`).join('')}</ol>`;
 }
 
-export function adminScreen(host, { api, me = '', demo = false, onBack }) {
+export function adminScreen(host, { api, me = '', demo = false, onBack, initial = null }) {
   let data = { users: [], requests: [], log: [] };
   let notice = '';
   let confirmTimer;
@@ -180,6 +180,7 @@ export function adminScreen(host, { api, me = '', demo = false, onBack }) {
     }));
   }
 
+  if (initial) { data = initial; draw(); return; }
   host.innerHTML = '<main class="admin" aria-busy="true"><p class="admin-loading">Memuat daftar akses…</p></main>';
   api.list().then((res) => { data = res; draw(); }).catch((err) => {
     host.innerHTML = `<main class="admin"><div class="fatal" role="alert"><h2>Halaman admin belum bisa dibuka</h2><p>${esc(err?.message || err)}</p>

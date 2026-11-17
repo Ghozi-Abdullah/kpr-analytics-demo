@@ -71,7 +71,7 @@ async function apiCall(action, payload = {}) {
   if (body.ok) return body.data;
   if (body.error === 'AUTH') { dropSession(); throw new AuthError('Sesi login berakhir. Silakan masuk lagi.'); }
   if (body.error === 'DENIED') throw new AccessError(`Akun ${body.email || 'ini'} belum ada di daftar akses dashboard.`, body);
-  if (body.error === 'FORBIDDEN') throw new Error('Halaman ini hanya untuk admin.');
+  if (body.error === 'FORBIDDEN') throw Object.assign(new Error('Halaman ini hanya untuk admin.'), { code: 'FORBIDDEN' });
   if (body.error === 'BUSY') throw new Error('Server sedang membatasi permintaan. Tunggu satu menit lalu muat ulang.');
   if (body.error === 'BAD') throw new Error(body.message || 'Permintaan ditolak server karena formatnya tidak sesuai.');
   throw gasError(new Error(body.error || body.message || 'Kesalahan tidak dikenal'));

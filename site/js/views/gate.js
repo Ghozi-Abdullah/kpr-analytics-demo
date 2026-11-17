@@ -23,39 +23,161 @@ function hideBrokenArt(host) {
   else img.addEventListener('error', hide, { once: true });
 }
 
-function layout(panel) {
+function layout(panel, cover = '') {
   return `<main class="auth">
     <div class="auth-device">
       <span class="auth-hinge" aria-hidden="true"></span>
       <section class="auth-art">${art}</section>
       <section class="auth-panel">${panel}</section>
+      ${cover}
     </div>
   </main>`;
 }
 
-export function loginScreen(host, { message = '', demo = false, onLogin }) {
+const G_SRC = ['css/google-g.svg', 'css/google-g.png'];
+const FOLD = { lift: 420, close: 980, go: 1900, calm: 650 };
+
+function bindGoogleMark(host) {
+  const img = host.querySelector('.auth-g');
+  if (!img) return;
+  let i = 0;
+  const fail = () => {
+    i += 1;
+    if (i < G_SRC.length) { img.src = G_SRC[i]; return; }
+    img.hidden = true;
+    host.querySelector('.auth-g-alt').hidden = false;
+  };
+  img.addEventListener('error', fail);
+  if (img.complete && !img.naturalWidth) fail();
+}
+
+function bindSwipe(host, onDone) {
+  const wrap = host.querySelector('.auth-swipe');
+  const knob = wrap.querySelector('.auth-swipe-knob');
+  const pad = 6;
+  let max = 0;
+  let x = 0;
+  let from = 0;
+  let drag = false;
+  let travel = 0;
+  let done = false;
+  let nudgeTimer;
+  const measure = () => { max = Math.max(0, wrap.clientWidth - knob.offsetWidth - pad * 2); };
+  const set = (v) => {
+    x = Math.max(0, Math.min(max, v));
+    wrap.style.setProperty('--x', `${x}px`);
+    wrap.style.setProperty('--p', max ? (x / max).toFixed(3) : '0');
+  };
+  const finish = () => {
+    if (done) return;
+    done = true;
+    measure();
+    wrap.classList.remove('is-drag', 'is-nudge');
+    wrap.classList.add('is-snap', 'is-done');
+    set(max);
+    knob.setAttribute('aria-disabled', 'true');
+    onDone();
+  };
+  const nudge = () => {
+    clearTimeout(nudgeTimer);
+    wrap.classList.remove('is-nudge');
+    void wrap.offsetWidth;
+    wrap.classList.add('is-nudge');
+    host.querySelector('.auth-swipe-hint')?.classList.add('is-on');
+    nudgeTimer = setTimeout(() => wrap.classList.remove('is-nudge'), 900);
+  };
+  knob.addEventListener('pointerdown', (e) => {
+    if (done || e.button > 0) return;
+    measure();
+    drag = true;
+    travel = 0;
+    from = e.clientX - x;
+    wrap.classList.remove('is-snap', 'is-nudge');
+    wrap.classList.add('is-drag');
+    knob.setPointerCapture?.(e.pointerId);
+  });
+  knob.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const v = e.clientX - from;
+    travel = Math.max(travel, Math.abs(v));
+    set(v);
+  });
+  const release = () => {
+    if (!drag) return;
+    drag = false;
+    wrap.classList.remove('is-drag');
+    if (max && x >= max * 0.8) { finish(); return; }
+    wrap.classList.add('is-snap');
+    set(0);
+    if (travel < 6) nudge();
+  };
+  knob.addEventListener('pointerup', release);
+  knob.addEventListener('pointercancel', release);
+  knob.addEventListener('lostpointercapture', release);
+  knob.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finish(); }
+  });
+  knob.addEventListener('click', (e) => { if (e.detail === 0) finish(); });
+  addEventListener('resize', () => { if (done) { measure(); set(max); } }, { passive: true });
+}
+
+export function loginScreen(host, { message = '', demo = false, roles = false, onLogin }) {
+  let role = 'viewer';
+  const going = demo ? 'Menyiapkan dashboard' : 'Menghubungkan ke Google';
+  const cover = `<section class="auth-cover" aria-hidden="true">
+      <div class="auth-cover-in">
+        <span class="auth-cover-mark">${icon('logo', 30)}</span>
+        <b>KPR Analytics</b>
+        <span class="auth-loader"></span>
+        <small>${going}…</small>
+      </div>
+    </section>`;
   host.innerHTML = layout(`
     <div class="auth-box">
       <span class="auth-mark">${icon('logo', 26)}</span>
       <h1>Masuk ke KPR Analytics</h1>
       <p class="auth-lead">Dashboard internal. Hanya akun yang sudah didaftarkan admin yang bisa membuka data.</p>
       ${message ? `<p class="auth-msg" role="alert">${esc(message)}</p>` : ''}
-      <button class="auth-scan" type="button" id="login">
-        <span class="auth-scan-ico">${keyMark(42)}</span>
-        <span class="auth-scan-text"><b>Masuk dengan Google</b><small>Pakai akun Google yang sudah didaftarkan admin</small></span>
-        ${icon('arrow-right', 18)}
-      </button>
-      ${demo ? '<p class="auth-demo">Versi demo: tombol ini langsung membuka dashboard tanpa memeriksa akun. Di versi asli, Google memeriksa akun Anda lalu server mencocokkan email dengan daftar akses sebelum data dikirim.</p>' : ''}
+      ${roles ? `<div class="auth-role" role="group" aria-label="Masuk sebagai">
+        <span>Masuk sebagai</span>
+        <button type="button" data-role="viewer" aria-pressed="true">Pengguna</button>
+        <button type="button" data-role="admin" aria-pressed="false">Admin</button>
+      </div>` : ''}
+      <div class="auth-swipe">
+        <span class="auth-swipe-fill" aria-hidden="true"></span>
+        <span class="auth-swipe-label" aria-hidden="true">Geser untuk masuk dengan Google</span>
+        <span class="auth-swipe-done" aria-hidden="true">${going}…</span>
+        <span class="auth-swipe-end" aria-hidden="true">${icon('arrow-right', 18)}</span>
+        <button type="button" class="auth-swipe-knob" id="login" aria-label="Masuk dengan Google. Geser ke kanan, atau tekan Enter.">
+          <img class="auth-g" src="${G_SRC[0]}" alt="" width="26" height="26" decoding="async"><span class="auth-g-alt" hidden>${keyMark(26)}</span>
+        </button>
+      </div>
+      <p class="auth-swipe-hint">Geser bulatan ke kanan sampai ujung, atau tekan Enter. Pakai akun Google yang sudah didaftarkan admin.</p>
+      <p class="sr-only" role="status" aria-live="polite" id="auth-live"></p>
+      ${demo ? `<p class="auth-demo">Versi demo: geser untuk langsung membuka dashboard tanpa memeriksa akun.${roles ? ' Halaman admin hanya muncul bila masuk sebagai Admin.' : ''} Di versi asli, Google memeriksa akun Anda lalu server mencocokkan email dengan daftar akses sebelum data dikirim.</p>` : ''}
       <ul class="auth-points">
         <li>${icon('shield', 16)}<span>Tidak ada password yang disimpan di dashboard ini.</span></li>
         <li>${icon('user-check', 16)}<span>Belum terdaftar? Masuk dulu, lalu kirim permintaan akses ke admin.</span></li>
         <li>${icon('lock', 16)}<span>Data baru dikirim setelah server memeriksa login dan email Anda.</span></li>
       </ul>
-    </div>`);
+    </div>`, cover);
   hideBrokenArt(host);
-  const btn = host.querySelector('#login');
-  btn.addEventListener('click', () => onLogin());
-  btn.focus({ preventScroll: true });
+  bindGoogleMark(host);
+  host.querySelectorAll('[data-role]').forEach((b) => b.addEventListener('click', () => {
+    role = b.dataset.role;
+    host.querySelectorAll('[data-role]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  bindSwipe(host, () => {
+    const root = host.querySelector('.auth');
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    host.querySelector('#auth-live').textContent = `${going}, tunggu sebentar.`;
+    root.setAttribute('aria-busy', 'true');
+    setTimeout(() => root.classList.add('is-folding'), calm ? 0 : 160);
+    setTimeout(() => root.classList.add('is-closed'), calm ? 0 : FOLD.close);
+    addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); }, { once: true });
+    setTimeout(() => onLogin(role), calm ? FOLD.calm : FOLD.go);
+  });
+  host.querySelector('#login').focus({ preventScroll: true });
 }
 
 export function deniedScreen(host, { email = '', asked = false, canAsk = false, note = '', onAsk, onSwitch, onReload }) {

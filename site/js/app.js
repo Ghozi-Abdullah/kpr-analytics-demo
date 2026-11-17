@@ -10,6 +10,7 @@ import { startLive, ago, LIVE_INTERVAL } from './services/live.js';
 import { resetHub } from './analytics/data-hub.js';
 import { createAsk } from './ask/engine.js';
 import { createAskDialog } from './ask/ask-dialog.js';
+import { createDock } from './core/dock.js';
 import { handleRedirect, login, logout, session, hasHint, isLocalHost } from './services/auth.js';
 import { initRouter, navigate, route, hrefFor } from './services/router.js';
 import { Board, compact } from './board/board.js';
@@ -27,6 +28,7 @@ const S = {
   live: null, liveState: { state: 'idle', checkedAt: 0 }, pendingData: '', refreshing: false,
 };
 const askEngine = createAsk();
+const dock = createDock();
 let askDialog = null;
 const $ = (id) => document.getElementById(id);
 
@@ -296,7 +298,8 @@ function openStatus() {
     : `<p class="note">Mode lokal. Tata letak panel tersimpan di browser ini. Untuk memperbarui data, simpan export spreadsheet ke folder data_raw lalu jalankan:</p>
        <div class="code">python pipeline/build_data.py</div>
        <p class="note">Contoh tampilan untuk versi yang memakai login:</p>
-       <div class="status-act"><a class="btn" href="#/masuk">${icon('lock', 16)}Halaman login</a><a class="btn" href="#/admin">${icon('users', 16)}Halaman admin</a>${DEMO_GATE ? '<button class="btn" type="button" id="demo-logout">Keluar</button>' : ''}</div>`;
+       ${DEMO_GATE ? `<p class="note">Versi demo: masuk sebagai <b>${demoRole() === 'admin' ? 'admin' : 'pengguna'}</b>.${demoRole() === 'admin' ? '' : ' Halaman admin hanya muncul untuk admin.'}</p>` : ''}
+       <div class="status-act">${DEMO_GATE ? '' : `<a class="btn" href="#/masuk">${icon('lock', 16)}Halaman login</a>`}${isAdmin() ? `<a class="btn" href="#/admin">${icon('users', 16)}Halaman admin</a>` : ''}${DEMO_GATE ? '<button class="btn" type="button" id="demo-logout">Keluar</button>' : ''}</div>`;
   const checked = S.liveState.checkedAt ? new Date(S.liveState.checkedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'belum';
   const liveWord = { live: 'Aktif', offline: 'Terhenti, perangkat sedang offline', error: 'Gagal menghubungi server, dicoba lagi otomatis', idle: 'Menyiapkan' }[S.liveState.state] || 'Aktif';
   const liveBox = `<div class="live-box"><b>${icon('signal', 16)}Pembaruan otomatis: ${esc(liveWord)}</b>
@@ -322,6 +325,7 @@ async function mount({ view: vid, params }) {
   const view = VIEWS[vid];
   updateNav(vid);
   if (S.view !== view || !S.model) {
+    dock.hide();
     S.board?.destroy();
     S.view = view;
     S.model = null;
@@ -368,11 +372,25 @@ async function update(params, token = S.token) {
   if (focused) document.getElementById(focused)?.focus({ preventScroll: true });
   $('board').removeAttribute('aria-busy');
   S.board.renderAll();
+  syncDock();
   if (S.pendingFocus) {
     const target = S.pendingFocus;
     S.pendingFocus = '';
     requestAnimationFrame(() => focusWidget(target));
   }
+}
+
+function syncDock() {
+  let spec = null;
+  try { spec = S.view?.dock && S.ctx ? S.view.dock(S.ctx) : null; } catch (err) { console.warn(err); }
+  if (!spec) { dock.hide(); return; }
+  dock.show({
+    ...spec,
+    bind: (body) => {
+      body.querySelectorAll('[data-kanca]').forEach((b) => b.addEventListener('click', () => setParams({ ro: b.dataset.ro || '', kanca: b.dataset.kanca })));
+      body.querySelectorAll('[data-ro-only]').forEach((b) => b.addEventListener('click', () => setParams({ ro: b.dataset.roOnly, kanca: '' })));
+    },
+  });
 }
 
 function onRoute(r) {
@@ -658,10 +676,13 @@ const DEMO_SESSION = 'kpr.demo.session';
 const DEMO_GATE = MODE === 'local' && !isLocalHost();
 const hashPage = () => location.hash.replace(/^#\/?/, '').split('?')[0];
 
-const demoSignedIn = () => { try { return sessionStorage.getItem(DEMO_SESSION) === '1'; } catch { return false; } };
+const demoValue = () => { try { return sessionStorage.getItem(DEMO_SESSION) || ''; } catch { return ''; } };
+const demoSignedIn = () => !!demoValue();
+const demoRole = () => (demoValue() === 'admin' ? 'admin' : 'viewer');
+const isAdmin = () => (MODE === 'api' ? S.info?.role === 'admin' : DEMO_GATE ? demoRole() === 'admin' : MODE === 'local');
 
-function demoSignIn(route) {
-  try { sessionStorage.setItem(DEMO_SESSION, '1'); } catch {}
+function demoSignIn(route, role = 'viewer') {
+  try { sessionStorage.setItem(DEMO_SESSION, role === 'admin' ? 'admin' : 'viewer'); } catch {}
   history.replaceState(null, '', `${location.pathname}${location.search}${route}`);
   location.reload();
 }
@@ -675,7 +696,7 @@ function demoSignOut() {
 function showDemoLogin() {
   const page = hashPage();
   const route = !page || page === 'masuk' ? '#/ringkasan' : location.hash;
-  loginScreen($('app'), { demo: true, onLogin: () => demoSignIn(route) });
+  loginScreen($('app'), { demo: true, roles: true, onLogin: (role) => demoSignIn(route === '#/admin' && role !== 'admin' ? '#/ringkasan' : route, role) });
 }
 
 function leaveTo(view) {
@@ -702,8 +723,21 @@ function showLogin(message = '') {
 
 function showAdmin() {
   const demo = MODE === 'local';
-  const api = demo ? demoAccessApi() : accessApi;
-  adminScreen($('app'), { api, me: demo ? api.me : session()?.email || '', demo, onBack: () => leaveTo('ringkasan') });
+  if (demo && DEMO_GATE && demoRole() !== 'admin') { leaveTo('ringkasan'); return; }
+  if (demo) {
+    const api = demoAccessApi();
+    adminScreen($('app'), { api, me: api.me, demo, onBack: () => leaveTo('ringkasan') });
+    return;
+  }
+  $('app').innerHTML = '<main class="admin" aria-busy="true"><p class="admin-loading">Memeriksa akses…</p></main>';
+  accessApi.list().then((initial) => {
+    adminScreen($('app'), { api: accessApi, me: session()?.email || '', demo, initial, onBack: () => leaveTo('ringkasan') });
+  }).catch((err) => {
+    if (err instanceof AuthError) { reauth(err.message); return; }
+    if (err instanceof AccessError) { showAccessDenied(err); return; }
+    if (err?.code === 'FORBIDDEN') { leaveTo('ringkasan'); return; }
+    adminScreen($('app'), { api: accessApi, me: session()?.email || '', demo, onBack: () => leaveTo('ringkasan') });
+  });
 }
 
 function reauth(message) {
