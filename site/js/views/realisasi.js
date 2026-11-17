@@ -88,7 +88,7 @@ function gapNote(api, c, rows, short) {
 export const realWidgets = {
   summary: () => ({
     title: 'Total realisasi per sumber', desc: 'Total tahun berjalan per sumber dan tabel per bulan (seperti dashboard Looker)',
-    icon: 'table', w: 12, h: 9, minW: 8, minH: 5, fitMin: 44,
+    icon: 'table', w: 12, h: 9, minW: 8, minH: 5, fit: true, fitMin: 44,
     render(api) {
       const c = R(api);
       const months = c.yearMonths;
