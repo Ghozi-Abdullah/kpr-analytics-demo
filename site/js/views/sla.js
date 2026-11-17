@@ -565,6 +565,14 @@ export const slaWidgets = {
 };
 
 
+function gauge(r, label) {
+  const v = Math.max(0, Math.min(1, r || 0));
+  return `<div class="dock-gauge" role="img" aria-label="${esc(label)}">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><circle class="dock-gauge-track" cx="24" cy="24" r="20" pathLength="100"></circle><circle class="dock-gauge-fill" cx="24" cy="24" r="20" pathLength="100" stroke-dasharray="${(v * 100).toFixed(1)} 100"></circle></svg>
+      <span><b>${fmt.pct(v, 0)}</b><small>lewat SLA</small></span>
+    </div>`;
+}
+
 function stageMix(rows) {
   const st = byStage(rows);
   return ACTIVE_STAGES.map((s) => [s.label, st.get(s.id).berkas]).filter(([, n]) => n).map(([l, n]) => `${l} ${fmt.num(n)}`).join(', ');
@@ -585,6 +593,7 @@ export function slaDock(c) {
       pill: '<b>Semua dalam SLA</b>',
       sub,
       body: `<section class="dock-hero is-ok">
+          ${gauge(0, 'Tidak ada berkas lewat SLA')}
           <p class="dock-big"><b>0</b><span>berkas lewat batas ${SLA_TARGET_HARI} hari. Semua berkas masih tepat waktu.</span></p>
           <dl class="dock-facts">
             <div><dt>Berkas berjalan</dt><dd>${fmt.num(all.berkas)}</dd></div>
@@ -602,6 +611,8 @@ export function slaDock(c) {
       <span class="dock-name">${esc(r.k)}<small>${esc(r.mix)}, paling lama ${span(r.x.umurMax)}</small>${top ? bar(r.x.berkas, top) : ''}</span>
       ${badges(r.x)}${icon('arrow-right', 14)}</button></li>`;
   const stages = byStage(late);
+  const split = ACTIVE_STAGES.filter((s) => stages.get(s.id).berkas)
+    .map((s) => `<i style="flex:${stages.get(s.id).berkas};--c:${SLA_STAGE_COLOR[s.id]}"></i>`).join('');
   const stageTiles = ACTIVE_STAGES.map((s) => {
     const x = stages.get(s.id);
     const on = c.sel.tahap === s.id;
@@ -637,19 +648,17 @@ export function slaDock(c) {
       </li>`;
     }).join('')}</ol>`;
   }
-  const part = Math.min(100, Math.max(2, Math.round((ratio(t.berkas, all.berkas) || 0) * 100)));
+  const part = ratio(t.berkas, all.berkas) || 0;
   return {
     key: 'sla', tone: 'late', icon: 'alert', title: 'Berkas lewat SLA', label: 'Peringatan berkas lewat SLA',
-    pill: `<span><b>${fmt.num(t.berkas)}</b> berkas lewat SLA</span><small>Plafon ${rp(t.nominal)}, klik untuk rinciannya</small>`,
+    pill: `<span><b>${fmt.num(t.berkas)}</b> berkas lewat SLA</span><small>Plafon ${rp(t.nominal)}, ketuk untuk rinciannya</small>`,
     sub,
     openFirst: matchMedia('(min-width: 900px)').matches,
     attention: true,
     body: `<section class="dock-hero">
+        ${gauge(part, `${share(t.berkas, all.berkas)} dari ${fmt.num(all.berkas)} berkas berjalan lewat SLA`)}
         <p class="dock-big"><b>${fmt.num(t.berkas)}</b><span>berkas sudah lebih dari ${SLA_TARGET_HARI} hari di tahapnya dan perlu dikejar</span></p>
-        <div class="dock-meter">
-          <span class="dock-meter-bar" role="img" aria-label="${fmt.num(t.berkas)} dari ${fmt.num(all.berkas)} berkas berjalan lewat SLA"><i style="width:${part}%"></i></span>
-          <span class="dock-meter-key"><span><i class="is-late"></i>${share(t.berkas, all.berkas)} lewat SLA</span><span><i class="is-ok"></i>${fmt.num(all.berkas - t.berkas)} dari ${fmt.num(all.berkas)} berkas masih tepat waktu</span></span>
-        </div>
+        <p class="dock-of">${fmt.num(all.berkas - t.berkas)} dari ${fmt.num(all.berkas)} berkas berjalan masih tepat waktu</p>
         <dl class="dock-facts">
           <div><dt>Plafon tertahan</dt><dd class="is-rp">${rp(t.nominal)}</dd></div>
           <div><dt>Paling lama</dt><dd>${span(t.umurMax)}</dd></div>
@@ -657,7 +666,8 @@ export function slaDock(c) {
         </dl>
       </section>
       <section class="dock-part" aria-labelledby="dock-stage-h">
-        <h3 id="dock-stage-h">Tertahan di tahap</h3>
+        <h3 id="dock-stage-h">Tertahan di tahap<small>klik untuk memfilter</small></h3>
+        <span class="dock-split" aria-hidden="true">${split}</span>
         <ul class="dock-stages">${stageTiles}</ul>
       </section>
       <section class="dock-part" aria-labelledby="dock-rank-h">
