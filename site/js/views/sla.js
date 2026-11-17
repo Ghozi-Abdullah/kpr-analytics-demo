@@ -608,7 +608,7 @@ export function slaDock(c) {
   const badges = (x) => `<span class="dock-count"><b>${fmt.num(x.berkas)}</b> berkas</span><span class="dock-rp">${rp(x.nominal)}</span>`;
   const bar = (n, top) => `<span class="dock-bar" aria-hidden="true"><i style="width:${Math.max(4, Math.round((n / top) * 100))}%"></i></span>`;
   const kancaItem = (r, ro, top = 0) => `<li><button type="button" class="dock-item" data-kanca="${esc(r.k)}" data-ro="${esc(ro)}">
-      <span class="dock-name">${esc(r.k)}<small>${esc(r.mix)}, paling lama ${span(r.x.umurMax)}</small>${top ? bar(r.x.berkas, top) : ''}</span>
+      <span class="dock-name">${esc(r.k)}<small><span>${esc(r.mix)},</span> <span>paling lama ${span(r.x.umurMax)}</span></small>${top ? bar(r.x.berkas, top) : ''}</span>
       ${badges(r.x)}${icon('arrow-right', 14)}</button></li>`;
   const stages = byStage(late);
   const split = ACTIVE_STAGES.filter((s) => stages.get(s.id).berkas)
@@ -638,8 +638,8 @@ export function slaDock(c) {
       const items = byKanca(late.filter((r) => r.ro === ro));
       return `<li class="dock-group">
         <button type="button" class="dock-item dock-head-item" data-group="${esc(ro)}" aria-expanded="false">
-          <span class="dock-no" aria-hidden="true">${i + 1}</span>
-          <span class="dock-name">${esc(shortRo(ro))}<small>${fmt.num(items.length)} kanca, paling lama ${span(x.umurMax)}</small>${bar(x.berkas, top)}</span>
+          <span class="dock-no" data-rank="${i < 3 ? i + 1 : ''}" aria-hidden="true">${i + 1}</span>
+          <span class="dock-name">${esc(shortRo(ro))}<small><span>${fmt.num(items.length)} kanca,</span> <span>paling lama ${span(x.umurMax)}</span></small>${bar(x.berkas, top)}</span>
           ${badges(x)}${icon('chevron-down', 14)}</button>
         <ul class="dock-sublist" hidden>
           ${items.map((r) => kancaItem(r, ro)).join('')}
