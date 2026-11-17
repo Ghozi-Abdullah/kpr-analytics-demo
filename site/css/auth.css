@@ -49,7 +49,7 @@
 .auth-swipe-hint { margin: -4px 0 0; font-size: 12px; color: var(--muted); transition: color .2s; }
 .auth-swipe-hint.is-on { color: var(--accent); font-weight: 500; }
 
-.auth-cover { position: relative; z-index: 4; grid-column: 2; grid-row: 1; min-width: 0; visibility: hidden; display: grid; place-items: center; overflow: hidden; background: radial-gradient(120% 90% at 50% 0%, #1A63C7 0%, #0A3F8F 52%, #06357A 100%); color: #fff; transform-origin: 0 50%; transition: border-radius .5s var(--ease); }
+.auth-cover { position: relative; z-index: 4; grid-column: 1 / -1; grid-row: 1; min-width: 0; visibility: hidden; display: grid; place-items: center; overflow: hidden; background: radial-gradient(120% 90% at 50% 0%, #1A63C7 0%, #0A3F8F 52%, #06357A 100%); color: #fff; border-radius: 36px; transform-origin: 50% 50%; }
 .auth-cover::before { content: ""; position: absolute; inset: 0; background: url("login-bg.webp") center / cover; opacity: .14; mix-blend-mode: screen; }
 .auth-cover-in { position: relative; display: grid; justify-items: center; gap: 10px; padding: 24px; text-align: center; }
 .auth-cover-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 20px; background: rgb(255 255 255 / .12); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .18); color: #fff; }
@@ -57,21 +57,19 @@
 .auth-cover-in small { font-size: 13px; color: rgb(255 255 255 / .8); }
 .auth-loader { width: 34px; height: 34px; margin-top: 10px; border-radius: 50%; border: 3px solid rgb(255 255 255 / .2); border-top-color: var(--mentari); animation: spin .9s linear infinite; }
 
-.auth-device { transition: width .56s cubic-bezier(.65, 0, .35, 1), grid-template-columns .56s cubic-bezier(.65, 0, .35, 1); }
-.auth-hinge { transition: opacity .2s; }
-.auth.is-folding .auth-device { overflow: visible; }
+.auth-device { transition: width .5s cubic-bezier(.7, 0, .3, 1); }
+.auth-hinge { transition: opacity .15s; }
 .auth.is-folding .auth-hinge { opacity: 0; }
-.auth.is-folding .auth-art { transform-origin: 100% 50%; animation: auth-lift .42s cubic-bezier(.55, 0, .8, .4) forwards; }
-.auth.is-folding .auth-cover { visibility: visible; animation: auth-land .56s cubic-bezier(.2, .9, .3, 1) .42s both; }
-.auth.is-closed .auth-device { width: calc(min(1180px, 100%) / 2 + 9px); grid-template-columns: 0fr minmax(0, 1fr); }
-.auth.is-closed .auth-cover { border-radius: 36px; }
-.auth.is-closed .auth-panel { visibility: hidden; transition: visibility 0s .1s; }
+.auth.is-folding .auth-device { width: calc(min(1180px, 100%) / 2 + 9px); }
+.auth.is-folding .auth-art { transform-origin: 100% 50%; animation: auth-fold-l .5s cubic-bezier(.7, 0, .3, 1) forwards; }
+.auth.is-folding .auth-panel { transform-origin: 0 50%; animation: auth-fold-r .5s cubic-bezier(.7, 0, .3, 1) forwards; }
+.auth.is-folding .auth-cover { visibility: visible; animation: auth-cover-on .36s cubic-bezier(.2, .9, .3, 1) .38s both; }
+.auth.is-closed .auth-art, .auth.is-closed .auth-panel { visibility: hidden; }
 .auth[aria-busy="true"] .auth-panel { pointer-events: none; }
 
 @media (min-width: 900px) {
   .auth-art { grid-column: 1; grid-row: 1; }
   .auth-panel { grid-column: 2; grid-row: 1; }
-  .auth-cover { border-radius: 0 36px 36px 0; }
 }
 
 .auth-demo { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--line); font-size: 12.5px; color: var(--ink-2); }
@@ -87,10 +85,13 @@
 @keyframes auth-grow { from { transform: scaleY(0); } }
 @keyframes auth-shine { from { background-position: 130% 0; } to { background-position: -130% 0; } }
 @keyframes auth-nudge { 0% { transform: translateX(0); } 40% { transform: translateX(38px); } 100% { transform: translateX(0); } }
-@keyframes auth-lift { to { transform: perspective(1800px) rotateY(90deg); opacity: .4; } }
-@keyframes auth-land { from { transform: perspective(1800px) rotateY(-90deg); } to { transform: none; } }
-@keyframes auth-lift-m { to { transform: perspective(1200px) rotateX(-90deg); opacity: 0; } }
-@keyframes auth-rise { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes auth-fold-l { to { transform: perspective(1400px) rotateY(88deg); filter: brightness(.6); } }
+@keyframes auth-fold-r { to { transform: perspective(1400px) rotateY(-88deg); filter: brightness(.6); } }
+@keyframes auth-fold-t { to { transform: perspective(1200px) rotateX(-88deg); filter: brightness(.6); } }
+@keyframes auth-fold-b { to { transform: perspective(1200px) rotateX(88deg); filter: brightness(.6); } }
+@keyframes auth-cover-on { from { opacity: 0; transform: scaleX(.08); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes auth-cover-on-m { from { opacity: 0; transform: scaleY(.08); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes auth-rise { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 899px) {
   .auth { padding: 0; place-items: stretch; background: var(--surface); }
@@ -106,11 +107,10 @@
   .auth-art { grid-column: 1; grid-row: 1; }
   .auth-panel { grid-column: 1; grid-row: 2; }
   .auth-cover { grid-column: 1; grid-row: 1 / -1; border-radius: 0; }
-  .auth.is-folding .auth-device { overflow: hidden; }
-  .auth.is-folding .auth-art { transform-origin: 50% 100%; animation: auth-lift-m .45s cubic-bezier(.55, 0, .8, .4) forwards; }
-  .auth.is-folding .auth-cover { animation: auth-rise .45s var(--ease) .3s both; }
-  .auth.is-closed .auth-device { width: 100%; grid-template-columns: minmax(0, 1fr); }
-  .auth.is-closed .auth-cover { border-radius: 0; }
+  .auth.is-folding .auth-device { width: 100%; }
+  .auth.is-folding .auth-art { transform-origin: 50% 100%; animation: auth-fold-t .45s cubic-bezier(.7, 0, .3, 1) forwards; }
+  .auth.is-folding .auth-panel { transform-origin: 50% 0; animation: auth-fold-b .45s cubic-bezier(.7, 0, .3, 1) forwards; }
+  .auth.is-folding .auth-cover { animation: auth-cover-on-m .36s cubic-bezier(.2, .9, .3, 1) .34s both; }
   .auth-swipe-label { font-size: 14px; inset-inline-end: 16px; }
   .auth-swipe-end { display: none; }
 }
@@ -127,7 +127,7 @@
   .auth-swipe-label { color: #fff; background: none; }
   .auth-swipe.is-nudge .auth-swipe-knob { animation: none; }
   .auth-device, .auth-cover { transition: none; }
-  .auth.is-folding .auth-art { animation: none; opacity: 0; }
+  .auth.is-folding .auth-art, .auth.is-folding .auth-panel { animation: none; opacity: 0; }
   .auth.is-folding .auth-cover { animation: auth-rise .2s linear both; }
   .auth-loader { animation-duration: 2.4s; }
 }

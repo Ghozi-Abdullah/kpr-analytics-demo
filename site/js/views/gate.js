@@ -1,12 +1,6 @@
 import { icon } from '../core/icons.js';
 import { esc } from '../core/format.js';
 
-const keyMark = (size = 44) => `<svg width="${size}" height="${size}" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-  <circle cx="17" cy="24" r="8.5"/>
-  <circle cx="17" cy="24" r="2.6" fill="currentColor" stroke="none"/>
-  <path d="M25.5 24H41M35 24v6.5M40.5 24v5"/>
-</svg>`;
-
 const BARS = [38, 52, 44, 66, 58, 80, 72];
 
 const art = `<img class="auth-photo" src="css/login-photo.webp" alt="" width="1200" height="1199" decoding="async">
@@ -34,8 +28,8 @@ function layout(panel, cover = '') {
   </main>`;
 }
 
-const G_SRC = ['css/google-g.svg', 'css/google-g.png'];
-const FOLD = { lift: 420, close: 980, go: 1900, calm: 650 };
+const G_SRC = ['css/google-g.png', 'css/google-g.svg'];
+const FOLD = { start: 120, close: 900, go: 1750, calm: 650 };
 
 function bindGoogleMark(host) {
   const img = host.querySelector('.auth-g');
@@ -149,7 +143,7 @@ export function loginScreen(host, { message = '', demo = false, roles = false, o
         <span class="auth-swipe-done" aria-hidden="true">${going}…</span>
         <span class="auth-swipe-end" aria-hidden="true">${icon('arrow-right', 18)}</span>
         <button type="button" class="auth-swipe-knob" id="login" aria-label="Masuk dengan Google. Geser ke kanan, atau tekan Enter.">
-          <img class="auth-g" src="${G_SRC[0]}" alt="" width="26" height="26" decoding="async"><span class="auth-g-alt" hidden>${keyMark(26)}</span>
+          <img class="auth-g" src="${G_SRC[0]}" alt="" width="26" height="26" decoding="async"><span class="auth-g-alt" hidden>${icon('arrow-right', 22)}</span>
         </button>
       </div>
       <p class="auth-swipe-hint">Geser bulatan ke kanan sampai ujung, atau tekan Enter. Pakai akun Google yang sudah didaftarkan admin.</p>
@@ -172,7 +166,7 @@ export function loginScreen(host, { message = '', demo = false, roles = false, o
     const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
     host.querySelector('#auth-live').textContent = `${going}, tunggu sebentar.`;
     root.setAttribute('aria-busy', 'true');
-    setTimeout(() => root.classList.add('is-folding'), calm ? 0 : 160);
+    setTimeout(() => root.classList.add('is-folding'), calm ? 0 : FOLD.start);
     setTimeout(() => root.classList.add('is-closed'), calm ? 0 : FOLD.close);
     addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); }, { once: true });
     setTimeout(() => onLogin(role), calm ? FOLD.calm : FOLD.go);

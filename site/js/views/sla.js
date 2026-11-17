@@ -591,7 +591,7 @@ export function slaDock(c) {
     .map(([k, x]) => ({ k, x, mix: stageMix(rows.filter((r) => r.kanca === k)) }));
   const kancaItem = (r, ro) => `<li><button type="button" class="dock-item" data-kanca="${esc(r.k)}" data-ro="${esc(ro)}">
       <span class="dock-name">${esc(r.k)}<small>${esc(r.mix)}, terlama ${span(r.x.umurMax)}</small></span>
-      <span class="dock-num"><b>${fmt.num(r.x.berkas)}</b><small>${rp(r.x.nominal)}</small></span>${icon('arrow-right', 14)}</button></li>`;
+      <span class="dock-count"><b>${fmt.num(r.x.berkas)}</b> berkas</span><span class="dock-rp">${rp(r.x.nominal)}</span>${icon('arrow-right', 14)}</button></li>`;
   let list;
   let where;
   if (c.sel.ro || c.sel.kanca) {
@@ -606,7 +606,7 @@ export function slaDock(c) {
       return `<li class="dock-group">
         <button type="button" class="dock-item dock-head-item" data-group="${esc(ro)}" aria-expanded="false">
           <span class="dock-name">${esc(shortRo(ro))}<small>${fmt.num(items.length)} kanca, terlama ${span(x.umurMax)}</small></span>
-          <span class="dock-num"><b>${fmt.num(x.berkas)}</b><small>${rp(x.nominal)}</small></span>${icon('chevron-down', 14)}</button>
+          <span class="dock-count"><b>${fmt.num(x.berkas)}</b> berkas</span><span class="dock-rp">${rp(x.nominal)}</span>${icon('chevron-down', 14)}</button>
         <ul class="dock-sublist" hidden>
           ${items.map((r) => kancaItem(r, ro)).join('')}
           <li><button type="button" class="dock-more" data-ro-only="${esc(ro)}">Tampilkan ${esc(shortRo(ro))} di halaman${icon('arrow-right', 14)}</button></li>
@@ -622,7 +622,7 @@ export function slaDock(c) {
     attention: true,
     body: `<p class="dock-sum"><b class="late-t">${fmt.num(t.berkas)} berkas</b> sudah lebih dari ${SLA_TARGET_HARI} hari di tahapnya, tersebar di ${where}. Total plafon <b>${rp(t.nominal)}</b> (${share(t.berkas, all.berkas)} dari berkas berjalan).</p>
       ${list}
-      <p class="dock-foot">Angka kanan: jumlah berkas dan plafon (nominal pengajuan) yang lewat SLA. Klik kanca untuk memfilter halaman.</p>`,
+      <p class="dock-foot">Kuning: jumlah berkas lewat SLA. Biru: plafon (nominal pengajuan) berkas itu. Klik kanca untuk memfilter halaman.</p>`,
   };
 }
 
