@@ -3,7 +3,7 @@ name: Terbitkan dashboard demo
 on:
   push:
     branches: [main]
-    paths: ['site/**', '.github/workflows/pages.yml']
+    paths: ['site/**', 'tools/build_pages.mjs', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -24,20 +24,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Siapkan folder situs (data dummy)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Pasang alat build
+        run: npm ci --no-audit --no-fund
+
+      - name: Siapkan folder situs
         run: |
-          cp -r site _site
+          node tools/build_pages.mjs _site
           rm -rf _site/img
-          if ! grep -q '"is_dummy":true' _site/data/meta.json; then
+          if grep -q "url: 'https://script.google.com/" site/js/deploy.js; then
+            rm -rf _site/data
+            echo "Mode login: data dikirim KPR API setelah login, folder data tidak ikut diterbitkan."
+          elif ! grep -q '"is_dummy":true' _site/data/meta.json; then
             echo "::error::Data di site/data bukan data dummy. Penerbitan dibatalkan."; exit 1
           fi
           if find _site -type f \( -name '*.xlsx' -o -name '*.csv' \) | grep -q .; then
             echo "::error::Ada file Excel atau CSV di folder situs. Penerbitan dibatalkan."; exit 1
           fi
-          if grep -q "url: 'https://script.google.com/" _site/js/deploy.js; then
-            echo "::error::Versi demo harus memakai data dummy lokal. Kosongkan API.url di site/js/deploy.js."; exit 1
+          if ! grep -q "script-src 'self';" _site/index.html || grep -q 'onerror=\|onclick=\|onload=' _site/index.html; then
+            echo "::error::Aturan keamanan CSP di index.html dilonggarkan. Penerbitan dibatalkan."; exit 1
           fi
-          touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
