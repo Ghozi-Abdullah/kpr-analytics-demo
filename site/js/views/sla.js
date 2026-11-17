@@ -578,35 +578,58 @@ export function slaDock(c) {
   const all = tally(pool);
   const t = tally(late);
   const scope = [c.sel.kanca || (c.sel.ro ? shortRo(c.sel.ro) : 'Nasional'), stage?.active ? `tahap ${stage.label}` : ''].filter(Boolean).join(', ');
+  const sub = `${esc(scope)}, posisi ${fmt.date(c.model.snapshot)}`;
   if (!t.berkas) {
     return {
       key: 'sla', tone: 'ok', icon: 'check', title: 'Semua berkas dalam SLA', label: 'Status SLA',
       pill: '<b>Semua dalam SLA</b>',
-      sub: `${esc(scope)}, posisi ${fmt.date(c.model.snapshot)}.`,
-      body: `<p class="dock-sum">Tidak ada berkas yang lewat ${SLA_TARGET_HARI} hari. ${fmt.num(all.berkas)} berkas masih berjalan${ok(all.umurMax) ? `, paling lama ${span(all.umurMax)}` : ''}.</p>`,
+      sub,
+      body: `<section class="dock-hero is-ok">
+          <p class="dock-big"><b>0</b><span>berkas lewat batas ${SLA_TARGET_HARI} hari. Semua berkas masih tepat waktu.</span></p>
+          <dl class="dock-facts">
+            <div><dt>Berkas berjalan</dt><dd>${fmt.num(all.berkas)}</dd></div>
+            <div><dt>Paling lama</dt><dd>${ok(all.umurMax) ? span(all.umurMax) : '–'}</dd></div>
+          </dl>
+        </section>`,
     };
   }
   const byKanca = (rows) => [...groupTally(rows, 'kanca')].filter(([k]) => k)
     .sort((a, b) => b[1].berkas - a[1].berkas || b[1].nominal - a[1].nominal)
     .map(([k, x]) => ({ k, x, mix: stageMix(rows.filter((r) => r.kanca === k)) }));
-  const kancaItem = (r, ro) => `<li><button type="button" class="dock-item" data-kanca="${esc(r.k)}" data-ro="${esc(ro)}">
-      <span class="dock-name">${esc(r.k)}<small>${esc(r.mix)}, terlama ${span(r.x.umurMax)}</small></span>
-      <span class="dock-count"><b>${fmt.num(r.x.berkas)}</b> berkas</span><span class="dock-rp">${rp(r.x.nominal)}</span>${icon('arrow-right', 14)}</button></li>`;
+  const badges = (x) => `<span class="dock-count"><b>${fmt.num(x.berkas)}</b> berkas</span><span class="dock-rp">${rp(x.nominal)}</span>`;
+  const bar = (n, top) => `<span class="dock-bar" aria-hidden="true"><i style="width:${Math.max(4, Math.round((n / top) * 100))}%"></i></span>`;
+  const kancaItem = (r, ro, top = 0) => `<li><button type="button" class="dock-item" data-kanca="${esc(r.k)}" data-ro="${esc(ro)}">
+      <span class="dock-name">${esc(r.k)}<small>${esc(r.mix)}, paling lama ${span(r.x.umurMax)}</small>${top ? bar(r.x.berkas, top) : ''}</span>
+      ${badges(r.x)}${icon('arrow-right', 14)}</button></li>`;
+  const stages = byStage(late);
+  const stageTiles = ACTIVE_STAGES.map((s) => {
+    const x = stages.get(s.id);
+    const on = c.sel.tahap === s.id;
+    return `<li><button type="button" class="dock-stage" style="--c:${SLA_STAGE_COLOR[s.id]}" data-tahap="${on ? '' : s.id}" aria-pressed="${on}"${x.berkas ? '' : ' data-empty'}>
+        <span class="dock-stage-name"><i aria-hidden="true"></i>${esc(s.label)}</span>
+        <b>${fmt.num(x.berkas)}</b><small>${x.berkas ? rp(x.nominal) : 'tidak ada'}</small></button></li>`;
+  }).join('');
   let list;
   let where;
+  let heading;
   if (c.sel.ro || c.sel.kanca) {
     const items = byKanca(late);
     where = `${fmt.num(items.length)} kanca`;
-    list = `<ol class="dock-list">${items.map((r) => kancaItem(r, c.model.kancaRo.get(r.k) || c.sel.ro)).join('')}</ol>`;
+    heading = 'Kantor cabang yang perlu dikejar';
+    const top = items[0]?.x.berkas || 1;
+    list = `<ol class="dock-list">${items.map((r) => kancaItem(r, c.model.kancaRo.get(r.k) || c.sel.ro, top)).join('')}</ol>`;
   } else {
     const ros = [...groupTally(late, 'ro')].filter(([k]) => k).sort((a, b) => b[1].berkas - a[1].berkas || b[1].nominal - a[1].nominal);
     where = `${fmt.num(ros.length)} RO`;
-    list = `<ol class="dock-list">${ros.map(([ro, x]) => {
+    heading = 'Region yang perlu dikejar';
+    const top = ros[0]?.[1].berkas || 1;
+    list = `<ol class="dock-list">${ros.map(([ro, x], i) => {
       const items = byKanca(late.filter((r) => r.ro === ro));
       return `<li class="dock-group">
         <button type="button" class="dock-item dock-head-item" data-group="${esc(ro)}" aria-expanded="false">
-          <span class="dock-name">${esc(shortRo(ro))}<small>${fmt.num(items.length)} kanca, terlama ${span(x.umurMax)}</small></span>
-          <span class="dock-count"><b>${fmt.num(x.berkas)}</b> berkas</span><span class="dock-rp">${rp(x.nominal)}</span>${icon('chevron-down', 14)}</button>
+          <span class="dock-no" aria-hidden="true">${i + 1}</span>
+          <span class="dock-name">${esc(shortRo(ro))}<small>${fmt.num(items.length)} kanca, paling lama ${span(x.umurMax)}</small>${bar(x.berkas, top)}</span>
+          ${badges(x)}${icon('chevron-down', 14)}</button>
         <ul class="dock-sublist" hidden>
           ${items.map((r) => kancaItem(r, ro)).join('')}
           <li><button type="button" class="dock-more" data-ro-only="${esc(ro)}">Tampilkan ${esc(shortRo(ro))} di halaman${icon('arrow-right', 14)}</button></li>
@@ -614,15 +637,34 @@ export function slaDock(c) {
       </li>`;
     }).join('')}</ol>`;
   }
+  const part = Math.min(100, Math.max(2, Math.round((ratio(t.berkas, all.berkas) || 0) * 100)));
   return {
     key: 'sla', tone: 'late', icon: 'alert', title: 'Berkas lewat SLA', label: 'Peringatan berkas lewat SLA',
-    pill: `<b>${fmt.num(t.berkas)}</b> berkas lewat SLA<small>${rp(t.nominal)}</small>`,
-    sub: `${esc(scope)}, posisi ${fmt.date(c.model.snapshot)}.`,
+    pill: `<span><b>${fmt.num(t.berkas)}</b> berkas lewat SLA</span><small>Plafon ${rp(t.nominal)}, klik untuk rinciannya</small>`,
+    sub,
     openFirst: matchMedia('(min-width: 900px)').matches,
     attention: true,
-    body: `<p class="dock-sum"><b class="late-t">${fmt.num(t.berkas)} berkas</b> sudah lebih dari ${SLA_TARGET_HARI} hari di tahapnya, tersebar di ${where}. Total plafon <b>${rp(t.nominal)}</b> (${share(t.berkas, all.berkas)} dari berkas berjalan).</p>
-      ${list}
-      <p class="dock-foot">Kuning: jumlah berkas lewat SLA. Biru: plafon (nominal pengajuan) berkas itu. Klik kanca untuk memfilter halaman.</p>`,
+    body: `<section class="dock-hero">
+        <p class="dock-big"><b>${fmt.num(t.berkas)}</b><span>berkas sudah lebih dari ${SLA_TARGET_HARI} hari di tahapnya dan perlu dikejar</span></p>
+        <div class="dock-meter">
+          <span class="dock-meter-bar" role="img" aria-label="${fmt.num(t.berkas)} dari ${fmt.num(all.berkas)} berkas berjalan lewat SLA"><i style="width:${part}%"></i></span>
+          <span class="dock-meter-key"><span><i class="is-late"></i>${share(t.berkas, all.berkas)} lewat SLA</span><span><i class="is-ok"></i>${fmt.num(all.berkas - t.berkas)} dari ${fmt.num(all.berkas)} berkas masih tepat waktu</span></span>
+        </div>
+        <dl class="dock-facts">
+          <div><dt>Plafon tertahan</dt><dd class="is-rp">${rp(t.nominal)}</dd></div>
+          <div><dt>Paling lama</dt><dd>${span(t.umurMax)}</dd></div>
+          <div><dt>Tersebar di</dt><dd>${where}</dd></div>
+        </dl>
+      </section>
+      <section class="dock-part" aria-labelledby="dock-stage-h">
+        <h3 id="dock-stage-h">Tertahan di tahap</h3>
+        <ul class="dock-stages">${stageTiles}</ul>
+      </section>
+      <section class="dock-part" aria-labelledby="dock-rank-h">
+        <h3 id="dock-rank-h">${heading}<small>urut dari berkas terbanyak</small></h3>
+        ${list}
+      </section>
+      <p class="dock-foot"><span class="dock-key is-late">kuning</span> jumlah berkas lewat SLA, <span class="dock-key is-rp">biru</span> plafonnya. Klik region untuk melihat kantor cabangnya, klik tahap atau kantor cabang untuk memfilter halaman.</p>`,
   };
 }
 

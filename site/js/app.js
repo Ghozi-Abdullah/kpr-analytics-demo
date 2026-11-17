@@ -390,6 +390,7 @@ function syncDock() {
     bind: (body) => {
       body.querySelectorAll('[data-kanca]').forEach((b) => b.addEventListener('click', () => setParams({ ro: b.dataset.ro || '', kanca: b.dataset.kanca })));
       body.querySelectorAll('[data-ro-only]').forEach((b) => b.addEventListener('click', () => setParams({ ro: b.dataset.roOnly, kanca: '' })));
+      body.querySelectorAll('[data-tahap]').forEach((b) => b.addEventListener('click', () => setParams({ tahap: b.dataset.tahap })));
     },
   });
 }
