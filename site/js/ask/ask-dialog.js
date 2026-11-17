@@ -75,6 +75,7 @@ function answerText(question, a) {
     lines.push(...lead.evidence.map((e) => `- ${plain(e)}`));
     if (lead.implication && plain(lead.implication) !== plain(a.title)) lines.push(`Artinya: ${plain(lead.implication)}`);
   }
+  if (a.meaning && !(lead?.implication && plain(lead.implication) !== plain(a.title))) lines.push(`Artinya: ${plain(a.meaning)}`);
   if (a.list) lines.push(...a.list.items.map((x) => `${x.rank}. ${plain(x.label)}: ${plain(x.text)}`));
   if (a.table) lines.push(...a.table.rows.map((r) => r.map(plain).join(' | ')));
   for (const it of more) lines.push(`${it.kindLabel}: ${plain(it.headline)}`);
@@ -86,7 +87,8 @@ function answerHtml(a, id) {
   const [lead, ...more] = a.insights || [];
   const leadHead = lead && plain(lead.headline) !== plain(a.title) ? `<p class="ask-lead">${lead.headline}</p>` : '';
   const leadLines = lead?.evidence?.length ? `<ul class="ask-lines">${lead.evidence.map((e) => `<li>${e}</li>`).join('')}</ul>` : '';
-  const meaning = lead?.implication && plain(lead.implication) !== plain(a.title) ? `<p class="ask-meaning"><span>Artinya</span>${lead.implication}</p>` : '';
+  const meaningText = lead?.implication && plain(lead.implication) !== plain(a.title) ? lead.implication : a.meaning;
+  const meaning = meaningText ? `<p class="ask-meaning"><span>Artinya</span>${meaningText}</p>` : '';
   const sure = lead ? `<p class="ask-sure">Keyakinan ${esc(lead.confidence)}${lead.confidenceNote ? `, ${esc(lead.confidenceNote)}` : ''}</p>` : '';
   const wide = visual || more.length || a.examples;
   return `<div class="ask-msg from-data${wide ? ' is-wide' : ''}${a.ok === false ? ' is-miss' : ''}">
@@ -107,7 +109,7 @@ function answerHtml(a, id) {
 
 const replyHtml = (inner) => `<div class="ask-reply"><span class="ask-avatar" aria-hidden="true">${icon('ask', 16)}</span>${inner}</div>`;
 const TYPING = '<div class="ask-msg from-data is-typing"><span class="ask-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="sr-only">Menyiapkan jawaban</span></div>';
-const GREETING = `<div class="ask-msg from-data is-wide"><h3 class="ask-title">Tanyakan angka, peringkat, tren, perbandingan, atau penyebab perubahan KPR.</h3>
+const GREETING = `<div class="ask-msg from-data is-wide"><h3 class="ask-title">Tanyakan angka, peringkat, tren, perbandingan, penyebab perubahan, atau proses berkas KPR dengan bahasa sehari-hari.</h3>
   <p class="ask-hint">Contoh pertanyaan yang bisa langsung dipilih:</p>${examplesHtml(EXAMPLES)}</div>`;
 
 export function createAskDialog({ engine, context = () => ({}), onNavigate }) {

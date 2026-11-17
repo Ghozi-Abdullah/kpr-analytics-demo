@@ -24,7 +24,7 @@ const appJs = inlineImages(bundle.outputFiles[0].text);
 
 const styles = await esbuild.build({
   entryPoints: [path.join(SITE, 'css', 'main.css')],
-  bundle: true, minify: true, write: false, loader: { '.woff2': 'dataurl', '.jpg': 'dataurl' }, legalComments: 'none',
+  bundle: true, minify: true, write: false, loader: { '.woff2': 'dataurl', '.jpg': 'dataurl', '.webp': 'dataurl' }, legalComments: 'none',
 });
 const css = styles.outputFiles[0].text;
 

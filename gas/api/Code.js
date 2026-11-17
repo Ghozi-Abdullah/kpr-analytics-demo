@@ -20,6 +20,7 @@ var GUARD = {
   users: 200,
   requests: 30,
   logRows: 60,
+  dataCacheSec: 21600,
 };
 var REJECTED_TOKEN = '!';
 
@@ -290,7 +291,7 @@ function agg_() {
   return SpreadsheetApp.openById(id);
 }
 
-function readData_(paths) {
+function readSheet_(paths) {
   var sh = agg_().getSheetByName('data');
   if (!sh) throw new Error('DATA_KOSONG');
   var values = sh.getDataRange().getValues();
@@ -305,8 +306,57 @@ function readData_(paths) {
     var parts = want[x];
     if (!parts.length) return;
     parts.sort(function (a, b) { return a[0] - b[0]; });
-    out[x] = { enc: parts[0][1], data: parts.map(function (y) { return y[2].replace(/^b:/, ''); }).join('') };
+    out[x] = { enc: parts[0][1], chunks: parts.map(function (y) { return y[2].replace(/^b:/, ''); }) };
   });
+  return out;
+}
+
+function headKey_(ver, x) { return 'dh:' + ver + ':' + x; }
+function chunkKey_(ver, x, i) { return 'dc:' + ver + ':' + x + ':' + i; }
+
+function fromCache_(cache, ver, paths) {
+  var heads = cache.getAll(paths.map(function (x) { return headKey_(ver, x); }));
+  var plan = {};
+  var keys = [];
+  paths.forEach(function (x) {
+    var h = heads[headKey_(ver, x)];
+    if (!h) return;
+    var head = JSON.parse(h);
+    plan[x] = head;
+    for (var i = 0; i < head.n; i += 1) keys.push(chunkKey_(ver, x, i));
+  });
+  var chunks = keys.length ? cache.getAll(keys) : {};
+  var out = {};
+  Object.keys(plan).forEach(function (x) {
+    var parts = [];
+    for (var i = 0; i < plan[x].n; i += 1) {
+      var c = chunks[chunkKey_(ver, x, i)];
+      if (typeof c !== 'string') return;
+      parts.push(c);
+    }
+    out[x] = { enc: plan[x].enc, data: parts.join('') };
+  });
+  return out;
+}
+
+function toCache_(cache, ver, found) {
+  var entries = {};
+  Object.keys(found).forEach(function (x) {
+    entries[headKey_(ver, x)] = JSON.stringify({ enc: found[x].enc, n: found[x].chunks.length });
+    found[x].chunks.forEach(function (c, i) { entries[chunkKey_(ver, x, i)] = c; });
+  });
+  try { cache.putAll(entries, GUARD.dataCacheSec); } catch (err) { console.warn('Cache data penuh, dilewati: ' + err); }
+}
+
+function readData_(paths) {
+  var ver = version_().version || '';
+  var cache = CacheService.getScriptCache();
+  var out = ver ? fromCache_(cache, ver, paths) : {};
+  var missing = paths.filter(function (x) { return !out[x]; });
+  if (!missing.length) return out;
+  var found = readSheet_(missing);
+  if (ver) toCache_(cache, ver, found);
+  Object.keys(found).forEach(function (x) { out[x] = { enc: found[x].enc, data: found[x].chunks.join('') }; });
   return out;
 }
 

@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build:gas": "node tools/build_gas.mjs",
+    "build:pages": "node tools/build_pages.mjs _site",
     "test:parity": "python pipeline/build_data.py && python tools/dump_xlsx.py .parity && node tools/test_gas_parity.mjs .parity",
     "test:api": "node tools/test_api.mjs"
   },

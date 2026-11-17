@@ -70,11 +70,22 @@ Aturan:
 ## 5. Tanya data (spesifikasi singkat)
 
 - Pemicu: tombol di kiri atas, tombol di sidebar, atau tombol `/` dan `Ctrl/Cmd + K`.
-- Jenis pertanyaan: nilai, peringkat, perbandingan, tren, komposisi, perubahan, proyeksi, penjelasan (kenapa),
-  anomali, ringkasan wilayah, syarat ("RO dengan NPL di atas 4%"), definisi istilah.
-- Mengerti RO (nama kota, "region 09", "jkt 2"), provinsi dan pulau, kanca ("KC ..."), RM, sumber realisasi (termasuk ETB), segmen
-  portofolio, FI/NFI, dan periode (hari ini, minggu lalu, Oktober, Q3, 3 bulan terakhir, sejak awal tahun).
-- Pertanyaan lanjutan memakai konteks sebelumnya ("kalau bulan lalu?", "yang terendah?", "kalau Makassar?").
+- Jenis pertanyaan: nilai, peringkat, perbandingan (antarwilayah dan antarperiode, misalnya "Oktober vs September"), tren
+  (harian, mingguan, bulanan), komposisi dan porsi terhadap total, perubahan, proyeksi, penjelasan (kenapa), anomali,
+  ringkasan wilayah, syarat ("RO dengan NPL di atas 4%", "RO yang belum capai RKA OS", "growth negatif"), kapan puncaknya
+  ("kapan NPL tertinggi?"), kualitas kredit (kolektibilitas), kanca tanpa realisasi, mana yang perlu perhatian, definisi
+  istilah dan bedanya dua istilah, sapaan, serta kapan data diperbarui.
+- Proses berkas (SLA): berkas berjalan dan lewat SLA per tahap, kepatuhan, umur berkas, lama prakarsa sampai cair, berkas
+  masuk atau cair per hari atau per periode, berkas ditolak dan rasio tolak, penyebab keterlambatan, perbandingan putusan
+  CLF dan cabang atau FI dan NFI. Status SLA selalu posisi terakhir; jumlah berkas per periode memakai data harian.
+- Mengerti RO (nama kota, "region 09", "jkt 2"), provinsi dan pulau, area Jabodetabek ("Bekasi", "Cibinong"), kanca ("KC ..."),
+  RM, sumber realisasi (termasuk ETB), segmen portofolio, FI/NFI, dan periode (hari ini, minggu lalu, Oktober, Q3, 3 bulan
+  terakhir, sejak awal tahun). Singkatan obrolan ("yg", "brp", "bln", "plg", "lwt") dan salah ketik kecil ikut dibaca.
+- Pertanyaan lanjutan memakai konteks sebelumnya ("kalau bulan lalu?", "yang terendah?", "kalau Makassar?", "npl nya?",
+  "kenapa?", "dibanding bulan lalu?"), termasuk untuk pertanyaan SLA.
+- Gaya jawaban seperti analis: kalimat pertama langsung menjawab, lalu angka pendukung, lalu kotak "Artinya" berisi
+  penilaian singkat. Anggapan yang keliru di pertanyaan diluruskan dulu ("kenapa NPL naik?" saat NPL turun).
+- Tidak memakai AI dan tidak terhubung ke internet; semua dihitung di browser dari data yang sedang dimuat.
 - Tampilan obrolan seperti aplikasi chat: kolom ketik di bawah, obrolan mengalir dari atas ke bawah, pertanyaan di gelembung
   kanan dan jawaban di gelembung kiri. Setelah bertanya, layar bergulir ke jawaban terbaru; jawaban panjang ditampilkan
   dari awal kalimatnya.

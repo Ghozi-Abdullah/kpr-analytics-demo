@@ -27,6 +27,7 @@ let fetches = 0;
 const store = new Map();
 const props = new Map(Object.entries({ AGG_ID: 'agg', CLIENT_ID, ALLOWED_EMAILS: 'andi@gmail.com,\n budi@gmail.com; @kantor.co.id', ADMIN_EMAILS: 'bos@gmail.com' }));
 const cacheMap = new Map();
+let sheetReads = 0;
 const sheetRows = [['path', 'part', 'enc', 'content'], ['meta.json', '0', 'gz64', 'b:AAA'], ['perf_daily.json', '1', 'gz64', 'b:CCC'], ['perf_daily.json', '0', 'gz64', 'b:BBB']];
 const quiet = { log() {}, info() {}, warn() {}, error() {} };
 const ctx = vm.createContext({
@@ -38,7 +39,11 @@ const ctx = vm.createContext({
     computeDigest: (_a, s) => signed(crypto.createHash('sha256').update(s, 'utf8').digest()),
     newBlob: (b) => ({ getDataAsString: () => unsigned(b).toString('utf8') }),
   },
-  CacheService: { getScriptCache: () => ({ get: (k) => cacheMap.get(k) ?? null, put: (k, v) => cacheMap.set(k, v), remove: (k) => cacheMap.delete(k) }) },
+  CacheService: { getScriptCache: () => ({
+    get: (k) => cacheMap.get(k) ?? null, put: (k, v) => cacheMap.set(k, v), remove: (k) => cacheMap.delete(k),
+    getAll: (keys) => Object.fromEntries(keys.filter((k) => cacheMap.has(k)).map((k) => [k, cacheMap.get(k)])),
+    putAll: (o) => { for (const [k, v] of Object.entries(o)) cacheMap.set(k, v); },
+  }) },
   LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
   UrlFetchApp: {
     fetch: () => { fetches += 1; return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ keys: [jwk] }) }; },
@@ -50,7 +55,7 @@ const ctx = vm.createContext({
       getProperties: () => Object.fromEntries([...props, ...store]),
     }),
   },
-  SpreadsheetApp: { openById: () => ({ getSheetByName: (n) => (n === 'data' ? { getDataRange: () => ({ getValues: () => sheetRows }) }
+  SpreadsheetApp: { openById: () => ({ getSheetByName: (n) => (n === 'data' ? { getDataRange: () => { sheetReads += 1; return { getValues: () => sheetRows }; } }
     : n === 'info' ? { getLastRow: () => 4, getRange: () => ({ getValues: () => [['status', 'OK'], ['waktu', '2026-11-08T10:00:00'], ['versi', '2026-11-08T09:58:00']] }) } : null) }) },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (text) => ({ text, setMimeType() { return this; } }) },
 });
@@ -179,6 +184,18 @@ expect('permintaan akses dibatasi jumlahnya', (() => {
   return last;
 })(), (r) => r.error === 'BUSY');
 clearGuards();
+
+for (const k of [...cacheMap.keys()]) if (/^d[hc]:/.test(k)) cacheMap.delete(k);
+const readsBefore = sheetReads;
+const cold = post({ action: 'bundle', token: good, paths: ['perf_daily.json', 'meta.json'] });
+const warm = post({ action: 'bundle', token: good, paths: ['perf_daily.json', 'meta.json'] });
+expect('data kedua kali diambil dari cache, bukan spreadsheet', { cold, warm, reads: sheetReads - readsBefore }, (r) => r.cold.ok && r.warm.ok && r.reads === 1
+  && r.warm.data['perf_daily.json'].data === 'BBBCCC' && r.warm.data['meta.json'].data === 'AAA' && r.warm.data['perf_daily.json'].enc === 'gz64');
+expect('cache data terikat versi data', [...cacheMap.keys()].filter((k) => /^d[hc]:/.test(k)), (keys) => keys.length > 0 && keys.every((k) => k.includes('2026-11-08T09:58:00')));
+cacheMap.delete('dc:2026-11-08T09:58:00:perf_daily.json:1');
+const partial = post({ action: 'bundle', token: good, paths: ['perf_daily.json'] });
+expect('potongan cache hilang: baca ulang dari spreadsheet', { partial, reads: sheetReads - readsBefore }, (r) => r.partial.ok && r.partial.data['perf_daily.json'].data === 'BBBCCC' && r.reads === 2);
+expect('data yang tidak ada di spreadsheet tidak dibuat-buat', post({ action: 'bundle', token: good, paths: ['sla.json'] }), (r) => r.ok && !('sla.json' in r.data));
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji KPR API lulus.');
 process.exit(failed ? 1 : 0);

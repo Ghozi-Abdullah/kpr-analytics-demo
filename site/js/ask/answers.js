@@ -6,7 +6,7 @@ import { NODE } from '../models/portfolio-model.js';
 import { PORTFOLIO_NODES } from '../config.js';
 import { filterKeyOf, modeOf } from '../models/realisasi-sumber.js';
 import { buildTerritory } from '../map/territory.js';
-import { METRO_NAME, metroArea } from '../map/metro-areas.js';
+import { METRO_NAME, METRO_AREAS, metroArea } from '../map/metro-areas.js';
 import { provinceName } from '../map/indonesia-map.js';
 import { kancaLabel } from '../map/branch-locations.js';
 import { preparePf } from '../services/datasets.js';
@@ -21,9 +21,11 @@ import {
 } from '../analytics/insights.js';
 import {
   rp, rpM, rpMSigned, rpReal, rpRealSigned, pct, signedPct, bps, bpsSigned, num, signedNum, listJoin, roName, monthName, monthYear,
-  dateText, dateShort, median, sum, PF_UNIT,
+  dateText, dateShort, median, sum, PF_UNIT, REAL_UNIT, PERF_UNIT,
 } from '../analytics/wording.js';
 import { ISLANDS, GLOSSARY, EXAMPLES, PROVINCE_ALIASES } from './lexicon.js';
+import { slaAnswer, slaBrief, slaByRo, slaLateKanca } from './sla-answers.js';
+import { answerTalk, answerDiff } from './talk.js';
 
 const b = (t) => `<b>${t}</b>`;
 const cap = (html) => String(html).replace(/^((?:<[^>]+>)*)(\p{Ll})/u, (m, tags, ch) => tags + ch.toUpperCase());
@@ -49,7 +51,15 @@ export function dataContext(hub) {
     pfLatest: pf?.index?.months?.at(-1) || null,
     regions: pm?.regions?.length ? pm.regions : (real?.ros || []),
     territory: pm?.territory || buildTerritory([], pm?.regions?.length ? pm.regions : (real?.ros || [])),
+    sla: null,
+    slaLatest: null,
   };
+}
+
+export function attachSla(D, sla) {
+  D.sla = sla?.rows?.length ? sla : null;
+  D.slaLatest = D.sla ? (D.sla.dayMax || D.sla.snapshot) : null;
+  return D;
 }
 
 function inferYear(month, anchor) {
@@ -58,7 +68,7 @@ function inferYear(month, anchor) {
 }
 
 export function resolvePeriod(t, D, source) {
-  const anchor = source === 'perf' ? D.perfLatest : source === 'real' ? D.realLatest : (D.pfLatest ? monthEnd(D.pfLatest) : null);
+  const anchor = source === 'perf' ? D.perfLatest : source === 'real' ? D.realLatest : source === 'sla' ? D.slaLatest : (D.pfLatest ? monthEnd(D.pfLatest) : null);
   if (!anchor) return null;
   const am = anchor.slice(0, 7);
   const ay = anchor.slice(0, 4);
@@ -117,6 +127,8 @@ export function resolvePeriod(t, D, source) {
       const end = t.n === 0 ? anchor : addDays(monday, 6);
       return rangeP(monday, end, t.n === 0 ? `minggu ini (${dateShort(monday)} sampai ${dateShort(end)})` : `minggu lalu (${dateShort(monday)} sampai ${dateShort(end)})`);
     }
+    case 'today':
+      return { kind: 'date', month: am, from: anchor, to: anchor, date: anchor, months: [am], label: `${dateText(anchor)} (data terakhir)`, today: true };
     case 'yesterday': {
       const dates = source === 'perf' ? D.perfDates : null;
       const d = dates ? dates[Math.max(0, dates.indexOf(anchor) - 1)] : addDays(anchor, -1);
@@ -185,7 +197,7 @@ export function pickSource(q) {
   const e = q.entities;
   const g = q.groupBy;
   if (['realisasi', 'realdeb', 'ticket', 'kancacount'].includes(m)) return 'real';
-  const pfish = e.kanca.length || e.node.length || e.fi || g === 'kanca' || g === 'node';
+  const pfish = e.kanca.length || e.node.length || e.fi || g === 'kanca' || g === 'node' || (['npl', 'sml'].includes(m) && e.tipe.some((t) => TIPE_TO_NODE[t]));
   if (['npl', 'sml'].includes(m)) return pfish || g === 'tujuan' ? 'pf' : 'perf';
   if (m === 'os') return pfish || g === 'tujuan' || e.tipe.some((t) => TIPE_TO_NODE[t]) ? 'pf' : 'perf';
   if (m === 'debitur') return e.rm.length || e.tipe.length || ['rm', 'tipe'].includes(g) ? 'real' : pfish ? 'pf' : 'perf';
@@ -276,6 +288,7 @@ function prevRange(P) {
     return { from: `${pm}-01`, to: monthEnd(pm), label: monthYear(pm) };
   }
   const days = Math.round((new Date(`${P.to}T00:00:00Z`) - new Date(`${P.from}T00:00:00Z`)) / 864e5) + 1;
+  if (days === 1) return { from: addDays(P.from, -1), to: addDays(P.from, -1), label: dateText(addDays(P.from, -1)) };
   return { from: addDays(P.from, -days), to: addDays(P.from, -1), label: `${days} hari sebelumnya` };
 }
 
@@ -293,7 +306,7 @@ function pfFilterRows(rows, q, D, { except = '' } = {}) {
 }
 
 function pfNodeFilter(q) {
-  const nodes = [...q.entities.node, ...q.entities.tipe.map((t) => TIPE_TO_NODE[t]).filter(Boolean)];
+  const nodes = [...new Set([...q.entities.node, ...q.entities.tipe.map((t) => TIPE_TO_NODE[t]).filter(Boolean)])];
   return nodes.length === 1 ? NODE[nodes[0]].filter : {};
 }
 
@@ -333,20 +346,108 @@ function outOfRange(P, source, D) {
   return '';
 }
 
+function perfFlowRange(D, ros, P, M, q) {
+  const latestM = D.perfLatest.slice(0, 7);
+  const parts = [];
+  for (const m of P.months) {
+    const end = m === latestM ? D.perfLatest : monthEnd(m);
+    const r = perfAt(D, ros, end);
+    if (!r || !r.tanggal.startsWith(m)) continue;
+    parts.push({ m, r, v: M.get(r) });
+  }
+  if (!parts.length) return null;
+  if (q.metric === 'growth') {
+    const start = parts[0].r.helper_os;
+    const endOs = parts.at(-1).r.os;
+    return { parts, v: ok(start) && ok(endOs) ? endOs - start : null, start, endOs };
+  }
+  return { parts, v: sum(parts.map((x) => x.v)) };
+}
+
+const rpOrNum = (M, x) => (M.kind === 'ratio' ? rpM(x) : M.f(x));
+
+function perfMeaning(q, M, r, v) {
+  const month = r.tanggal.slice(0, 7);
+  const full = r.tanggal === monthEnd(month);
+  if (M.kind === 'ratio' && M.helper && ok(r[M.target]) && ok(r[M.nominal])) {
+    const start = ratio(r[M.helper], r.helper_os);
+    const moved = ok(start) ? (v - start < 0 ? `membaik ${bps(v - start)} sejak awal bulan` : v - start > 0 ? `memburuk ${bps(v - start)} sejak awal bulan` : 'tidak berubah sejak awal bulan') : '';
+    return r[M.nominal] > r[M.target]
+      ? `Melewati batas RKA ${rpM(r[M.nominal] - r[M.target])}${moved ? `, dan ${moved}` : ''}. Perlu perhatian.`
+      : `Masih di bawah batas RKA${moved ? `, dan ${moved}` : ''}.`;
+  }
+  if (q.metric === 'os' && ok(r.rka_os)) {
+    const gap = v - r.rka_os;
+    if (gap >= 0) return `Sudah melampaui RKA ${rpM(gap)}.`;
+    return full ? `Bulan ${monthName(month)} ditutup di bawah RKA, kurang ${rpM(-gap)}.` : `Masih kurang ${rpM(-gap)} untuk mencapai RKA akhir bulan.`;
+  }
+  if (q.metric === 'disburse' && ok(r.guidance_disb) && r.guidance_disb > 0) {
+    const ach = v / r.guidance_disb;
+    if (full) return `Bulan ${monthName(month)} ditutup ${pct(ach, 1)} dari guidance${ach < 1 ? `, kurang ${rpM(r.guidance_disb - v)}` : ''}.`;
+    const day = Number(r.tanggal.slice(8, 10));
+    const all = workdaysOf(month).length;
+    const now = workdaysOf(month, day).length;
+    const time = all ? now / all : null;
+    if (!ok(time)) return '';
+    if (now >= all) return `Hari kerja ${monthName(month)} sudah habis; capaian ${pct(ach, 1)} dari guidance${ach < 1 ? `, kurang ${rpM(r.guidance_disb - v)}` : ''}.`;
+    return `Hari kerja sudah berjalan ${pct(time, 0)} (${now} dari ${all}), capaian ${pct(ach, 0)}: ${ach >= time ? 'lebih cepat' : 'lebih lambat'} dari laju rata. Disburse biasanya menumpuk di akhir bulan, jadi lihat juga proyeksinya.`;
+  }
+  if (q.metric === 'debitur' && ok(r.rka_deb)) {
+    const gap = v - r.rka_deb;
+    return gap >= 0 ? `Sudah melampaui RKA debitur ${num(gap)} debitur.` : `Masih kurang ${num(-gap)} debitur dari RKA.`;
+  }
+  return '';
+}
+
 function perfValue(q, D) {
   const P = resolvePeriod(q.time, D, 'perf');
   const miss = outOfRange(P, 'perf', D);
   if (miss) return { ok: false, title: miss };
   const ros = rosOf(q, D);
   const M = perfMetric(q);
+  const where = whereText(q, D, { source: 'perf' });
+  if (M.kind === 'flow' && P.months.length > 1) {
+    const F = perfFlowRange(D, ros, P, M, q);
+    if (!F || !ok(F.v)) return { ok: false, title: 'Data untuk wilayah dan periode ini tidak ada.' };
+    const lines = [];
+    if (q.metric === 'growth') lines.push(`OS dari ${rpM(F.start)} (awal ${monthName(F.parts[0].m)}) ke ${rpM(F.endOs)} (${dateText(F.parts.at(-1).r.tanggal)}), ${signedPct(ratio(F.v, F.start), 2)}.`);
+    if (F.parts.length > 1 && F.parts.length <= 12) lines.push(`Per bulan: ${F.parts.map((x) => `${monthName(x.m).slice(0, 3)} ${M.f(x.v)}`).join(', ')}.`);
+    if (q.metric === 'disburse') {
+      const g = sum(F.parts.map((x) => x.r.guidance_disb));
+      if (g > 0) lines.push(`Total guidance ${rpM(g)}, capaian ${b(pct(F.v / g, 1))}.`);
+    }
+    if (q.metric === 'runoff') {
+      const avg = F.v / F.parts.length;
+      lines.push(`Rata-rata ${rpM(avg)} per bulan.`);
+    }
+    return {
+      ok: true,
+      title: `${cap(M.label)} ${where} ${P.label}: ${b(M.f(F.v))}.`,
+      lines,
+      spark: F.parts.length > 1 ? { labels: F.parts.map((x) => monthName(x.m).slice(0, 3)), values: F.parts.map((x) => (q.metric === 'growth' ? x.r.gr_os : x.v)), fmt: M.f, bars: true } : undefined,
+      chips: chips([['Metrik', M.label], ['Wilayah', where], ['Periode', P.label], ['Sumber', 'Performance'], ...fixChips(q)]),
+      link: linkFor('perf', q, D, P, M.widget),
+      followups: followupsFor(q, where),
+    };
+  }
   const r = perfAt(D, ros, P.date);
   if (!r) return { ok: false, title: 'Data untuk wilayah dan tanggal ini tidak ada.' };
-  const where = whereText(q, D, { source: 'perf' });
   const v = M.get(r);
   const lines = [];
   const at = dateText(r.tanggal);
   let title = cap(`${M.label} ${where} ${b(M.f(v))} per ${at}.`);
   if (q.metric === 'disburse' || q.metric === 'growth' || q.metric === 'runoff') title = `${M.label[0].toUpperCase()}${M.label.slice(1)} ${where} sejak awal ${monthName(r.tanggal.slice(0, 7))} sampai ${at}: ${b(M.f(v))}.`;
+  if (q.targetAsk && M.target && ok(r[M.target])) {
+    const tl = q.metric === 'disburse' ? 'Guidance disburse' : M.kind === 'ratio' ? `Batas RKA ${M.label.replace('%', '')} (nominal)` : `RKA ${M.label}`;
+    title = `${tl} ${where} ${monthYear(r.tanggal.slice(0, 7))}: ${b(rpOrNum(M, r[M.target]))}. Posisi ${at}: ${M.kind === 'ratio' ? rpM(r[M.nominal]) : M.f(v)}.`;
+  }
+  if (M.kind === 'flow' && P.kind === 'date') {
+    const idx = D.perfDates.indexOf(r.tanggal);
+    const prevD = idx > 0 ? D.perfDates[idx - 1] : null;
+    const pr = prevD && prevD.slice(0, 7) === r.tanggal.slice(0, 7) ? perfAt(D, ros, prevD) : null;
+    const inc = pr ? v - M.get(pr) : v;
+    if (ok(inc)) lines.push(`Pada ${dateText(r.tanggal)} sendiri: ${b(M.f(inc))}${pr ? ` (selisih dari posisi ${dateShort(prevD)})` : ''}.`);
+  }
   if (M.target && ok(r[M.target])) {
     const t = r[M.target];
     const ach = M.better === 'down' ? ratio(t, v) : ratio(v, t);
@@ -354,6 +455,8 @@ function perfValue(q, D) {
       lines.push(`Capaian terhadap guidance ${b(pct(ach, 1))} (guidance ${rpM(t)})${ok(r.prognosa_disb) ? `; prognosa ${rpM(r.prognosa_disb)}` : ''}.`);
     } else if (M.kind === 'ratio') {
       lines.push(`Nominal ${rpM(r[M.nominal])}; RKA nominal ${rpM(t)}, posisi ${r[M.nominal] > t ? 'di atas' : 'di bawah'} RKA ${rpM(Math.abs(r[M.nominal] - t))} (makin kecil makin baik).`);
+    } else if (M.better === 'down') {
+      lines.push(`Batas RKA ${M.f(t)}; posisi ${v > t ? 'di atas' : 'di bawah'} batas ${M.f(Math.abs(v - t))} (makin kecil makin baik). %${M.ratioKey.toUpperCase()} ${pct(ratio(v, r.os))}.`);
     } else {
       lines.push(`Capaian RKA ${b(pct(ach, 1))} (RKA ${M.f(t)}, GAP ${M.f === rpM ? rpMSigned(v - t) : signedNum(v - t)}).`);
     }
@@ -389,44 +492,66 @@ function perfValue(q, D) {
       if (pos > 0) lines.push(`Peringkat ${pos} tertinggi dari ${sorted.length} RO.`);
     }
   }
+  const follow = followupsFor(q, where);
+  if (q.metric === 'os' && ok(r.rka_os) && v < r.rka_os) follow.unshift('Berapa disburse yang dibutuhkan bulan depan?');
   return {
     ok: true, title, lines,
+    meaning: perfMeaning(q, M, r, v),
     chips: chips([['Metrik', M.label], ['Wilayah', where], ['Posisi', at], ['Sumber', 'Performance'], ...fixChips(q)]),
     link: linkFor('perf', q, D, P, M.widget),
-    followups: followupsFor(q, where),
+    followups: follow.slice(0, 3),
   };
 }
 
 function realValue(q, D) {
-  const P = resolvePeriod(q.time, D, 'real');
+  let P = resolvePeriod(q.time, D, 'real');
   const miss = outOfRange(P, 'real', D);
   if (miss) return { ok: false, title: miss };
   const metric = realMetricOf(q);
   const f = realFilters(q, D);
   const base = realFilter(D.real.rows, f);
-  const rows = inRange(base, P);
+  let rows = inRange(base, P);
   const where = whereText(q, D, { source: 'real' });
   if (metric === 'rmcount' || metric === 'kancacount') {
     const key = metric === 'rmcount' ? 'rm' : 'kanca';
     const n = new Set(rows.filter((r) => r.plafond > 0).map((r) => r[key])).size;
     const all = new Set(base.map((r) => r[key])).size;
+    const ros = rosOf(q, D);
+    const lines = [];
+    let title = `${b(num(n))} ${key === 'rm' ? 'RM' : 'kanca'} mencatat realisasi di ${where} pada ${P.label}.`;
+    if (key === 'kanca' && ros.length && D.territory?.kancaCount) {
+      const tot = sum(ros.map((ro) => D.territory.kancaCount(ro) || 0));
+      if (tot) {
+        title = `${where} membawahi ${b(num(tot))} kantor cabang; ${b(num(n))} di antaranya mencatat realisasi ${P.label}.`;
+        if (tot > n) lines.push(`${num(tot - n)} kanca belum ada realisasi pada periode itu. Tanyakan "kanca mana yang belum ada realisasi ${P.label}" untuk daftarnya.`);
+      }
+    } else lines.push(`Total ${key === 'rm' ? 'RM' : 'kanca'} yang pernah muncul di data realisasi ${where}: ${num(all)}.`);
     return {
-      ok: true,
-      title: `${b(num(n))} ${key === 'rm' ? 'RM' : 'kanca'} mencatat realisasi di ${where} pada ${P.label}.`,
-      lines: [`Total ${key === 'rm' ? 'RM' : 'kanca'} yang pernah muncul di data realisasi ${where}: ${num(all)}.`],
+      ok: true, title, lines,
       chips: chips([['Metrik', key === 'rm' ? 'RM aktif' : 'kanca aktif'], ['Wilayah', where], ['Periode', P.label], ['Sumber', 'Realisasi'], ...fixChips(q)]),
       link: linkFor('real', q, D, P, key === 'rm' ? 'rm' : 'kanca'),
       followups: [`Top 5 ${key === 'rm' ? 'RM' : 'kanca'} realisasi ${P.label}`, `Realisasi ${where} ${P.label}`],
     };
   }
   const M = REAL_M[metric];
+  const lines = [];
+  if (P.kind === 'date' && !realTotals(rows).debitur) {
+    let back = P.from;
+    for (let k = 0; k < 10 && !inRange(base, { from: back, to: back }).some((r) => r.plafond > 0); k += 1) back = addDays(back, -1);
+    if (back !== P.from && inRange(base, { from: back, to: back }).some((r) => r.plafond > 0)) {
+      const wd = weekday(P.from);
+      lines.push(`Tidak ada realisasi pada ${dateText(P.from)}${wd >= 5 ? ` (hari ${['Sabtu', 'Minggu'][wd - 5]})` : ''}. Angka di atas memakai hari terakhir yang ada transaksinya.`);
+      P = { ...P, from: back, to: back, date: back, label: dateText(back) };
+      rows = inRange(base, P);
+    }
+  }
   const t = realTotals(rows);
   const PR = prevRange(P);
   const p = realTotals(inRange(base, PR));
-  const lines = [];
-  const title = metric === 'ticket'
-    ? `Plafond rata-rata realisasi ${where} ${P.label}: ${b(rpReal(t.ticket))} per debitur.`
-    : `Realisasi ${where} ${P.label}: ${b(rpReal(t.plafond))} dari ${b(num(t.debitur))} debitur.`;
+  let title;
+  if (metric === 'ticket') title = `Plafond rata-rata realisasi ${where} ${P.label}: ${b(rpReal(t.ticket))} per debitur.`;
+  else if (metric === 'realdeb') title = `Debitur baru (akad realisasi) ${where} ${P.label}: ${b(`${num(t.debitur)} debitur`)}, total plafond ${rpReal(t.plafond)}.`;
+  else title = `Realisasi ${where} ${P.label}: ${b(rpReal(t.plafond))} dari ${b(num(t.debitur))} debitur.`;
   if (metric !== 'ticket') lines.push(`Plafond rata-rata ${rpReal(t.ticket)} per debitur.`);
   if (p.plafond > 0) {
     const cur = M.get(t);
@@ -445,8 +570,17 @@ function realValue(q, D) {
     const k = workdaysOf(P.month, Number(P.to.slice(8, 10))).length;
     lines.push(`Bulan berjalan baru ${k} hari kerja; rata-rata ${rpReal(t.plafond / Math.max(1, k))} per hari kerja.`);
   }
+  let meaning = '';
+  if ((P.kind === 'month' || P.kind === 'latest') && P.months.length === 1 && !P.partial) {
+    const prev3 = [1, 2, 3].map((i) => shiftMonth(P.month, -i)).filter((m) => D.real.months.includes(m));
+    if (prev3.length >= 2) {
+      const avg = sum(prev3.map((m) => M.get(realTotals(base.filter((r) => r.bulan === m))))) / prev3.length;
+      const cur = M.get(t);
+      if (ok(avg) && avg > 0 && ok(cur)) meaning = `${cur >= avg ? 'Di atas' : 'Di bawah'} rata-rata 3 bulan sebelumnya (${M.f(avg)}), ${signedPct(cur / avg - 1)}.`;
+    }
+  }
   return {
-    ok: true, title, lines,
+    ok: true, title, lines, meaning,
     chips: chips([['Metrik', M.label], ['Wilayah', where], ['Periode', P.label], ['Sumber', 'Realisasi'], ...fixChips(q)]),
     link: linkFor('real', q, D, P, 'summary'),
     followups: followupsFor({ ...q, metric: 'realisasi' }, where),
@@ -516,21 +650,32 @@ async function rankItems(q, D) {
     const items = pool.map((ro) => {
       const r = perfRowAt(D, ro, P.date);
       if (!r) return null;
-      let v = M.get(r);
-      let text = M.f(v);
+      const ach = (row) => {
+        const tv = row[M.target];
+        const av = M.kind === 'ratio' ? row[M.nominal] : M.get(row);
+        return ok(tv) && ok(av) && av ? (M.better === 'down' ? tv / av : av / tv) : null;
+      };
+      const byAch = q.target && M.target && !q.byChange;
+      let v = byAch ? ach(r) : M.get(r);
+      let text = byAch ? pct(v, 1) : M.f(v);
       if (q.byChange) {
         if (M.kind === 'ratio' && M.helper) { v = v - ratio(r[M.helper], r.helper_os); text = bpsSigned(v); }
         else if (q.metric === 'os' || q.metric === 'growth') { v = ratio(r.gr_os, r.helper_os); text = signedPct(v, 2); }
         else if (q.metric === 'disburse' && ok(r.disburse_lalu) && r.disburse_lalu) { v = r.disburse / r.disburse_lalu - 1; text = signedPct(v); }
       }
-      return ok(v) ? { key: ro, label: roName(ro), v, text, sub: q.byChange ? `${M.label} ${M.f(M.get(r))}` : (M.kind === 'ratio' ? `OS ${rpM(r.os)}` : '') } : null;
+      const sub = byAch ? `${M.label} ${M.f(M.get(r))}${M.kind !== 'ratio' && ok(r[M.target]) ? `, GAP ${M.f === rpM ? rpMSigned(M.get(r) - r[M.target]) : signedNum(M.get(r) - r[M.target])}` : ''}`
+        : q.byChange ? `${M.label} ${M.f(M.get(r))}` : (M.kind === 'ratio' ? `OS ${rpM(r.os)}` : '');
+      return ok(v) ? { key: ro, label: roName(ro), v, text, sub } : null;
     }).filter(Boolean);
     const nat = perfAt(D, [], P.date);
+    const byAch = q.target && M.target && !q.byChange;
+    const natAch = nat && byAch ? (M.better === 'down' ? ratio(nat[M.target], nat[M.nominal]) : ratio(M.get(nat), nat[M.target])) : null;
     return {
-      source, dim: 'ro', items, M, P, better: q.byChange && M.kind !== 'ratio' ? 'up' : M.better,
-      ref: nat ? `Nasional ${q.byChange && M.kind === 'ratio' && M.helper ? bpsSigned(M.get(nat) - ratio(nat[M.helper], nat.helper_os)) : M.f(M.get(nat))}` : '',
-      total: M.additive && !q.byChange && nat ? M.get(nat) : null,
-      label: q.byChange ? (M.kind === 'ratio' ? `perubahan ${M.label} sejak awal bulan` : `pertumbuhan ${M.label}`) : M.label,
+      source, dim: 'ro', items, M: byAch ? { ...M, f: (x) => pct(x, 1) } : M, P, better: byAch || (q.byChange && M.kind !== 'ratio') ? 'up' : M.better,
+      ref: nat ? (byAch ? `Nasional ${pct(natAch, 1)}` : `Nasional ${q.byChange && M.kind === 'ratio' && M.helper ? bpsSigned(M.get(nat) - ratio(nat[M.helper], nat.helper_os)) : M.f(M.get(nat))}`) : '',
+      total: M.additive && !q.byChange && !byAch && nat ? M.get(nat) : null,
+      label: byAch ? `capaian ${q.metric === 'disburse' ? 'guidance' : 'RKA'} ${M.label}` : q.byChange ? (M.kind === 'ratio' ? `perubahan ${M.label} sejak awal bulan` : `pertumbuhan ${M.label}`) : M.label,
+      unitAch: byAch,
     };
   }
   if (source === 'real') {
@@ -626,7 +771,7 @@ async function answerRank(q, D) {
   const lead = top[0];
   const lines = [];
   if (R.ref) lines.push(`${R.ref}.`);
-  if (R.total && top.length > 1 && !q.byChange && dir === 'desc' && R.items.every((x) => x.v >= 0)) lines.push(`${n} ${DIM_WORD[R.dim]} teratas memegang ${b(pct(sum(top.map((x) => x.v)) / R.total, 0))} dari total ${R.items.length} ${DIM_WORD[R.dim]}.`);
+  if (R.total && top.length > 1 && top.length < R.items.length && !q.byChange && dir === 'desc' && R.items.every((x) => x.v >= 0)) lines.push(`${n} ${DIM_WORD[R.dim]} teratas memegang ${b(pct(sum(top.map((x) => x.v)) / R.total, 0))} dari total ${R.items.length} ${DIM_WORD[R.dim]}.`);
   if (R.note) lines.push(R.note);
   const where = whereText({ ...q, entities: { ...q.entities, [R.dim === 'node' ? 'node' : R.dim]: [] } }, D, { source: R.source });
   return {
@@ -647,14 +792,31 @@ async function answerRank(q, D) {
 async function answerFilter(q, D) {
   const R = await rankItems({ ...q, byChange: false }, D);
   if (R.miss) return { ok: false, title: R.miss };
-  const th = q.threshold;
-  const hit = R.items.filter((x) => (th.op === '>' ? x.v > th.value : x.v < th.value)).sort((a, c) => (th.op === '>' ? c.v - a.v : a.v - c.v));
-  const thText = th.unit === '%' ? pct(th.value) : th.unit === 'rp' ? rp(th.value) : num(th.value, 2);
+  const th0 = q.threshold;
+  const scale = th0.unit === 'rp' ? (R.source === 'real' ? REAL_UNIT : R.source === 'pf' ? PF_UNIT : PERF_UNIT) : 1;
+  const th = { ...th0, value: th0.value / scale };
+  const hit = R.items.filter((x) => (th.op === '>' ? x.v >= th.value - (th.unit === 'ach' ? 1e-9 : 0) && (th.unit === 'ach' || x.v > th.value) : x.v < th.value)).sort((a, c) => (th.op === '>' ? c.v - a.v : a.v - c.v));
+  const thText = th.unit === 'ach' ? '100%' : th.unit === '%' ? pct(th.value) : th.unit === 'rp' ? rp(th0.value) : th.text === 'negatif' || th.text === 'positif' ? '0' : num(th.value, 2);
+  if (th.unit === 'ach') {
+    const word = th.op === '<' ? 'belum mencapai' : 'sudah mencapai';
+    return {
+      ok: true,
+      title: hit.length ? `${b(`${hit.length} dari ${R.items.length} ${DIM_WORD[R.dim]}`)} ${word} ${q.metric === 'disburse' ? 'guidance' : 'RKA'} ${R.M.label === 'OS' ? 'OS' : perfMetric(q).label}, ${R.P.label}.` : `Semua ${DIM_WORD[R.dim]} ${th.op === '<' ? 'sudah' : 'belum'} mencapai ${q.metric === 'disburse' ? 'guidance' : 'RKA'} pada ${R.P.label}.`,
+      lines: [R.ref ? `Capaian ${R.ref.replace(/^Nasional/, 'nasional')}.` : '', hit.length && th.op === '<' ? `Paling jauh: ${hit[0].label} (${hit[0].text}).` : ''].filter(Boolean),
+      list: hit.length ? { items: hit.slice(0, 25).map((x, i) => ({ ...x, rank: i + 1 })), dir: th.op === '>' ? 'desc' : 'asc', abs: true } : null,
+      chips: chips([['Metrik', R.label], ['Syarat', th.text], ['Periode', R.P.label], ['Sumber', SOURCE_NAME[R.source]], ...fixChips(q)]),
+      link: linkFor(R.source, q, D, R.P, 'rank'),
+      followups: [`Kenapa OS ${hit[0] ? plain(hit[0].label) : ''} di bawah RKA?`.replace('  ', ' '), 'Berapa disburse yang dibutuhkan bulan depan?'],
+    };
+  }
   return {
     ok: true,
     title: hit.length
-      ? `${b(`${hit.length} ${DIM_WORD[R.dim]}`)} punya ${R.label} ${th.op === '>' ? 'di atas' : 'di bawah'} ${thText}, ${R.P.label}.`
-      : `Tidak ada ${DIM_WORD[R.dim]} dengan ${R.label} ${th.op === '>' ? 'di atas' : 'di bawah'} ${thText} pada ${R.P.label}.`,
+      ? (th.text === 'negatif' || th.text === 'positif'
+        ? `${b(`${hit.length} dari ${R.items.length} ${DIM_WORD[R.dim]}`)} mencatat ${R.label} ${th.text}, ${R.P.label}.`
+        : `${b(`${hit.length} ${DIM_WORD[R.dim]}`)} punya ${R.label} ${th.op === '>' ? 'di atas' : 'di bawah'} ${thText}, ${R.P.label}.`)
+      : th.text === 'negatif' ? `Tidak ada ${DIM_WORD[R.dim]} dengan ${R.label} negatif pada ${R.P.label}: semua ${DIM_WORD[R.dim]} tumbuh.`
+        : `Tidak ada ${DIM_WORD[R.dim]} dengan ${R.label} ${th.op === '>' ? 'di atas' : 'di bawah'} ${thText} pada ${R.P.label}.`,
     lines: [R.ref ? `${R.ref}.` : '', `Dari ${R.items.length} ${DIM_WORD[R.dim]} yang punya data.`, R.note].filter(Boolean),
     list: hit.length ? { items: hit.slice(0, 25).map((x, i) => ({ ...x, rank: i + 1 })), dir: th.op === '>' ? 'desc' : 'asc', abs: true } : null,
     chips: chips([['Metrik', R.label], ['Syarat', `${th.op === '>' ? '>' : '<'} ${thText}`], ['Periode', R.P.label], ['Sumber', SOURCE_NAME[R.source]], ...fixChips(q)]),
@@ -715,6 +877,9 @@ async function compareEntities(q, D) {
     if (kind === 'fiList') e.fi = val;
     else e[kind] = [val];
     for (const k of ['ro', 'kanca', 'rm', 'tipe', 'node', 'prov']) if (k !== kind) e[k] = kind === 'prov' && k === 'ro' ? [] : (e[k].length ? e[k] : q.entities[k]);
+    if (kind === 'tipe') e.node = [];
+    if (kind === 'node') e.tipe = [];
+    if (kind === 'fiList') e.fiList = [];
     return e;
   };
   const label = (val) => (kind === 'ro' ? roName(val) : kind === 'prov' ? provinceLabel(val) : kind === 'fiList' ? (val === 'FI' ? 'Fixed income (FI)' : 'Non fixed income (NFI)') : esc(kind === 'node' ? NODE[val]?.label || val : val));
@@ -766,6 +931,10 @@ async function valueOf(q, D, source) {
   if (source === 'perf') {
     const P = resolvePeriod(q.time, D, 'perf');
     const M = perfMetric(q);
+    if (P && M.kind === 'flow' && P.months.length > 1) {
+      const F = perfFlowRange(D, rosOf(q, D), P, M, q);
+      return { v: F?.v ?? null, text: ok(F?.v) ? M.f(F.v) : '–', f: M.f, period: P.label, metricLabel: M.label, ratioKind: false, extra: '' };
+    }
     const r = P ? perfAt(D, rosOf(q, D), P.date) : null;
     const v = r ? M.get(r) : null;
     const extra = M.target && r && ok(r[M.target]) && M.kind !== 'ratio' ? `capaian ${pct(M.better === 'down' ? ratio(r[M.target], v) : ratio(v, r[M.target]), 1)}` : '';
@@ -788,18 +957,86 @@ async function valueOf(q, D, source) {
   return { v, text: ok(v) ? f(v) : '–', f, period: monthYear(month), metricLabel: pfLabel(q), ratioKind: (q.metric === 'npl' || q.metric === 'sml') && !q.nominal };
 }
 
+function weeklyTrend(q, D, source, P, where) {
+  const monday = (d) => addDays(d, -weekday(d));
+  const weeks = new Map();
+  let M;
+  let f;
+  if (source === 'real') {
+    const metric = ['rmcount', 'kancacount'].includes(realMetricOf(q)) ? 'realisasi' : realMetricOf(q);
+    M = REAL_M[metric] || REAL_M.realisasi;
+    f = M.f;
+    for (const r of inRange(realFilter(D.real.rows, realFilters(q, D)), P)) {
+      const k = monday(r.tanggal);
+      const g = weeks.get(k) || { plafond: 0, debitur: 0 };
+      g.plafond += r.plafond || 0;
+      g.debitur += r.debitur || 0;
+      weeks.set(k, g);
+    }
+    for (const g of weeks.values()) g.v = M.get({ ...g, ticket: ratio(g.plafond, g.debitur) });
+  } else {
+    M = perfMetric(q);
+    f = M.f;
+    const ros = rosOf(q, D);
+    const dates = D.perfDates.filter((d) => d >= P.from && d <= P.to);
+    let prev = null;
+    for (const d of dates) {
+      const r = perfAt(D, ros, d);
+      if (!r) continue;
+      const k = monday(d);
+      const g = weeks.get(k) || { v: 0 };
+      if (M.kind === 'flow') {
+        const pv = prev && prev.tanggal.slice(0, 7) === d.slice(0, 7) ? M.get(prev) : 0;
+        g.v += (M.get(r) ?? 0) - (pv ?? 0);
+      } else g.v = M.get(r);
+      weeks.set(k, g);
+      prev = r;
+    }
+  }
+  const keys = [...weeks.keys()].sort().filter((k) => k >= P.from);
+  if (keys.length < 2) return { ok: false, title: 'Data belum cukup untuk melihat pola mingguan.' };
+  const lastPartial = weekday(P.to) < 6 && keys.at(-1) === monday(P.to);
+  const full = lastPartial ? keys.slice(0, -1) : keys;
+  const vals = full.map((k) => weeks.get(k).v);
+  const avg = sum(vals) / Math.max(1, vals.length);
+  const hiK = full.reduce((a, k) => (weeks.get(k).v > weeks.get(a).v ? k : a), full[0]);
+  const loK = full.reduce((a, k) => (weeks.get(k).v < weeks.get(a).v ? k : a), full[0]);
+  const lab = (k) => dateShort(k).replace(/ \d{4}$/, '');
+  const lines = [`Tertinggi minggu ${lab(hiK)} (${f(weeks.get(hiK).v)}), terendah minggu ${lab(loK)} (${f(weeks.get(loK).v)}).`];
+  if (full.length >= 2) {
+    const a = weeks.get(full.at(-1)).v;
+    const z = weeks.get(full.at(-2)).v;
+    if (ok(a) && ok(z) && z) lines.push(`Minggu penuh terakhir (${lab(full.at(-1))}) ${f(a)}, ${signedPct(a / z - 1)} dari minggu sebelumnya.`);
+  }
+  if (lastPartial) lines.push(`Minggu ${lab(keys.at(-1))} masih berjalan (${f(weeks.get(keys.at(-1)).v)}), tidak dipakai dalam rata-rata.`);
+  lines.push('Minggu dihitung Senin sampai Minggu.');
+  const flowish = source === 'real' || M.kind === 'flow';
+  return {
+    ok: true,
+    title: flowish
+      ? cap(`${M.label} ${where} per minggu, ${full.length} minggu penuh: rata-rata ${b(f(avg))} per minggu.`)
+      : cap(`${M.label} ${where} per minggu: dari ${f(vals[0])} ke ${b(f(vals.at(-1)))} dalam ${full.length} minggu.`),
+    lines,
+    spark: { labels: keys.map((k) => `${lab(k)}${lastPartial && k === keys.at(-1) ? '*' : ''}`), values: keys.map((k) => weeks.get(k).v), fmt: f, bars: flowish },
+    chips: chips([['Metrik', M.label], ['Wilayah', where], ['Periode', P.label], ['Per', 'minggu'], ['Sumber', SOURCE_NAME[source]], ...fixChips(q)]),
+    link: linkFor(source, q, D, null, source === 'real' ? 'calendar' : M.widget),
+    followups: [`${cap(M.label)} ${where} per bulan tahun ini`, `Kenapa ${M.label} ${where} turun?`],
+  };
+}
+
 async function answerTrend(q, D) {
   const source = pickSource(q);
-  const t = q.time.kind ? q.time : { kind: 'lastN', n: 6, unit: 'month' };
+  const t = q.time.kind ? q.time : q.grain === 'week' ? { kind: 'lastN', n: 63, unit: 'day' } : q.grain === 'day' ? { kind: 'monthRel', n: 0 } : { kind: 'lastN', n: 6, unit: 'month' };
   const P = resolvePeriod(t, D, source === 'pf' ? 'pf' : source);
   const miss = outOfRange(P, source, D);
   if (miss) return { ok: false, title: miss };
   const where = whereText(q, D, { source });
+  if (q.grain === 'week' && source !== 'pf') return weeklyTrend(q, D, source, P, where);
   let labels = [];
   let values = [];
   let f = (v) => num(v);
   let metricLabel = '';
-  const daily = (P.kind === 'month' || P.kind === 'range' || P.kind === 'latest') && P.months.length === 1 && q.time.kind;
+  const daily = q.grain === 'day' || ((P.kind === 'month' || P.kind === 'range' || P.kind === 'latest') && P.months.length === 1 && q.time.kind && q.grain !== 'month');
   if (source === 'perf') {
     const M = perfMetric(q);
     metricLabel = M.label;
@@ -879,6 +1116,20 @@ async function answerTrend(q, D) {
       followups: [`Realisasi ${where} ${P.label}`, `Top 5 kanca realisasi ${P.label}`],
     };
   }
+  if (q.peak) {
+    const x = q.peak === 'high' ? hi : lo;
+    const other = q.peak === 'high' ? lo : hi;
+    const SHORT = Object.fromEntries(Array.from({ length: 12 }, (_, i) => { const m = `2000-${pad(i + 1)}`; return [monthName(m).slice(0, 3), monthName(m)]; }));
+    const when = (l) => (daily ? `tanggal ${l}` : SHORT[l.replace('*', '')] || l);
+    return {
+      ok: true,
+      title: `${cap(metricLabel)} ${where} ${q.peak === 'high' ? 'tertinggi' : 'terendah'} pada ${b(when(x.l))}: ${b(f(x.v))}, dalam periode ${P.label}.`,
+      lines: [`${q.peak === 'high' ? 'Terendah' : 'Tertinggi'} ${when(other.l)} (${f(other.v)}); posisi terakhir ${when(last.l)} ${f(last.v)}.`, labels.some((l) => l.endsWith('*')) && flowLike && !daily ? 'Bulan berjalan tidak ikut dibandingkan karena belum penuh.' : ''].filter(Boolean),
+      spark: { labels, values, fmt: f, bars: flowLike },
+      chips: chips([['Metrik', metricLabel], ['Wilayah', where], ['Periode', P.label], ['Sumber', SOURCE_NAME[source]], ...fixChips(q)]),
+      link: linkFor(source, q, D, null, source === 'perf' ? perfMetric(q).widget : source === 'real' ? 'months-chart' : 'qtrend'),
+    };
+  }
   const change = isRatio ? bpsSigned(last.v - first.v) : signedPct(ratio(last.v, first.v) - 1);
   let run = 0;
   for (let i = pts.length - 1; i > 0 && Math.sign(pts[i].v - pts[i - 1].v) === Math.sign(last.v - pts[pts.length - 2].v) && pts[i].v !== pts[i - 1].v; i -= 1) run += 1;
@@ -899,6 +1150,24 @@ const upWord = (d) => (!ok(d) || d === 0 ? 'stabil' : d > 0 ? 'naik' : 'turun');
 
 function insightCards(list) { return list.filter(Boolean); }
 
+function factOf(delta, what, fmt, tail = '') {
+  if (!ok(delta)) return '';
+  return delta === 0 ? `${cap(what)} tidak berubah${tail ? ` ${tail}` : ''}.` : `${cap(what)} ${delta < 0 ? 'turun' : 'naik'} ${fmt(Math.abs(delta))}${tail ? ` ${tail}` : ''}.`;
+}
+
+function premise(q, delta, what, fmt, tail = '') {
+  if (!ok(delta) || delta === 0) return '';
+  const up = /\b(naik|meningkat|bertambah|tumbuh|melonjak|membengkak|memburuk)\b/.test(q.norm);
+  const down = /\b(turun|menurun|berkurang|anjlok|drop|merosot|jatuh|melambat|membaik)\b/.test(q.norm);
+  if (up === down) return '';
+  const worse = /\bmemburuk\b/.test(q.norm);
+  const better = /\bmembaik\b/.test(q.norm);
+  if ((up && !worse && delta < 0) || (down && !better && delta > 0)) {
+    return `Sebenarnya ${what} ${delta < 0 ? 'turun' : 'naik'} ${fmt(Math.abs(delta))}${tail ? ` ${tail}` : ''}, bukan ${delta < 0 ? 'naik' : 'turun'}. Berikut penyebab ${delta < 0 ? 'penurunannya' : 'kenaikannya'}.`;
+  }
+  return '';
+}
+
 async function answerWhy(q, D) {
   const source = pickSource(q);
   const ros = rosOf(q, D);
@@ -911,6 +1180,12 @@ async function answerWhy(q, D) {
     if (!cards.length) return { ok: false, title: 'Belum ada perubahan realisasi yang cukup berarti untuk dijelaskan pada periode ini.' };
     const lines = [];
     const PR = prevRange(P);
+    const curT = realTotals(inRange(rs.base, P)).plafond;
+    const prvT = realTotals(inRange(rs.base, PR)).plafond;
+    const what = `realisasi ${rs.label} ${P.label}`;
+    const tailR = `dibanding ${PR.label}`;
+    const fmtR = (x) => `${rpReal(x)} (${signedPct((curT - prvT) / prvT).replace(/^[+−]/, '')})`;
+    const note = prvT > 0 ? premise(q, curT - prvT, what, fmtR, tailR) || `${factOf(curT - prvT, what, fmtR, tailR)} ${cards[0].implication || cards[0].headline}` : '';
     const contrib = (dim) => {
       const cur = realGroup(inRange(rs.base, P), dim);
       const old = realGroup(inRange(rs.base, PR), dim);
@@ -933,7 +1208,7 @@ async function answerWhy(q, D) {
       if (worst && worst.d < 0) lines.push(`Per sumber, penurunan terbesar ${esc(worst.k)} (${rpRealSigned(worst.d)})${best && best.d > 0 ? `, kenaikan terbesar ${esc(best.k)} (${rpRealSigned(best.d)})` : ''}.`);
     }
     return {
-      ok: true, title: cards[0].implication || cards[0].headline, lines, insights: cards,
+      ok: true, title: note || cards[0].implication || cards[0].headline, lines, insights: cards,
       chips: chips([['Penjelasan', 'volume, tiket, komposisi, pola harian'], ['Periode', P?.label || ''], ['Sumber', 'Realisasi'], ...fixChips(q)]),
       link: linkFor('real', q, D, P, 'summary'),
       followups: [`Porsi realisasi per sumber ${P?.label || ''}`.trim(), 'Top 5 kanca realisasi bulan ini'],
@@ -961,8 +1236,23 @@ async function answerWhy(q, D) {
   if (!cards.length) return { ok: false, title: 'Belum ada perubahan yang cukup berarti untuk dijelaskan pada periode ini.' };
   const lines = [];
   if (!ps.slice.full && ps.wd < 5) lines.push(`Bulan berjalan baru ${ps.wd} hari kerja. Untuk penjelasan yang lebih stabil, coba tanyakan dengan "bulan lalu".`);
+  const r = perfAt(D, ro ? [ro] : [], ps.date);
+  const M = perfMetric(q.metric ? q : { ...q, metric: 'os' });
+  let note = '';
+  if (r) {
+    const span = ps.slice.full ? `selama ${monthYear(ps.bulan)}` : `sejak awal ${monthName(ps.bulan)}`;
+    const what = `${M.label} ${roName(ro || NASIONAL)} ${span}`;
+    let d = null;
+    let w = what;
+    let tail = '';
+    let fmt = rpM;
+    if (M.kind === 'ratio' && M.helper) { d = M.get(r) - ratio(r[M.helper], r.helper_os); fmt = bps; }
+    else if (q.metric === 'disburse' && ok(r.disburse_lalu)) { d = r.disburse - r.disburse_lalu; w = `disburse ${roName(ro || NASIONAL)} ${span}`; tail = 'dibanding periode yang sama bulan lalu'; }
+    else if (!q.metric || q.metric === 'os' || q.metric === 'growth') { d = r.gr_os; w = `OS ${roName(ro || NASIONAL)} ${span}`; }
+    if (ok(d)) note = premise(q, d, w, fmt, tail) || `${factOf(d, w, fmt, tail)} ${cards[0].implication || cards[0].headline}`;
+  }
   return {
-    ok: true, title: cards[0].implication || cards[0].headline, lines, insights: cards,
+    ok: true, title: note || cards[0].implication || cards[0].headline, lines, insights: cards,
     chips: chips([['Penjelasan', q.metric === 'npl' || q.metric === 'sml' ? 'efek nominal vs efek pertumbuhan OS, kontribusi RO' : 'disburse vs runoff, kontribusi RO'], ['Wilayah', roName(ro || NASIONAL)], ['Periode', ps.slice.full ? monthYear(ps.bulan) : `sampai ${dateText(ps.date)}`], ['Sumber', 'Performance'], ...fixChips(q)]),
     link: linkFor('perf', q, D, P, q.metric === 'npl' ? 'npl' : 'trend-os'),
     followups: q.metric === 'npl' ? [`RO mana NPL naik paling tinggi?`, `Tren NPL ${roName(ro || NASIONAL)} 6 bulan terakhir`] : [`RO dengan growth OS terendah`, `Proyeksi disburse akhir bulan`],
@@ -975,6 +1265,28 @@ async function answerForecast(q, D) {
   if (['realisasi', 'realdeb'].includes(q.metric) || pickSource(q) === 'real') {
     const rs = realScope(D.real, { ro, kanca: q.entities.kanca[0] || '', rm: q.entities.rm[0] || '', tipe: q.entities.tipe[0] || '' });
     const card = rs && realProjectionInsight(rs);
+    if (!card && rs?.full) {
+      const done = D.real.months.filter((m) => m <= rs.bulan).slice(-3);
+      const plaf = sum(done.map((m) => realTotals(rs.base.filter((r) => r.bulan === m)).plafond));
+      const wd = sum(done.map((m) => workdaysOf(m).length));
+      const rate = wd ? plaf / wd : null;
+      const next = shiftMonth(rs.bulan, 1);
+      const wdNext = workdaysOf(next).length;
+      const cur = realTotals(rs.base.filter((r) => r.bulan === rs.bulan)).plafond;
+      if (ok(rate)) {
+        return {
+          ok: true,
+          title: `${monthName(rs.bulan)} sudah lengkap: realisasi ${esc(rs.label)} ditutup ${b(rpReal(cur))}. Dengan laju 3 bulan terakhir, ${monthName(next)} diperkirakan sekitar ${b(rpReal(rate * wdNext))}.`,
+          lines: [
+            `Laju rata-rata ${rpReal(rate)} per hari kerja (${listJoin(done.map(monthName))}), dikali ${wdNext} hari kerja di ${monthName(next)}.`,
+            `Proyeksi dari pola bulan berjalan sendiri tersedia mulai hari kerja ke-5 ${monthName(next)}.`,
+          ],
+          chips: chips([['Metode', 'laju per hari kerja 3 bulan terakhir'], ['Sumber', 'Realisasi']]),
+          link: linkFor('real', q, D, null, 'cum-grid'),
+          followups: [`Realisasi ${monthName(rs.bulan)} vs ${monthName(shiftMonth(rs.bulan, -1))}`, 'Berapa disburse yang dibutuhkan bulan depan?'],
+        };
+      }
+    }
     if (!card) {
       const k = rs ? workdaysOf(rs.bulan, rs.lastDay).length : 0;
       return { ok: false, title: rs && !rs.full && k < 5 ? `Bulan berjalan baru ${k} hari kerja, pola awal bulan terlalu labil untuk diproyeksikan. Proyeksi tersedia mulai hari kerja ke-5.` : 'Proyeksi realisasi belum bisa dihitung untuk pilihan ini.' };
@@ -1003,7 +1315,17 @@ async function answerForecast(q, D) {
     }
     return { ok: false, title: 'Proyeksi belum bisa dihitung untuk pilihan ini.' };
   }
-  return { ok: true, title: cards[0].implication || cards[0].headline, lines: [], insights: cards, chips: chips([['Metode', 'pola kumulatif hari kerja 6 bulan terakhir'], ['Wilayah', roName(ro || NASIONAL)], ['Sumber', 'Performance']]), link: linkFor('perf', q, D, null, 'pace'), followups: ['RO mana yang paling jauh dari guidance?', 'Kenapa disburse bulan lalu di bawah guidance?'] };
+  const lines = [];
+  if (ps.slice.full) {
+    const o = outlook(D.pm, { ro, real: D.real, perRo: false });
+    const n = o?.next;
+    if (n && ok(n.baseOs)) {
+      const tw = { input: 'target', rka: 'RKA' }[n.targetSource] || 'perkiraan RKA';
+      lines.push(`Bulan ${monthName(ps.bulan)} sudah selesai. Untuk ${monthName(n.month)}, dengan laju biasa OS diperkirakan ${b(rpM(n.baseOs))}${ok(n.achBase) ? `, ${pct(n.achBase, 1)} dari ${tw} ${rpM(n.target)}` : ''}.`);
+      if (ok(n.needDisb) && ok(n.lift)) lines.push(`Agar tepat 100%, disburse ${monthName(n.month)} perlu ${rpM(n.needDisb)}, ${liftText(n.lift)} dari laju biasa.`);
+    }
+  }
+  return { ok: true, title: cards[0].implication || cards[0].headline, lines, insights: cards, chips: chips([['Metode', 'pola kumulatif hari kerja 6 bulan terakhir'], ['Wilayah', roName(ro || NASIONAL)], ['Sumber', 'Performance']]), link: linkFor('perf', q, D, null, 'pace'), followups: ['RO mana yang paling jauh dari guidance?', 'Kenapa disburse bulan lalu di bawah guidance?'] };
 }
 
 async function answerSummary(q, D) {
@@ -1035,6 +1357,8 @@ async function answerSummary(q, D) {
       lines.push(`Realisasi ${monthName(rs.bulan)} sampai tanggal ${rs.lastDay}: ${rpReal(t.plafond)} dari ${num(t.debitur)} debitur.`);
     }
   }
+  const sb = D.sla && (ro || !ros.length) ? slaBrief(D.sla, ro) : null;
+  if (sb) lines.push(`SLA: ${sb.line}`);
   const scope = { performance: { ro }, realisasi: { ro }, portofolio: { ro } };
   if (D.pf) await preparePf(D.pf, { bulan: D.pfLatest });
   const cards = buildInsights({ pm: D.pm, real: D.real, pf: D.pf }, scope, { limit: 3, perKind: 1 });
@@ -1082,7 +1406,13 @@ function answerHelp() {
   return {
     ok: true,
     title: 'Tanya dengan bahasa sehari-hari. Sebut metrik, wilayah, dan periode bila perlu.',
-    lines: ['Metrik: OS, growth, NPL, SML, disburse, realisasi, debitur, plafond rata-rata, produktivitas RM, runoff.', 'Wilayah: nama RO (misal Bandung, Jakarta 2), provinsi, kanca (awali dengan KC), RM, atau sumber realisasi (termasuk ETB).', 'Periode: hari ini, kemarin, minggu ini, bulan lalu, Oktober, Q3, 3 bulan terakhir, sejak awal tahun.'],
+    lines: [
+      'Metrik: OS, growth, NPL, SML, kolektibilitas, disburse, realisasi, debitur, plafond rata-rata, produktivitas RM, runoff.',
+      'Proses berkas (SLA): berkas berjalan, lewat SLA, kepatuhan, umur berkas, lama prakarsa sampai cair, berkas masuk atau cair per hari, berkas ditolak.',
+      'Wilayah: nama RO (misal Bandung, Jakarta 2), provinsi, kanca (awali dengan KC), RM, atau sumber realisasi (termasuk ETB).',
+      'Periode: hari ini, kemarin, minggu ini, bulan lalu, Oktober, Q3, 3 bulan terakhir, sejak awal tahun. Bisa juga dibandingkan: "Oktober vs September".',
+      'Jenis pertanyaan: berapa, peringkat, tren, porsi, bandingkan, kenapa, proyeksi, kebutuhan, mana yang perlu perhatian, dan arti istilah.',
+    ],
     examples: EXAMPLES,
   };
 }
@@ -1125,6 +1455,33 @@ function answerPlan(q, D) {
   if (!D.pm) return { ok: false, title: 'Data Performance belum tersedia untuk menghitung kebutuhan.' };
   const ros = rosOf(q, D);
   const ro = ros.length === 1 ? ros[0] : '';
+  if (q.planDebitur || (q.metric === 'debitur' && !/\d+\s*%/.test(q.norm))) {
+    const r = perfAt(D, ros, D.perfLatest);
+    if (!r || !ok(r.rka_deb)) return { ok: false, title: 'RKA debitur belum ada di data.' };
+    const where = whereText(q, D, { source: 'perf' });
+    const gap = r.rka_deb - r.debitur;
+    const lines = [];
+    if (D.real) {
+      const months = D.real.months.slice(-3);
+      const base = realFilter(D.real.rows, realFilters({ ...q, entities: { ...q.entities, ro: ros } }, D));
+      const t = realTotals(base.filter((x) => months.includes(x.bulan)));
+      const avgDeb = t.debitur / Math.max(1, months.length);
+      if (gap > 0 && ok(t.ticket)) lines.push(`Dengan plafond rata-rata realisasi ${rpReal(t.ticket)}, ${num(gap)} debitur setara sekitar ${b(rpReal(gap * t.ticket))} realisasi baru.`);
+      lines.push(`Akad baru rata-rata ${num(avgDeb)} debitur per bulan (${listJoin(months.map(monthName))}).`);
+    }
+    if (ok(r.gr_deb)) lines.push(`Sejak awal bulan jumlah debitur ${signedNum(r.gr_deb)} (akad baru dikurangi debitur yang lunas atau pindah).`);
+    return {
+      ok: true,
+      title: gap > 0
+        ? `Untuk mencapai RKA debitur ${where}, masih butuh ${b(`${num(gap)} debitur`)} lagi (posisi ${num(r.debitur)}, RKA ${num(r.rka_deb)}, per ${dateText(r.tanggal)}).`
+        : `Jumlah debitur ${where} sudah melampaui RKA ${b(`${num(-gap)} debitur`)} (posisi ${num(r.debitur)}, RKA ${num(r.rka_deb)}).`,
+      lines,
+      meaning: gap > 0 ? 'Karena ada debitur yang lunas setiap bulan, akad baru yang dibutuhkan biasanya lebih banyak dari angka GAP ini.' : '',
+      chips: chips([['Metrik', 'jumlah debitur vs RKA'], ['Wilayah', where], ['Sumber', 'Performance dan Realisasi']]),
+      link: linkFor('perf', q, D, null, 'rank'),
+      followups: ['Berapa debitur baru bulan ini?', 'RO dengan capaian RKA debitur terendah'],
+    };
+  }
   const o = outlook(D.pm, { ro, real: D.real });
   if (!o) return { ok: false, title: 'Riwayat data belum cukup untuk proyeksi. Proyeksi butuh minimal dua bulan penuh sebelum bulan berjalan.' };
   const wantsCurrent = (q.time?.kind === 'monthRel' && q.time.n === 0) || /\bsisa\b/.test(q.norm);
@@ -1163,7 +1520,7 @@ function answerPlan(q, D) {
       link,
     };
   }
-  if (q.metric === 'npl' || q.metric === 'sml') {
+  if (q.metric === 'npl' || q.metric === 'sml' || /\b(npl|sml)\b/.test(q.norm)) {
     const lines = view.quality.slice(1);
     return { ok: true, title: view.quality[0] || `Belum ada data NPL yang cukup untuk ${m}.`, lines, link };
   }
@@ -1283,8 +1640,320 @@ function answerCoverage(q, D) {
   };
 }
 
-export async function answer(q, D, vocab) {
-  if (q.unresolved && !['help', 'define'].includes(q.intent)) return answerUnresolved(q, vocab);
+async function answerShareOf(q, D) {
+  const e = q.entities;
+  const kind = q.manyOf || (e.fiList.length >= 2 ? 'fiList' : null);
+  let metric = q.metric;
+  if (!metric) metric = e.tipe.length || e.kanca.length || e.rm.length ? 'realisasi' : 'os';
+  const base = { ...q, metric, nominal: q.nominal || ['npl', 'sml'].includes(metric), intent: 'value' };
+  const clearKeys = kind ? [kind === 'fiList' ? 'fi' : kind] : e.tipe.length ? ['tipe'] : e.node.length ? ['node'] : e.fi ? ['fi'] : ['ro', 'prov', 'kanca', 'rm'];
+  const blank = (ent) => {
+    const out = { ...ent };
+    for (const k of clearKeys) out[k] = k === 'fi' ? null : [];
+    if (clearKeys.includes('node')) out.tipe = [];
+    if (clearKeys.includes('tipe')) out.node = [];
+    out.fiList = [];
+    return out;
+  };
+  const parts = [];
+  if (kind === 'fiList') for (const fi of e.fiList) parts.push({ label: fi === 'FI' ? 'Fixed income (FI)' : 'Non fixed income (NFI)', entities: { ...e, fi, fiList: [] } });
+  else if (kind) for (const val of e[kind]) parts.push({ label: kind === 'ro' ? roName(val) : kind === 'prov' ? provinceLabel(val) : kind === 'node' ? esc(NODE[val]?.label || val) : esc(val), entities: { ...e, [kind]: [val], ...(kind === 'tipe' ? { node: [] } : kind === 'node' ? { tipe: [] } : {}) } });
+  else parts.push({ label: whereText({ ...base }, D, { source: pickSource(base) }), entities: e });
+  const src = pickSource({ ...base, entities: parts[0].entities });
+  const res = [];
+  for (const p of parts) res.push({ ...p, ...(await valueOf({ ...base, entities: p.entities }, D, src)) });
+  const totalQ = { ...base, entities: blank(e) };
+  const tot = await valueOf(totalQ, D, src);
+  if (!ok(tot.v) || !tot.v) return null;
+  const parentWhere = whereText(totalQ, D, { source: src });
+  const of = parentWhere === 'Nasional' ? 'nasional' : parentWhere;
+  const valid = res.filter((x) => ok(x.v));
+  if (!valid.length) return { ok: false, title: 'Data untuk porsi ini tidak tersedia.' };
+  if (valid.length === 1) {
+    const x = valid[0];
+    const lines = [];
+    if (!kind && e.ro.length > 1) {
+      const each = [];
+      for (const ro of e.ro) each.push(`${roName(ro)} ${(await valueOf({ ...base, entities: { ...e, ro: [ro] } }, D, src)).text}`);
+      lines.push(`Terdiri dari ${listJoin(each)}.`);
+    } else if (x.extra) lines.push(`${cap(x.extra)}.`);
+    return {
+      ok: true,
+      title: `${b(x.label)} menyumbang ${b(pct(x.v / tot.v, 1))} ${x.metricLabel} ${of}: ${x.text} dari ${tot.text}, ${x.period}.`,
+      lines,
+      chips: chips([['Metrik', x.metricLabel], ['Bagian', plain(x.label)], ['Dari', of], ['Periode', x.period], ['Sumber', SOURCE_NAME[src]], ...fixChips(q)]),
+      link: linkFor(src, q, D, null, src === 'real' ? 'hero' : src === 'pf' ? 'tree' : 'rank'),
+      followups: [`Tren ${x.metricLabel} ${plain(x.label)} 6 bulan terakhir`, `Porsi ${x.metricLabel} per ${src === 'real' ? 'sumber' : 'RO'}`],
+    };
+  }
+  const sorted = [...valid].sort((a, c) => c.v - a.v);
+  const covered = sum(sorted.map((x) => x.v));
+  return {
+    ok: true,
+    title: `Porsi ${sorted[0].metricLabel} ${of}, ${sorted[0].period}: ${listJoin(sorted.map((x) => `${b(x.label)} ${b(pct(x.v / tot.v, 1))}`))}.`,
+    lines: [`Total ${of} ${tot.text}${Math.abs(covered - tot.v) / tot.v > 0.005 ? `; sisanya ${pct(1 - covered / tot.v, 1)} di luar kelompok ini` : ''}.`],
+    list: { items: sorted.map((x, i) => ({ rank: i + 1, key: plain(x.label), label: x.label, v: x.v, text: `${pct(x.v / tot.v, 1)} (${x.text})` })), dir: 'desc', abs: true },
+    chips: chips([['Metrik', sorted[0].metricLabel], ['Dibandingkan', listJoin(sorted.map((x) => plain(x.label)))], ['Periode', sorted[0].period], ['Sumber', SOURCE_NAME[src]], ...fixChips(q)]),
+    link: linkFor(src, q, D, null, src === 'pf' ? 'tree' : 'rank'),
+    followups: [`Bandingkan NPL ${listJoin(sorted.map((x) => plain(x.label)))}`, `Tren ${sorted[0].metricLabel} 6 bulan terakhir`],
+  };
+}
+
+async function comparePeriods(q, D) {
+  if (!q.metric || ['quality', 'kancacount', 'rmcount'].includes(q.metric)) return null;
+  const source = pickSource(q);
+  let tA = q.time2 ? q.time : { kind: 'latest' };
+  let tB = q.time2 || q.time;
+  if (!tB?.kind) return null;
+  let PA = resolvePeriod(tA, D, source);
+  let PB = resolvePeriod(tB, D, source);
+  if (!PA || !PB) return null;
+  if (PA.to < PB.to) { [tA, tB] = [tB, tA]; [PA, PB] = [PB, PA]; }
+  const missA = outOfRange(PA, source, D);
+  const missB = outOfRange(PB, source, D);
+  if (missA || missB) return { ok: false, title: missA || missB };
+  const A = await valueOf({ ...q, time: tA }, D, source);
+  let B = await valueOf({ ...q, time: tB }, D, source);
+  const lines = [];
+  if (source === 'real' && PA.partial && PB.months.length === 1 && PB.month === shiftMonth(PA.month, -1)) {
+    const PR = prevRange(PA);
+    const metric = realMetricOf(q);
+    const M = REAL_M[metric] || REAL_M.realisasi;
+    const t = realTotals(inRange(realFilter(D.real.rows, realFilters(q, D)), PR));
+    lines.push(`${monthName(PA.month)} belum penuh, jadi dibandingkan dengan ${PR.label}: ${M.f(M.get(t))}. ${monthYear(PB.month)} penuh: ${B.text}.`);
+    B = { ...B, v: M.get(t), text: M.f(M.get(t)), period: PR.label };
+  }
+  if (!ok(A.v) || !ok(B.v)) return { ok: false, title: 'Data untuk salah satu periode tidak tersedia.' };
+  const where = whereText(q, D, { source });
+  const d = A.v - B.v;
+  const isRatio = A.ratioKind;
+  const label = A.metricLabel;
+  const better = source === 'perf' ? perfMetric(q).better : (['npl', 'sml'].includes(q.metric) ? 'down' : 'up');
+  const move = !d ? 'tidak berubah' : d > 0 ? 'naik' : 'turun';
+  const size = isRatio ? bps(d) : `${A.f === rpM ? rpM(Math.abs(d)) : A.f === rpReal ? rpReal(Math.abs(d)) : A.f(Math.abs(d)).replace(/^−/, '')} (${signedPct(ratio(A.v, B.v) - 1)})`;
+  const lead = q.upDownAsk ? `${d > 0 ? 'Naik' : d < 0 ? 'Turun' : 'Tetap'}. ` : '';
+  lines.push(`${A.period}: ${b(A.text)}${A.extra ? `; ${A.extra}` : ''}.`, `${B.period}: ${B.text}${B.extra ? `; ${B.extra}` : ''}.`);
+  const good = better === 'down' ? d < 0 : d > 0;
+  return {
+    ok: true,
+    title: `${lead}${cap(label)} ${where} ${move}${d ? ` ${size}` : ''}: dari ${B.text} (${B.period}) ke ${b(A.text)} (${A.period}).`,
+    lines,
+    meaning: d && ['npl', 'sml'].includes(q.metric) ? (good ? 'Kualitas kredit membaik.' : 'Kualitas kredit memburuk, perlu dipantau.') : '',
+    chips: chips([['Metrik', label], ['Wilayah', where], ['Dibandingkan', `${A.period} vs ${B.period}`], ['Sumber', SOURCE_NAME[source]], ...fixChips(q)]),
+    link: linkFor(source, q, D, PA, source === 'perf' ? perfMetric(q).widget : 'months-chart'),
+    followups: [`Kenapa ${label} ${where} ${move === 'naik' ? 'naik' : 'turun'}?`, `Tren ${label} ${where} 6 bulan terakhir`],
+  };
+}
+
+async function answerQuality(q, D) {
+  if (!D.pf) return { ok: false, title: 'Data Portofolio belum tersedia.' };
+  const P = resolvePeriod(q.time, D, 'pf');
+  const miss = outOfRange(P, 'pf', D);
+  if (miss) return { ok: false, title: miss };
+  const month = D.pf.index.months.includes(P.month) ? P.month : D.pfLatest;
+  const L = pfLabels(D.pf, 'os');
+  const pick = async (m) => pfSums(pfFilterRows(await pfRows(D, m, q.entities.kanca.length > 0, 'os'), q, D), L, pfNodeFilter(q));
+  const s = await pick(month);
+  if (!s.base) return { ok: false, title: 'Data portofolio untuk pilihan ini kosong.' };
+  const where = whereText(q, D, { source: 'pf' });
+  const lancar = (s.base - s.sml - s.npl) / s.base;
+  const lines = [`Nominal: lancar ${rp((s.base - s.sml - s.npl) * PF_UNIT)}, SML ${rp(s.sml * PF_UNIT)}, NPL ${rp(s.npl * PF_UNIT)} dari OS ${rp(s.base * PF_UNIT)}.`];
+  const prev = shiftMonth(month, -1);
+  if (D.pf.index.months.includes(prev)) {
+    const p = await pick(prev);
+    if (p.base) lines.push(`Dibanding ${monthYear(prev)}: %SML ${bpsSigned(s.smlR - p.smlR)}, %NPL ${bpsSigned(s.nplR - p.nplR)}.`);
+  }
+  if (ok(s.nplFiR) && ok(s.nplNfiR)) lines.push(`%NPL debitur FI ${pct(s.nplFiR)}, NFI ${pct(s.nplNfiR)}.`);
+  const nat = q.entities.kanca.length || rosOf(q, D).length ? pfSums(await pfRows(D, month, false, 'os'), L) : null;
+  const meaning = nat ? `%NPL ${s.nplR > nat.nplR ? 'lebih tinggi' : 'lebih rendah'} dari nasional (${pct(nat.nplR)}).` : `${pct(s.smlR + s.nplR, 1)} OS sedang menunggak (SML ditambah NPL).`;
+  return {
+    ok: true,
+    title: `Kualitas kredit ${where} ${monthYear(month)}: lancar ${b(pct(lancar, 1))}, SML (kol 2) ${b(pct(s.smlR))}, NPL (kol 3 sampai 5) ${b(pct(s.nplR))}.`,
+    lines, meaning,
+    list: { items: [['Lancar', lancar, s.base - s.sml - s.npl], ['SML', s.smlR, s.sml], ['NPL', s.nplR, s.npl]].map(([l, v, n], i) => ({ rank: i + 1, key: l, label: l, v, text: `${pct(v, 2)} (${rp(n * PF_UNIT)})` })), dir: 'desc', abs: true },
+    chips: chips([['Metrik', 'kolektibilitas'], ['Wilayah', where], ['Bulan', monthYear(month)], ['Sumber', 'Portofolio'], ...fixChips(q)]),
+    link: linkFor('pf', q, D, { month }, 'qtrend'),
+    followups: [`Kanca NPL tertinggi${where !== 'Nasional' ? ` di ${plain(where)}` : ''}`, `Tren NPL ${plain(where)} 6 bulan terakhir`, 'Apa itu kolektibilitas?'],
+  };
+}
+
+function answerZero(q, D) {
+  if (!D.real) return { ok: false, title: 'Data Realisasi belum tersedia.' };
+  const P = resolvePeriod(q.time, D, 'real');
+  const miss = outOfRange(P, 'real', D);
+  if (miss) return { ok: false, title: miss };
+  const dim = q.groupBy === 'rm' ? 'rm' : 'kanca';
+  const base = realFilter(D.real.rows, realFilters(q, D, { except: dim }));
+  const lookFrom = `${shiftMonth(P.month, -3)}-01`;
+  const pool = new Map();
+  for (const r of base) if (r.tanggal >= lookFrom && r.tanggal <= P.to && r[dim]) {
+    const last = pool.get(r[dim]);
+    if (r.plafond > 0 && (!last || r.tanggal > last)) pool.set(r[dim], r.tanggal);
+    else if (!pool.has(r[dim])) pool.set(r[dim], '');
+  }
+  const active = new Set(inRange(base, P).filter((r) => r.plafond > 0).map((r) => r[dim]));
+  const zero = [...pool.keys()].filter((k) => !active.has(k));
+  const where = whereText({ ...q, entities: { ...q.entities, [dim]: [] } }, D, { source: 'real' });
+  const word = dim === 'rm' ? 'RM' : 'kanca';
+  if (!zero.length) {
+    return {
+      ok: true, title: `Semua ${num(pool.size)} ${word} ${where !== 'Nasional' ? `di ${where} ` : ''}sudah mencatat realisasi pada ${P.label}.`, lines: [],
+      followups: [`${word === 'RM' ? 'RM' : 'Kanca'} dengan realisasi terendah ${P.label}`],
+    };
+  }
+  const list = zero.map((k) => ({ k, last: pool.get(k) })).sort((a, c) => (a.last || '').localeCompare(c.last || ''));
+  return {
+    ok: true,
+    title: `${b(`${num(zero.length)} ${word}`)} ${where !== 'Nasional' ? `di ${where} ` : ''}belum mencatat realisasi pada ${P.label}, dari ${num(pool.size)} ${word} yang aktif 3 bulan terakhir.`,
+    lines: [list.length > 12 ? `${num(list.length - 12)} lainnya tidak ditampilkan.` : ''].filter(Boolean),
+    list: { items: list.slice(0, 12).map((x, i) => ({ rank: i + 1, key: x.k, label: esc(x.k), v: 0, text: x.last ? `terakhir ${dateShort(x.last)}` : 'belum ada' })), dir: 'asc', abs: true },
+    meaning: `Cek apakah ${word} ini sedang menunggu berkas cair atau memang tidak ada pipeline.`,
+    chips: chips([['Syarat', 'realisasi nol'], ['Wilayah', where], ['Periode', P.label], ['Sumber', 'Realisasi'], ...fixChips(q)]),
+    link: linkFor('real', { ...q, entities: { ...q.entities, [dim]: [] } }, D, P, dim === 'rm' ? 'rm' : 'kanca'),
+    followups: [`${dim === 'rm' ? 'RM' : 'Kanca'} dengan realisasi terendah ${P.label}`, 'Berapa berkas lewat SLA?'],
+  };
+}
+
+async function answerAttention(q, D) {
+  const date = D.perfLatest;
+  const ros = rosOf(q, D);
+  const ro = ros.length === 1 ? ros[0] : '';
+  const issues = [];
+  const push = (key, score, text) => { if (score > 0) issues.push({ key, score, text }); };
+  if (D.pm && !ro) {
+    const sla = slaByRo(D.sla);
+    const month = date.slice(0, 7);
+    const full = date === monthEnd(month);
+    const time = full ? 1 : workdaysOf(month, Number(date.slice(8, 10))).length / Math.max(1, workdaysOf(month).length);
+    const realBy = D.real ? realGroup(D.real.rows.filter((r) => r.bulan === D.realLatest.slice(0, 7) && r.tanggal <= D.realLatest), 'ro') : new Map();
+    const realPrev = D.real ? realGroup(inRange(D.real.rows, prevRange(resolvePeriod({ kind: 'monthRel', n: 0 }, D, 'real'))), 'ro') : new Map();
+    for (const r0 of D.pm.regions) {
+      const r = perfRowAt(D, r0, date);
+      if (!r) continue;
+      if (ok(r.npl) && ok(r.rka_npl) && r.npl > r.rka_npl) push(r0, ((r.npl - r.rka_npl) / r.rka_npl) * 30, `%NPL ${pct(ratio(r.npl, r.os))}, nominal NPL ${rpM(r.npl - r.rka_npl)} di atas RKA`);
+      const dn = ratio(r.npl, r.os) - ratio(r.helper_npl, r.helper_os);
+      if (ok(dn) && dn > 0.001) push(r0, dn * 400, `%NPL naik ${bps(dn)} sejak awal bulan`);
+      if (ok(r.dpk) && ok(r.rka_dpk) && r.dpk > r.rka_dpk * 1.05) push(r0, ((r.dpk - r.rka_dpk) / r.rka_dpk) * 10, `SML ${rpM(r.dpk - r.rka_dpk)} di atas RKA`);
+      const ach = ratio(r.os, r.rka_os);
+      if (ok(ach) && ach < 0.995) push(r0, (1 - ach) * 150, `OS ${pct(ach, 1)} dari RKA (kurang ${rpM(r.rka_os - r.os)})`);
+      const dAch = ratio(r.disburse, r.guidance_disb);
+      if (ok(dAch) && dAch < time * 0.85) push(r0, (time - dAch) * 3, `disburse baru ${pct(dAch, 0)} dari guidance${full ? '' : ` (waktu berjalan ${pct(time, 0)})`}`);
+      const st = sla.get(r0);
+      if (st && st.late >= 2) push(r0, ratio(st.late, st.ok + st.late) * 2 + st.late * 0.05, `${num(st.late)} berkas lewat SLA`);
+      const rc = realBy.get(r0);
+      const rp0 = realPrev.get(r0);
+      if (rc && rp0 && rp0.plafond > 0 && rc.plafond / rp0.plafond < 0.8) push(r0, (1 - rc.plafond / rp0.plafond) * 2, `realisasi ${signedPct(rc.plafond / rp0.plafond - 1)} dari periode yang sama bulan lalu`);
+    }
+    const by = new Map();
+    for (const it of issues) {
+      const g = by.get(it.key) || { score: 0, texts: [] };
+      g.score += it.score;
+      g.texts.push(it);
+      by.set(it.key, g);
+    }
+    const top = [...by.entries()].sort((a, c) => c[1].score - a[1].score).slice(0, q.topN || 5);
+    if (!top.length) return { ok: true, title: `Tidak ada sinyal yang menonjol per ${dateText(date)}: NPL, capaian RKA, disburse, realisasi, dan SLA tiap RO masih dalam batas wajar.`, lines: [], followups: ['Ringkasan bulan ini', 'RO mana NPL tertinggi?'] };
+    const nat = perfAt(D, [], date);
+    const natLines = [];
+    if (nat) {
+      const a = ratio(nat.disburse, nat.guidance_disb);
+      if (ok(a) && a < time * 0.9) natLines.push(`Secara nasional, disburse baru ${pct(a, 1)} dari guidance${full ? ` dan bulan ${monthName(month)} sudah berakhir` : ''}.`);
+      if (ok(nat.npl) && ok(nat.rka_npl) && nat.npl > nat.rka_npl) natLines.push(`NPL nasional di atas RKA ${rpM(nat.npl - nat.rka_npl)}.`);
+    }
+    const sb = slaBrief(D.sla);
+    if (sb && sb.run.late) natLines.push(`SLA nasional: ${sb.line}`);
+    return {
+      ok: true,
+      title: `${top.length} RO yang paling perlu perhatian per ${dateText(date)}: ${listJoin(top.map(([k]) => b(roName(k))))}.`,
+      lines: [...top.map(([k, g]) => `${b(roName(k))}: ${g.texts.sort((a, c) => c.score - a.score).slice(0, 3).map((x) => x.text).join('; ')}.`), ...natLines],
+      meaning: `Prioritaskan ${roName(top[0][0])}: sinyalnya paling banyak dan paling jauh dari target.`,
+      chips: chips([['Dinilai dari', 'NPL vs RKA, arah NPL, capaian OS, disburse vs guidance, realisasi, SLA'], ['Posisi', dateText(date)]]),
+      link: { view: 'ringkasan', params: {}, widget: '', label: 'Buka Ringkasan' },
+      followups: [`Kondisi ${roName(top[0][0])}`, `Kenapa NPL ${roName(top[0][0])} naik?`, 'Kanca dengan berkas lewat SLA terbanyak'],
+    };
+  }
+  if (!ro) return { ok: false, title: 'Data Performance belum tersedia.' };
+  const r = perfRowAt(D, ro, date);
+  const lines = [];
+  if (r) {
+    if (ok(r.npl) && ok(r.rka_npl)) lines.push(r.npl > r.rka_npl ? `NPL di atas RKA ${rpM(r.npl - r.rka_npl)} (%NPL ${pct(ratio(r.npl, r.os))}).` : `NPL masih di bawah RKA (%NPL ${pct(ratio(r.npl, r.os))}).`);
+    const ach = ratio(r.os, r.rka_os);
+    if (ok(ach)) lines.push(`OS ${pct(ach, 1)} dari RKA${ach < 1 ? `, kurang ${rpM(r.rka_os - r.os)}` : ''}.`);
+    const dAch = ratio(r.disburse, r.guidance_disb);
+    if (ok(dAch)) lines.push(`Disburse ${pct(dAch, 1)} dari guidance.`);
+  }
+  if (D.pf) {
+    await preparePf(D.pf, { bulan: D.pfLatest });
+    const L = pfLabels(D.pf, 'os');
+    const rows = (D.pf.monthData.get(D.pfLatest) || []).filter((x) => x.m === 'os' && x.ro === ro);
+    const all = pfSums(rows, L);
+    const g = [...pfGroup(rows, L, 'kanca')].filter(([, s]) => s.base > all.base * 0.02 && ok(s.nplR)).sort((a, c) => c[1].nplR - a[1].nplR).slice(0, 3);
+    if (g.length) lines.push(`Kanca dengan %NPL tertinggi: ${listJoin(g.map(([k, s]) => `${esc(k)} (${pct(s.nplR)})`))}.`);
+  }
+  const late = slaLateKanca(D.sla, ro);
+  if (late.length) lines.push(`Berkas lewat SLA terbanyak: ${listJoin(late.map(([k, t]) => `${esc(k)} (${num(t.berkas)})`))}.`);
+  if (D.real) {
+    const P = resolvePeriod({ kind: 'monthRel', n: 0 }, D, 'real');
+    const PR = prevRange(P);
+    const base = D.real.rows.filter((x) => x.ro === ro);
+    const cur = realGroup(inRange(base, P), 'kanca');
+    const old = realGroup(inRange(base, PR), 'kanca');
+    const drops = [...old].map(([k, g]) => ({ k, d: (cur.get(k)?.plafond || 0) - g.plafond })).filter((x) => x.d < 0).sort((a, c) => a.d - c.d).slice(0, 3);
+    if (drops.length) lines.push(`Realisasi turun paling dalam: ${listJoin(drops.map((x) => `${esc(x.k)} (${rpRealSigned(x.d)})`))}, dibanding ${PR.label}.`);
+  }
+  return {
+    ok: true,
+    title: `Yang perlu diperhatikan di ${b(roName(ro))} per ${dateText(date)}:`,
+    lines,
+    chips: chips([['Wilayah', roName(ro)], ['Dinilai dari', 'NPL, capaian RKA, disburse, NPL kanca, SLA, realisasi kanca']]),
+    link: linkFor('perf', q, D, null, 'strip'),
+    followups: [`Kondisi ${roName(ro)}`, `Kanca NPL tertinggi di ${roName(ro)}`, `SLA ${roName(ro)}`],
+  };
+}
+
+const KIT = { rosOf, resolvePeriod, fixChips, provinceLabel, prevRange };
+
+function metroLookup(q, D) {
+  const text = ` ${q.normRaw || q.norm} `;
+  for (const a of METRO_AREAS) {
+    const key = a.keys.find((k) => text.includes(` ${k} `));
+    if (!key) continue;
+    const list = D.territory.metroIn(a.id);
+    if (!list.length) continue;
+    const place = key.replace(/\b\w/g, (c) => c.toUpperCase());
+    const total = list.reduce((t, x) => t + x.n, 0);
+    const same = place.toLowerCase() === a.name.toLowerCase();
+    return {
+      ok: true,
+      title: `${same ? `Area ${b(a.name)} (${METRO_NAME})` : `${b(esc(place))} termasuk area ${b(a.name)} (${METRO_NAME}),`} dilayani ${list.length > 1 ? `${b(list.length)} RO` : b(roName(list[0].ro))}${total ? ` dengan ${num(total)} kantor cabang di area itu` : ''}.`,
+      lines: list.map((x) => `${b(roName(x.ro))}: ${num(x.n)} kanca${x.kanca?.length ? ` (${x.kanca.slice(0, 6).map((k) => esc(kancaLabel(k).replace(/^KC\s+/i, ''))).join(', ')})` : ''}.`),
+      meaning: list.length > 1 ? `Untuk ${esc(place)}, lihat kantor cabang terdekatnya: RO-nya mengikuti kanca tersebut.` : '',
+      chips: chips([['Area', a.name], ['Sumber', 'peta wilayah']]),
+      link: { view: 'performance', params: { ro: list.length === 1 ? list[0].ro : '' }, widget: 'map', label: 'Buka peta wilayah' },
+    };
+  }
+  return null;
+}
+
+export async function answer(q, D, vocab, memory = null) {
+  if (q.intent === 'talk') return answerTalk(q, D, memory);
+  if (q.intent === 'help') return answerHelp();
+  if (q.intent === 'define') {
+    if (q.diff) {
+      const d = answerDiff(q);
+      if (d) return d;
+    }
+    return answerDefine(q, vocab);
+  }
+  if (q.intent === 'coverage' && !q.entities.ro.length && !q.entities.prov.length) {
+    const hit = q.unresolved || !q.entities.kanca.length ? metroLookup(q, D) : null;
+    if (hit) return hit;
+  }
+  if (q.unresolved) return answerUnresolved(q, vocab);
+  if (q.domain === 'sla') return slaAnswer(q, D, KIT);
+  if (q.intent === 'attention') return answerAttention(q, D);
+  if (q.metric === 'quality') return answerQuality(q, D);
+  if (q.intent === 'zero') return answerZero(q, D);
   if (q.intent === 'rank' && !q.metric) {
     if (['rm', 'kanca', 'tipe', 'tujuan'].includes(q.groupBy)) q = { ...q, metric: 'realisasi' };
     else {
@@ -1292,20 +1961,34 @@ export async function answer(q, D, vocab) {
         ok: false,
         title: `${q.order === 'best' ? 'Terbaik' : q.order === 'worst' ? 'Terburuk' : 'Peringkat'} menurut apa?`,
         lines: ['Sebut metriknya agar urutannya jelas.'],
-        followups: ['RO dengan growth OS tertinggi', 'RO dengan NPL terendah', 'RO dengan capaian disburse tertinggi'],
+        followups: ['RO dengan growth OS tertinggi', 'RO dengan NPL terendah', 'RO dengan capaian disburse tertinggi', 'Kanca dengan berkas lewat SLA terbanyak'],
       };
     }
   }
-  if (q.intent === 'help') return answerHelp();
   if (q.intent === 'coverage') return answerCoverage(q, D);
   if (q.intent === 'plan') return answerPlan(q, D);
-  if (q.intent === 'define') return answerDefine(q, vocab);
   if (q.intent === 'anomaly') return answerAnomaly(q, D);
   if (q.intent === 'why') return answerWhy(q, D);
   if (q.intent === 'forecast') return answerForecast(q, D);
   if (q.intent === 'summary') return answerSummary(q, D);
+  const hasEntity = ['ro', 'kanca', 'rm', 'tipe', 'node', 'prov', 'fiList'].some((k) => q.entities[k]?.length) || q.entities.fi;
+  if (q.intent === 'share' && (q.groupBy === 'fi' || q.groupBy === 'pendapatan')) return answerShareOf({ ...q, groupBy: null, entities: { ...q.entities, fiList: ['FI', 'NFI'], fi: null }, manyOf: 'fiList' }, D);
+  if (q.intent === 'share' && !q.groupBy && hasEntity) {
+    const r = await answerShareOf(q, D);
+    if (r) return r;
+  }
   if (!q.metric && q.intent !== 'compare') return null;
-  if (q.intent === 'compare') return compareEntities(q, D);
+  if (q.intent === 'compare') {
+    if (q.time2 || (!q.manyOf && q.time.kind && !q.groupBy && q.metric)) {
+      const r = await comparePeriods(q, D);
+      if (r) return r;
+    }
+    if (!q.manyOf && q.groupBy && q.metric) return answerRank({ ...q, intent: 'rank', order: q.order || 'desc', topN: q.topN || 25 }, D);
+    const c = await compareEntities(q, D);
+    if (c) return c;
+    if (!q.metric) return null;
+    q = { ...q, intent: 'value' };
+  }
   if (q.intent === 'rank') return answerRank(q, D);
   if (q.intent === 'filter') return answerFilter(q, D);
   if (q.intent === 'share') return answerShare(q, D);
@@ -1321,4 +2004,3 @@ export async function answer(q, D, vocab) {
   if (source === 'real') return realValue(q, D);
   return pfValue(q, D);
 }
-

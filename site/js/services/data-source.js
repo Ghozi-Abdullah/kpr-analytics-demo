@@ -108,15 +108,21 @@ async function decodePayload(p) {
   return p;
 }
 
+let dataVersion = '';
+
 async function fetchLocal(path) {
+  const fresh = path === 'meta.json' || !dataVersion;
+  const url = fresh ? `data/${path}` : `data/${path}?v=${encodeURIComponent(dataVersion)}`;
   let res;
   try {
-    res = await fetch(`data/${path}`, { cache: 'no-store' });
+    res = await fetch(url, { cache: fresh ? 'no-store' : 'default' });
   } catch {
     throw new Error('Data tidak bisa dibaca. Buka dashboard lewat Live Server (klik "Go Live" di VS Code).');
   }
   if (!res.ok) throw new Error(`File data/${path} belum ada. Jalankan "python pipeline/build_data.py", lalu muat ulang halaman.`);
-  return res.json();
+  const body = await res.json();
+  if (path === 'meta.json' && typeof body?.generated_at === 'string') dataVersion = body.generated_at;
+  return body;
 }
 
 let queue = null;

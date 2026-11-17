@@ -296,7 +296,7 @@ function openStatus() {
     : `<p class="note">Mode lokal. Tata letak panel tersimpan di browser ini. Untuk memperbarui data, simpan export spreadsheet ke folder data_raw lalu jalankan:</p>
        <div class="code">python pipeline/build_data.py</div>
        <p class="note">Contoh tampilan untuk versi yang memakai login:</p>
-       <div class="status-act"><a class="btn" href="#/masuk">${icon('lock', 16)}Halaman login</a><a class="btn" href="#/admin">${icon('users', 16)}Halaman admin</a></div>`;
+       <div class="status-act"><a class="btn" href="#/masuk">${icon('lock', 16)}Halaman login</a><a class="btn" href="#/admin">${icon('users', 16)}Halaman admin</a>${DEMO_GATE ? '<button class="btn" type="button" id="demo-logout">Keluar</button>' : ''}</div>`;
   const checked = S.liveState.checkedAt ? new Date(S.liveState.checkedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'belum';
   const liveWord = { live: 'Aktif', offline: 'Terhenti, perangkat sedang offline', error: 'Gagal menghubungi server, dicoba lagi otomatis', idle: 'Menyiapkan' }[S.liveState.state] || 'Aktif';
   const liveBox = `<div class="live-box"><b>${icon('signal', 16)}Pembaruan otomatis: ${esc(liveWord)}</b>
@@ -307,6 +307,7 @@ function openStatus() {
       <button class="icon-btn" type="button" data-close aria-label="Tutup">${icon('close')}</button></div>
     <div class="dialog-body">${liveBox}<div class="data-status">${items}</div>${how}<p class="credit">Ikon: <a href="https://www.flaticon.com/uicons" target="_blank" rel="noopener noreferrer">Uicons by Flaticon</a></p></div>`;
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
+  dlg.querySelector('#demo-logout')?.addEventListener('click', () => demoSignOut());
   dlg.querySelector('#logout')?.addEventListener('click', () => {
     logout();
     try { sessionStorage.setItem('kpr.auth.msg', 'Anda sudah keluar.'); } catch {}
@@ -653,7 +654,29 @@ function scheduleSave() {
 }
 
 const STANDALONE_PAGES = ['masuk', 'admin'];
+const DEMO_SESSION = 'kpr.demo.session';
+const DEMO_GATE = MODE === 'local' && !isLocalHost();
 const hashPage = () => location.hash.replace(/^#\/?/, '').split('?')[0];
+
+const demoSignedIn = () => { try { return sessionStorage.getItem(DEMO_SESSION) === '1'; } catch { return false; } };
+
+function demoSignIn(route) {
+  try { sessionStorage.setItem(DEMO_SESSION, '1'); } catch {}
+  history.replaceState(null, '', `${location.pathname}${location.search}${route}`);
+  location.reload();
+}
+
+function demoSignOut() {
+  try { sessionStorage.removeItem(DEMO_SESSION); } catch {}
+  history.replaceState(null, '', `${location.pathname}${location.search}#/masuk`);
+  location.reload();
+}
+
+function showDemoLogin() {
+  const page = hashPage();
+  const route = !page || page === 'masuk' ? '#/ringkasan' : location.hash;
+  loginScreen($('app'), { demo: true, onLogin: () => demoSignIn(route) });
+}
 
 function leaveTo(view) {
   history.replaceState(null, '', `${location.pathname}${location.search}#/${view}`);
@@ -711,6 +734,7 @@ async function start() {
       return;
     }
   }
+  if (DEMO_GATE && (!demoSignedIn() || hashPage() === 'masuk')) { showDemoLogin(); return; }
   if (MODE === 'local' && hashPage() === 'masuk') {
     loginScreen($('app'), { demo: true, onLogin: () => leaveTo('ringkasan') });
     return;
