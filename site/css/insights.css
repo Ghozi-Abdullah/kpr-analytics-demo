@@ -26,7 +26,7 @@
 .insight-evidence { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; font-size: var(--fs-body); line-height: 1.5; color: var(--ink-2); }
 .insight-evidence li { position: relative; padding-left: 13px; }
 .insight-evidence li::before { content: ""; position: absolute; left: 0; top: .72em; width: 6px; height: 1.5px; border-radius: 1px; background: var(--line-2); }
-.insight-implication { margin: 2px 0 0; padding: 9px 11px; border-radius: 12px; background: var(--accent-tint); font-size: var(--fs-body); line-height: 1.5; color: var(--ink); }
+.insight-implication { margin: 2px 0 0; padding: 9px 13px; border-radius: 12px; background: var(--accent-tint); font-size: var(--fs-body); line-height: 1.5; color: var(--ink); }
 .insight-implication span { display: block; margin-bottom: 2px; font-size: var(--fs-caption); font-weight: 600; color: var(--accent); }
 .insight-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 2px; }
 .insight-confidence { font-size: var(--fs-caption); color: var(--faint); }

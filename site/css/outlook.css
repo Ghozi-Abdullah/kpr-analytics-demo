@@ -33,13 +33,15 @@
 .outlook-meter span { position: absolute; left: 71.43%; top: -4px; bottom: -4px; width: 2px; border-radius: 1px; background: var(--ink-2); }
 .outlook-notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: var(--fs-body); line-height: 1.55; color: var(--ink-2); }
 .outlook-notes li { position: relative; padding-left: 14px; }
+.outlook-quality .outlook-notes li { padding-left: 21px; }
+.outlook-quality .outlook-notes li::before { left: 5px; }
 .outlook-notes li::before { content: ""; position: absolute; left: 1px; top: .68em; width: 5px; height: 5px; border-radius: 50%; background: var(--line-2); }
 .outlook-notes b { font-weight: 650; color: var(--ink); }
 .outlook-muted { margin: 0; font-size: var(--fs-body); color: var(--muted); }
 .outlook-ro { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; min-height: 0; padding: 14px 10px 10px 16px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); }
 .outlook-ro h3 svg { color: var(--accent); }
 .outlook-ro-sum { margin: 0; padding-right: 6px; font-size: var(--fs-body); line-height: 1.5; color: var(--muted); }
-.outlook-ro-list { margin: 0; padding: 0 6px 0 0; list-style: none; display: grid; align-content: start; gap: 2px; max-height: 268px; overflow: auto; scrollbar-width: thin; }
+.outlook-ro-list { margin: 0 0 0 -8px; padding: 0 6px 0 0; list-style: none; display: grid; align-content: start; gap: 2px; max-height: 268px; overflow: auto; scrollbar-width: thin; }
 .outlook-ro-list button { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 6px 8px; border: 0; border-radius: 10px; background: none; color: var(--ink); text-align: left; font-size: var(--fs-body); }
 .outlook-ro-list button:hover { background: var(--accent-tint); }
 .outlook-ro-list button:focus-visible { outline: 2px solid var(--cakrawala); outline-offset: -2px; }

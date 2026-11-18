@@ -161,6 +161,20 @@ berjarak minimal satu langkah skala, jadi tidak ada lagi ukuran yang hanya beda 
 angka besar, 1,236 untuk judul, 1,45 untuk teks antarmuka, dan 1,618 untuk paragraf jawaban Tanya data. Kotak isian
 Tanya data tetap 16 px supaya iPhone tidak memperbesar layar saat diketuk.
 
+## 6c. Kesejajaran
+
+Aturannya: tepi yang berdekatan harus sejajar persis, atau jelas berbeda. Tidak boleh "hampir sejajar".
+
+- Baris filter yang lebarnya hanya beda kurang dari 32 px dari judul halaman dibuat persis selebar judul
+  (`js/core/filter-snap.js`). Kalau isinya akan terpotong, ukuran asli dipakai.
+- Jarak filter ke elemen di atasnya (subjudul, atau kotak Tanya data dan tombol bila letaknya bertumpuk) dibuat sama
+  dengan jarak filter ke isi di bawahnya (tepi kartu, atau huruf judul baris di Summary). Tidak berlaku di HP dan saat
+  Atur panel.
+- Judul daftar peringkat di panel peta sejajar dengan nomor urut; nomor urut rata kiri.
+- Ringkasan di "Kebutuhan per RO" sejajar dengan nama RO di bawahnya.
+- Poin di "Kualitas kredit" (Outlook) sejajar dengan teks judulnya, titiknya tepat di bawah ikon.
+- Teks kotak Implikasi di Insight sejajar dengan teks poin di atasnya.
+
 ## 7. Rencana uji pakai (5 orang, 30 menit per orang)
 
 Fasilitator bukan pembuat dashboard. Satu pencatat. Pakai data dummy dulu, lalu data asli.

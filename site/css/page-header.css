@@ -58,9 +58,13 @@
 .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.filter-bar { position: sticky; top: 0; z-index: 30; margin: 12px -14px 12px; padding: 8px 14px; border-radius: 0 0 18px 18px; transition: background .2s, box-shadow .2s; }
+.filter-bar { --lift: 0px; position: sticky; top: 0; z-index: 30; margin: calc(12px - var(--lift)) -14px calc(12px + var(--lift)); padding: 8px 14px; border-radius: 0 0 18px 18px; transition: background .2s, box-shadow .2s; }
 .filter-bar.stuck { background: rgb(245 245 247 / .82); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 1px 0 var(--line); }
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 34px; }
+.filters.is-snap { flex-wrap: nowrap; justify-content: space-between; margin-inline: auto; }
+.filters.is-snap > * { flex: 1 1 auto; min-width: 0; }
+.filters.is-snap .picker { justify-content: space-between; padding-left: 11px; gap: 5px; }
+.filters.is-snap .picker-button { padding-right: 26px; background-position: right 7px center; }
 .filters-skel { width: 360px; max-width: 100%; height: 34px; border-radius: 999px; background: linear-gradient(90deg, #EBEBEF 0, #F5F5F8 40%, #EBEBEF 80%) 0 0 / 300% 100%; animation: shimmer 1.4s infinite; }
 
 .picker { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 3px 0 14px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px rgb(11 33 71 / .04); max-width: 100%; transition: box-shadow .15s, background .15s; }

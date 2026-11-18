@@ -11,6 +11,7 @@ import { resetHub } from './analytics/data-hub.js';
 import { createAsk } from './ask/engine.js';
 import { createAskDialog } from './ask/ask-dialog.js';
 import { createDock } from './core/dock.js';
+import { snapFilters, balanceFilters } from './core/filter-snap.js';
 import { handleRedirect, login, logout, session, hasHint, isLocalHost } from './services/auth.js';
 import { initRouter, navigate, route, hrefFor } from './services/router.js';
 import { Board, compact } from './board/board.js';
@@ -143,6 +144,9 @@ function renderShell() {
     if (b) S.board?.addItem(b.dataset.add);
   });
   const bar = $('filter-bar');
+  let snapQueued = 0;
+  addEventListener('resize', () => { cancelAnimationFrame(snapQueued); snapQueued = requestAnimationFrame(alignFilters); });
+  document.fonts?.ready.then(alignFilters);
   new IntersectionObserver(([e]) => bar.classList.toggle('stuck', e.intersectionRatio < 1), { threshold: [1], rootMargin: '-1px 0px 0px 0px' }).observe(bar);
 }
 
@@ -373,12 +377,18 @@ async function update(params, token = S.token) {
   if (focused) document.getElementById(focused)?.focus({ preventScroll: true });
   $('board').removeAttribute('aria-busy');
   S.board.renderAll();
+  alignFilters();
   syncDock();
   if (S.pendingFocus) {
     const target = S.pendingFocus;
     S.pendingFocus = '';
     requestAnimationFrame(() => focusWidget(target));
   }
+}
+
+function alignFilters() {
+  snapFilters($('filters'), document.querySelector('.page-title h1'));
+  balanceFilters($('filter-bar'), document.querySelector('.page-header'), $('board'));
 }
 
 function syncDock() {
@@ -582,6 +592,7 @@ function setEditing(on) {
   $('edit-bar').hidden = !on;
   $('filters').hidden = on;
   $('palette').hidden = !on;
+  requestAnimationFrame(alignFilters);
   if (on) {
     renderPalette();
     announce('Mode atur panel aktif. Seret panel atau pakai tombol panah pada ikon titik di kiri judul panel.');
