@@ -10,6 +10,23 @@
   --cakrawala: #307FE2;
   --mentari: #71C5E8;
   --accent: var(--nusantara);
+  --fs-nano: 8px;
+  --fs-micro: 9.5px;
+  --fs-caption: 11px;
+  --fs-body: 13px;
+  --fs-lead: 15px;
+  --fs-title: 18px;
+  --fs-heading: 21px;
+  --fs-value: 25px;
+  --fs-page: 29px;
+  --fs-display: 34px;
+  --fs-display-2: 40px;
+  --fs-hero: 47px;
+  --fs-hero-2: 55px;
+  --lh-tight: 1.1;
+  --lh-heading: 1.236;
+  --lh-body: 1.45;
+  --lh-prose: 1.618;
   --accent-hover: #0A4CAB;
   --accent-soft: #EAF2FD;
   --accent-tint: #F4F8FE;
@@ -55,7 +72,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
 body {
-  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 13px; line-height: 1.45;
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: var(--fs-body); line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
 }
 button, input, select, textarea { font: inherit; color: inherit; }

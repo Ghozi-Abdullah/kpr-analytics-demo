@@ -1,13 +1,13 @@
-.dock { --col-count: 84px; --col-rp: 102px; --dock-navy: linear-gradient(165deg, #0B4FB0 0%, #08408F 46%, #06357A 100%); --dock-amber: #FFB938; position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 40; display: grid; justify-items: end; max-width: calc(100vw - 32px); font-size: 13px; }
+.dock { --col-count: 84px; --col-rp: 102px; --dock-navy: linear-gradient(165deg, #0B4FB0 0%, #08408F 46%, #06357A 100%); --dock-amber: #FFB938; position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 40; display: grid; justify-items: end; max-width: calc(100vw - 32px); font-size: var(--fs-body); }
 
-.dock-pill { position: relative; display: inline-flex; align-items: center; gap: 12px; height: 56px; padding: 0 20px 0 8px; border: 0; border-radius: 999px; background: var(--dock-navy); color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12), 0 20px 40px -16px rgb(6 53 122 / .6), 0 4px 12px -4px rgb(6 53 122 / .35); font: 500 13.5px/1.2 var(--font); text-align: left; cursor: pointer; transition: transform .15s var(--ease), box-shadow .15s; }
+.dock-pill { position: relative; display: inline-flex; align-items: center; gap: 12px; height: 56px; padding: 0 20px 0 8px; border: 0; border-radius: 999px; background: var(--dock-navy); color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12), 0 20px 40px -16px rgb(6 53 122 / .6), 0 4px 12px -4px rgb(6 53 122 / .35); font: 500 var(--fs-body)/1.2 var(--font); text-align: left; cursor: pointer; transition: transform .15s var(--ease), box-shadow .15s; }
 .dock-pill:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .18), 0 24px 44px -16px rgb(6 53 122 / .65), 0 4px 12px -4px rgb(6 53 122 / .35); }
 .dock-pill:focus-visible { outline: 3px solid var(--cakrawala); outline-offset: 3px; }
 .dock-pill-ico { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgb(255 185 56 / .16); color: var(--dock-amber); }
 .dock-pill-ico::before { content: ""; position: absolute; top: 3px; right: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--dock-amber); box-shadow: 0 0 0 2px #0A47A0; }
 .dock-pill-text { display: grid; justify-items: start; }
 .dock-pill-text b { font-weight: 750; color: var(--dock-amber); font-variant-numeric: tabular-nums; }
-.dock-pill-text small { font-size: 11.5px; color: rgb(255 255 255 / .72); font-variant-numeric: tabular-nums; }
+.dock-pill-text small { font-size: var(--fs-caption); color: rgb(255 255 255 / .72); font-variant-numeric: tabular-nums; }
 .dock[data-tone="ok"] .dock-pill-ico { background: rgb(74 222 128 / .16); color: #6EE7A0; }
 .dock[data-tone="ok"] .dock-pill-ico::before { display: none; }
 .dock[data-tone="ok"] .dock-pill-text b { color: #6EE7A0; }
@@ -19,8 +19,8 @@
 .dock-ico { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: rgb(255 185 56 / .16); color: var(--dock-amber); }
 .dock[data-tone="ok"] .dock-ico { background: rgb(74 222 128 / .16); color: #6EE7A0; }
 .dock-titles { flex: 1; min-width: 0; }
-.dock-titles h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: #fff; }
-.dock-sub { margin: 1px 0 0; font-size: 12px; color: rgb(255 255 255 / .7); }
+.dock-titles h2 { margin: 0; font-size: var(--fs-lead); font-weight: 650; letter-spacing: -0.01em; color: #fff; }
+.dock-sub { margin: 1px 0 0; font-size: var(--fs-caption); color: rgb(255 255 255 / .7); }
 .dock-head .dock-min { flex: none; background: rgb(255 255 255 / .1); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16); color: #fff; }
 .dock-head .dock-min:hover { background: rgb(255 255 255 / .2); color: #fff; }
 .dock-head .dock-min:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
@@ -34,22 +34,22 @@
 .dock-gauge-fill { stroke: var(--dock-amber); }
 .dock-hero.is-ok .dock-gauge-fill { stroke: #6EE7A0; }
 .dock-gauge span { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; line-height: 1.05; }
-.dock-gauge b { font-size: 20px; font-weight: 750; letter-spacing: -0.02em; color: #fff; font-variant-numeric: tabular-nums; }
-.dock-gauge small { font-size: 9.5px; color: rgb(255 255 255 / .7); }
+.dock-gauge b { font-size: var(--fs-heading); font-weight: 750; letter-spacing: -0.02em; color: #fff; font-variant-numeric: tabular-nums; }
+.dock-gauge small { font-size: var(--fs-micro); color: rgb(255 255 255 / .7); }
 .dock-big { position: relative; display: grid; gap: 2px; margin: 0; }
-.dock-big b { font-size: 46px; font-weight: 760; line-height: .95; letter-spacing: -0.045em; color: var(--dock-amber); font-variant-numeric: tabular-nums; }
+.dock-big b { font-size: var(--fs-hero); font-weight: 760; line-height: .95; letter-spacing: -0.045em; color: var(--dock-amber); font-variant-numeric: tabular-nums; }
 .dock-hero.is-ok .dock-big b { color: #6EE7A0; }
-.dock-big span { font-size: 13.5px; font-weight: 550; line-height: 1.35; color: #fff; text-wrap: pretty; }
-.dock-of { position: relative; grid-column: 2; margin: 0; font-size: 11.5px; color: rgb(255 255 255 / .68); }
+.dock-big span { font-size: var(--fs-body); font-weight: 550; line-height: 1.35; color: #fff; text-wrap: pretty; }
+.dock-of { position: relative; grid-column: 2; margin: 0; font-size: var(--fs-caption); color: rgb(255 255 255 / .68); }
 .dock-facts { position: relative; grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; margin: 12px 0 0; }
 .dock-facts div { display: grid; gap: 3px; padding: 9px 11px; border-radius: 14px; background: rgb(255 255 255 / .09); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
-.dock-facts dt { font-size: 11px; color: rgb(255 255 255 / .66); }
-.dock-facts dd { margin: 0; font-size: 15px; font-weight: 700; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dock-facts dt { font-size: var(--fs-caption); color: rgb(255 255 255 / .66); }
+.dock-facts dd { margin: 0; font-size: var(--fs-lead); font-weight: 700; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .dock-facts dd.is-rp { color: #9FD8F0; }
 
 .dock-part { display: grid; gap: 9px; }
-.dock-part h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px; font-size: 13px; font-weight: 650; color: var(--ink); }
-.dock-part h3 small { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.dock-part h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px; font-size: var(--fs-body); font-weight: 650; color: var(--ink); }
+.dock-part h3 small { font-size: var(--fs-caption); font-weight: 400; color: var(--muted); }
 .dock-split { display: flex; gap: 3px; height: 10px; margin: 0 4px; }
 .dock-split i { min-width: 6px; border-radius: 999px; background: var(--c); }
 .dock-stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -58,11 +58,11 @@
 .dock-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dock-stage[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .dock-stage[data-empty] { opacity: .5; }
-.dock-stage-name { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.dock-stage-name { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-caption); font-weight: 600; color: var(--ink-2); }
 .dock-stage-name i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
-.dock-stage b { font-size: 21px; font-weight: 750; letter-spacing: -0.02em; color: var(--warn); font-variant-numeric: tabular-nums; }
+.dock-stage b { font-size: var(--fs-heading); font-weight: 750; letter-spacing: -0.02em; color: var(--warn); font-variant-numeric: tabular-nums; }
 .dock-stage[data-empty] b { color: var(--muted); }
-.dock-stage small { font-size: 11.5px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.dock-stage small { font-size: var(--fs-caption); font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
 .dock-stage[data-empty] small { font-weight: 400; color: var(--muted); }
 
 .dock-list, .dock-sublist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -74,29 +74,29 @@
 .dock-head-item { grid-template-columns: 26px minmax(0, 1fr) var(--col-count) var(--col-rp) 14px; }
 .dock-head-item[aria-expanded="true"] { background: var(--surface-2); }
 .dock-head-item[aria-expanded="true"] > svg { transform: rotate(180deg); }
-.dock-no { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); font-size: 12px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.dock-no { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--fs-caption); font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .dock-no[data-rank] { box-shadow: 0 4px 10px -4px var(--rank); background: var(--rank); color: #fff; }
 .dock-no[data-rank="1"] { --rank: var(--bad); }
 .dock-no[data-rank="2"] { --rank: #E8590C; }
 .dock-no[data-rank="3"] { --rank: #F2AA0D; color: #3D2500; }
-.dock-name { min-width: 0; display: grid; gap: 1px; font-weight: 600; font-size: 13.5px; overflow-wrap: anywhere; }
-.dock-name small { font-size: 11.5px; font-weight: 400; line-height: 1.35; color: var(--muted); }
+.dock-name { min-width: 0; display: grid; gap: 1px; font-weight: 600; font-size: var(--fs-body); overflow-wrap: anywhere; }
+.dock-name small { font-size: var(--fs-caption); font-weight: 400; line-height: 1.35; color: var(--muted); }
 .dock-name small span { white-space: nowrap; }
 .dock-bar { display: block; height: 4px; margin-top: 5px; border-radius: 4px; background: var(--line-soft); overflow: hidden; }
 .dock-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #F5A524, #FFC864); }
-.dock-count, .dock-rp { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 30px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dock-count, .dock-rp { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; height: 30px; padding: 0 12px; border-radius: 999px; font-size: var(--fs-caption); font-weight: 500; line-height: 30px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .dock-count { width: 100%; background: var(--warn-bg); color: var(--warn); box-shadow: inset 0 0 0 1px rgb(224 155 0 / .35); }
-.dock-count b { font-size: 16px; font-weight: 750; letter-spacing: -0.01em; }
-.dock-rp { width: 100%; background: var(--accent-soft); color: var(--accent); font-size: 13.5px; font-weight: 700; box-shadow: inset 0 0 0 1px rgb(8 87 195 / .16); }
+.dock-count b { font-size: var(--fs-lead); font-weight: 750; letter-spacing: -0.01em; }
+.dock-rp { width: 100%; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-body); font-weight: 700; box-shadow: inset 0 0 0 1px rgb(8 87 195 / .16); }
 .dock-sublist .dock-item { padding: 7px 8px 7px 20px; }
-.dock-sublist .dock-name { font-weight: 500; font-size: 13px; }
+.dock-sublist .dock-name { font-weight: 500; font-size: var(--fs-body); }
 .dock-sublist .dock-count, .dock-sublist .dock-rp { height: 26px; line-height: 26px; padding: 0 8px; }
-.dock-sublist .dock-count b { font-size: 14px; }
-.dock-sublist .dock-rp { font-size: 12.5px; }
-.dock-more { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 0 4px; padding: 6px 8px; border: 0; border-radius: 10px; background: none; color: var(--accent); font: 600 12.5px/1 var(--font); cursor: pointer; }
+.dock-sublist .dock-count b { font-size: var(--fs-lead); }
+.dock-sublist .dock-rp { font-size: var(--fs-body); }
+.dock-more { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 0 4px; padding: 6px 8px; border: 0; border-radius: 10px; background: none; color: var(--accent); font: 600 var(--fs-body)/1 var(--font); cursor: pointer; }
 .dock-more:hover { background: var(--accent-soft); }
 .dock-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.dock-foot { margin: 0 4px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.dock-foot { margin: 0 4px; font-size: var(--fs-caption); line-height: 1.45; color: var(--muted); }
 .dock-key { display: inline-block; padding: 0 7px; border-radius: 999px; font-weight: 650; }
 .dock-key.is-late { background: var(--warn-bg); color: var(--warn); }
 .dock-key.is-rp { background: var(--accent-soft); color: var(--accent); }
@@ -122,11 +122,11 @@ body.is-editing .dock { display: none; }
   .dock-head-item > svg { grid-column: 5; grid-row: 2; }
   .dock-hero { gap: 4px 12px; padding: 4px 14px 16px; }
   .dock-gauge { width: 76px; height: 76px; }
-  .dock-gauge b { font-size: 17px; }
-  .dock-big b { font-size: 38px; }
-  .dock-big span { font-size: 12.5px; }
+  .dock-gauge b { font-size: var(--fs-title); }
+  .dock-big b { font-size: var(--fs-display-2); }
+  .dock-big span { font-size: var(--fs-body); }
   .dock-stage { padding: 8px 8px 7px; }
-  .dock-stage b { font-size: 18px; }
+  .dock-stage b { font-size: var(--fs-title); }
 }
 @media (max-width: 759px) {
   .dock { left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-width: none; pointer-events: none; }

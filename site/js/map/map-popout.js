@@ -1,4 +1,5 @@
 import { esc } from '../core/format.js';
+import { FS } from '../core/type-scale.js';
 import { icon } from '../core/icons.js';
 import { seg, onSeg, pick, enhancePicks } from '../core/controls.js';
 import { ID_PROVINCES } from './provinces.js';
@@ -169,7 +170,7 @@ function drawOverlay(svg, view, ctx) {
         const box = [cx - w / 2, cy - 7, cx + w / 2, cy + 7];
         if (!free(box)) continue;
         taken.push(box);
-        provText.push(`<text class="mp-pname${p.muted ? ' muted' : ''}" x="${ux(cx)}" y="${uy(cy + 4)}" font-size="${11 * u}">${esc(p.name)}</text>`);
+        provText.push(`<text class="mp-pname${p.muted ? ' muted' : ''}" x="${ux(cx)}" y="${uy(cy + 4)}" font-size="${FS.caption * u}">${esc(p.name)}</text>`);
         break;
       }
     }
@@ -193,7 +194,7 @@ function drawOverlay(svg, view, ctx) {
       const spot = spots.find(([box]) => free(box));
       if (!spot) continue;
       taken.push(spot[0]);
-      kancaText.push(`<text class="mp-kname" x="${ux(spot[2])}" y="${uy(spot[3])}" text-anchor="${spot[1]}" font-size="${10.5 * u}">${esc(name)}</text>`);
+      kancaText.push(`<text class="mp-kname" x="${ux(spot[2])}" y="${uy(spot[3])}" text-anchor="${spot[1]}" font-size="${FS.caption * u}">${esc(name)}</text>`);
     }
   };
   if (ctx.zoomed) { placeKancas(); placeProvinces(); } else { placeProvinces(); placeKancas(); }
@@ -204,7 +205,7 @@ function drawOverlay(svg, view, ctx) {
     return `<g class="mp-mark${n > 1 ? ' is-group' : ''}${cls >= 3 ? ' is-dark' : ''}${m.items.some((p) => p.key === ctx.sel) ? ' is-sel' : ''}" data-mark="${i}" transform="translate(${m.x} ${m.y})">
       <circle class="mp-hit" r="${Math.max(m.r + 5, 11) * u}"/><circle class="mp-ring" r="${(m.r + 3.5) * u}"/>
       <circle class="mp-halo" r="${(m.r + 1.6) * u}"/><circle class="mp-dot" r="${m.r * u}" fill="${cls >= 0 ? MAP_RAMP[cls] : NO_DATA}"/>
-      ${n > 1 ? `<text class="mp-count" y="${3.4 * u}" font-size="${(n > 99 ? 8.5 : 9.5) * u}">${n}</text>` : ''}</g>`;
+      ${n > 1 ? `<text class="mp-count" y="${3.4 * u}" font-size="${(n > 99 ? FS.nano : FS.micro) * u}">${n}</text>` : ''}</g>`;
   }).join('');
   layer.style.setProperty('--u', String(u));
   layer.innerHTML = `<g class="mp-pnames">${provText.join('')}</g><g class="mp-marks">${dots}</g><g class="mp-knames">${kancaText.join('')}</g>`;

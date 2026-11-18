@@ -134,6 +134,33 @@ Aturan:
 Layar sentuh: legenda, tautan, dan judul kolom tabel punya area sentuh minimal 24 px. Pemeriksaan otomatis memastikan
 tidak ada geser samping, zoom-out otomatis, teks terpotong, atau konten keluar panel di semua ukuran di atas.
 
+## 6b. Skala huruf (golden ratio)
+
+Semua ukuran huruf memakai satu skala. Basis 13 px, tiap naik satu langkah dikali akar pangkat tiga dari 1,618, jadi
+tiap tiga langkah tepat ×1,618 dan jatuh di angka Fibonacci 8, 13, 21, 34, 55. Nilai dibulatkan ke piksel supaya tajam.
+Token ada di `css/base.css` (`--fs-*`), dan chart serta peta membaca token yang sama lewat `js/core/type-scale.js`.
+
+| Token | Ukuran | Peran |
+|---|---|---|
+| `--fs-nano` | 8 px | angka di titik peta yang sangat kecil |
+| `--fs-micro` | 9,5 px | label data di batang chart yang rapat, label kalender |
+| `--fs-caption` | 11 px | label, keterangan, sumbu chart, legenda, kepala tabel, filter |
+| `--fs-body` | 13 px | teks utama, isi tabel, tombol, nilai filter |
+| `--fs-lead` | 15 px | judul panel, kalimat utama penjelasan, nama tahap |
+| `--fs-title` | 18 px | judul dialog, angka pendukung |
+| `--fs-heading` | 21 px | judul baris di Summary, angka sedang |
+| `--fs-value` | 25 px | angka KPI utama, judul halaman di HP |
+| `--fs-page` | 29 px | judul halaman |
+| `--fs-display` | 34 px | angka besar di kartu tahap SLA |
+| `--fs-display-2` | 40 px | angka besar peringatan SLA di HP |
+| `--fs-hero` | 47 px | angka besar peringatan SLA |
+| `--fs-hero-2` | 55 px | cadangan untuk angka paling besar |
+
+Urutan penting dari atas: judul halaman, angka KPI, judul baris, judul panel, teks utama, keterangan. Tiap tingkat
+berjarak minimal satu langkah skala, jadi tidak ada lagi ukuran yang hanya beda setengah piksel. Tinggi baris: 1,1 untuk
+angka besar, 1,236 untuk judul, 1,45 untuk teks antarmuka, dan 1,618 untuk paragraf jawaban Tanya data. Kotak isian
+Tanya data tetap 16 px supaya iPhone tidak memperbesar layar saat diketuk.
+
 ## 7. Rencana uji pakai (5 orang, 30 menit per orang)
 
 Fasilitator bukan pembuat dashboard. Satu pencatat. Pakai data dummy dulu, lalu data asli.

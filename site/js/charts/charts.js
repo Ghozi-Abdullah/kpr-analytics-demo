@@ -1,5 +1,6 @@
 import { fmt, esc } from '../core/format.js';
 import { icon } from '../core/icons.js';
+import { FS } from '../core/type-scale.js';
 
 const { Chart } = window;
 if (window.ChartDataLabels) Chart.register(window.ChartDataLabels);
@@ -15,7 +16,7 @@ export const SEQ = ['#EAF2FD', '#CFE0F8', '#A9C8F1', '#7AAAE8', '#4A88DC', '#246
 export const seqColor = (t) => SEQ[Math.max(0, Math.min(SEQ.length - 1, Math.round(t * (SEQ.length - 1))))];
 
 Chart.defaults.font.family = '"Google Sans Flex", -apple-system, BlinkMacSystemFont, "SF Pro Text", Aptos, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif';
-Chart.defaults.font.size = 11;
+Chart.defaults.font.size = FS.caption;
 Chart.defaults.font.weight = 500;
 Chart.defaults.color = C.muted;
 Chart.defaults.maintainAspectRatio = false;
@@ -143,12 +144,12 @@ const refLines = {
         const x = a.right + 6;
         ctx.textAlign = 'left';
         ctx.fillStyle = C.muted;
-        ctx.font = `500 9.5px ${Chart.defaults.font.family}`;
+        ctx.font = `500 ${FS.micro}px ${Chart.defaults.font.family}`;
         ctx.fillText(k, x, p - 2);
-        if (v) { ctx.fillStyle = C.fg; ctx.font = `600 10px ${Chart.defaults.font.family}`; ctx.fillText(v, x, p + 10); }
+        if (v) { ctx.fillStyle = C.fg; ctx.font = `600 ${FS.caption}px ${Chart.defaults.font.family}`; ctx.fillText(v, x, p + 10); }
       } else if (l.label) {
         ctx.setLineDash([]);
-        ctx.font = `600 10px ${Chart.defaults.font.family}`;
+        ctx.font = `600 ${FS.caption}px ${Chart.defaults.font.family}`;
         const tw = ctx.measureText(l.label).width;
         const x = l.axis === 'x' ? p - tw / 2 : a.right - tw;
         const y = l.axis === 'x' ? a.top - 4 : p - 5;
@@ -166,7 +167,7 @@ const refLines = {
 };
 Chart.register(crosshair, pulse, background, refLines);
 
-const LBL_FONT = { size: 10, weight: 600 };
+const LBL_FONT = { size: FS.caption, weight: 600 };
 function lastFinite(data) {
   for (let k = data.length - 1; k >= 0; k -= 1) if (Number.isFinite(data[k])) return k;
   return -1;
@@ -230,7 +231,7 @@ function barLabels({ horizontal, stacked, fmtFn }) {
       return pickLabel(ctx, 30 * shown);
     },
     anchor: 'end', align: 'end', offset: horizontal ? 4 : 2, clamp: true,
-    color: C.fg, font: { size: horizontal ? 11.5 : 10, weight: 600 },
+    color: C.fg, font: { size: horizontal ? FS.caption : FS.micro, weight: 600 },
     textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: horizontal ? 0 : 2,
     formatter: (v, ctx) => fmtFn(stacked ? totalAt(ctx.chart, ctx.dataIndex) : v),
   };
@@ -262,7 +263,7 @@ function segmentLabels({ horizontal, fmtFn, min = 14 }) {
     },
     anchor: 'center', align: 'center', clamp: true,
     color: (ctx) => inkOn(ctx.dataset.$color),
-    font: { size: 10.5, weight: 650 },
+    font: { size: FS.caption, weight: 650 },
     formatter: (v) => fmtFn(v),
   };
 }
@@ -299,13 +300,13 @@ function gradient(color) {
 const xScale = (extra = {}) => ({
   grid: { display: false },
   border: { display: false },
-  ticks: { color: C.muted, autoSkip: true, autoSkipPadding: 10, maxRotation: 0, font: { size: 10.5 } },
+  ticks: { color: C.muted, autoSkip: true, autoSkipPadding: 10, maxRotation: 0, font: { size: FS.caption } },
   ...extra,
 });
 const yScale = (show, tickFormat, extra = {}) => (show ? {
   grid: { color: C.grid, drawTicks: false },
   border: { display: false, dash: [4, 4] },
-  ticks: { color: C.muted, maxTicksLimit: 5, padding: 8, font: { size: 10.5 }, callback: (v) => (tickFormat ? tickFormat(v) : fmt.compact(v)) },
+  ticks: { color: C.muted, maxTicksLimit: 5, padding: 8, font: { size: FS.caption }, callback: (v) => (tickFormat ? tickFormat(v) : fmt.compact(v)) },
   ...extra,
 } : { display: false, ...extra });
 
@@ -412,7 +413,7 @@ export function barChart(canvas, {
       layout: { padding: { top: valueLabels && !horizontal ? 16 : 8, right: valueLabels && horizontal ? 44 : 6 } },
       scales: {
         [catAxis]: horizontal
-          ? { stacked, grid: { display: false }, border: { display: false }, ticks: { color: C.fg, font: { size: 12.5, weight: 500 } } }
+          ? { stacked, grid: { display: false }, border: { display: false }, ticks: { color: C.fg, font: { size: FS.body, weight: 500 } } }
           : xScale({ stacked }),
         [valueAxis]: horizontal
           ? { stacked, display: false, beginAtZero: true, max: valueLabels ? max * 1.12 : undefined }
@@ -481,7 +482,7 @@ export function bandCombo(canvas, {
             },
             anchor: 'start', align: 'end', rotation: -90, offset: 4, clamp: true,
             color: '#33415C', textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 2.5,
-            font: { size: 9.5, weight: 600 }, formatter: (v) => fmtBar(v),
+            font: { size: FS.micro, weight: 600 }, formatter: (v) => fmtBar(v),
           } },
       ],
     },
@@ -491,7 +492,7 @@ export function bandCombo(canvas, {
       scales: {
         x: xScale(),
         y: yScale(true, tickFormat, { beginAtZero: true, max: yTop, ticks: {
-          color: C.muted, maxTicksLimit: 4, padding: 8, font: { size: 10.5 }, callback: (v) => (v > yMax * 0.62 ? '' : (tickFormat ? tickFormat(v) : fmt.compact(v))),
+          color: C.muted, maxTicksLimit: 4, padding: 8, font: { size: FS.caption }, callback: (v) => (v > yMax * 0.62 ? '' : (tickFormat ? tickFormat(v) : fmt.compact(v))),
         } }),
         p: { type: 'linear', display: false, min: pMin, max: pMax },
       },
@@ -534,11 +535,11 @@ export function bubbleChart(canvas, { points, xFormat, yFormat, xTitle, yTitle, 
       onClick: onClick ? (evt, els, chart) => { if (els.length) onClick(chart.data.datasets[els[0].datasetIndex].label); } : undefined,
       scales: {
         x: { grace: '6%', suggestedMax: refX ?? undefined, grid: { color: C.grid, drawTicks: false }, border: { display: false },
-          title: xTitle ? { display: true, text: xTitle, color: C.muted, font: { size: 11 } } : undefined,
-          ticks: { color: C.muted, padding: 6, maxTicksLimit: 6, font: { size: 10.5 }, callback: (v) => (xFormat ? xFormat(v) : v) } },
+          title: xTitle ? { display: true, text: xTitle, color: C.muted, font: { size: FS.caption } } : undefined,
+          ticks: { color: C.muted, padding: 6, maxTicksLimit: 6, font: { size: FS.caption }, callback: (v) => (xFormat ? xFormat(v) : v) } },
         y: { grace: '10%', grid: { color: C.grid, drawTicks: false }, border: { display: false },
-          title: yTitle ? { display: true, text: yTitle, color: C.muted, font: { size: 11 } } : undefined,
-          ticks: { color: C.muted, padding: 6, maxTicksLimit: 5, font: { size: 10.5 }, callback: (v) => (yFormat ? yFormat(v) : v) } },
+          title: yTitle ? { display: true, text: yTitle, color: C.muted, font: { size: FS.caption } } : undefined,
+          ticks: { color: C.muted, padding: 6, maxTicksLimit: 5, font: { size: FS.caption }, callback: (v) => (yFormat ? yFormat(v) : v) } },
       },
       plugins: {
         tooltip: { enabled: false, external: externalTooltip },
@@ -549,7 +550,7 @@ export function bubbleChart(canvas, { points, xFormat, yFormat, xTitle, yTitle, 
             const { x, chartArea } = { x: ctx.chart.scales.x.getPixelForValue(ctx.dataset.data[0].x), chartArea: ctx.chart.chartArea };
             return chartArea && x > chartArea.right - 96 ? 'top' : 'right';
           },
-          color: C.fg, font: { size: 11, weight: 600 }, formatter: (_v, ctx) => ctx.dataset.label,
+          color: C.fg, font: { size: FS.caption, weight: 600 }, formatter: (_v, ctx) => ctx.dataset.label,
         },
       },
     },
