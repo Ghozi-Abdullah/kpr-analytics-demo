@@ -241,7 +241,7 @@ var KPR = (function () {
       rows: rows,
       columns: keep.map(function (k) { return k.std; }),
       info: { file: src.file, sheet: src.sheet || '(sheet pertama)', header_row: hr + 1, rows_in: rows.length,
-        columns_kept: keep.map(function (k) { return k.std; }), columns_dropped: dropped },
+        columns_kept: keep.map(function (k) { return k.std; }), columns_dropped: dropped.concat(src.skipped || []) },
     };
   }
 
@@ -510,10 +510,207 @@ var KPR = (function () {
       + kHit + ' dari ' + Object.keys(kancas).length + ' kanca');
   }
 
-  function buildSla(src, cfg, out, meta, totals, log) {
-    if (!src) { log.push('  sla         : sumber SLA belum diisi, halaman SLA dilewati'); return; }
-    var t = readSource(src, cfg.SLA_COLUMNS);
-    requireCols(t, cfg.SLA_REQUIRED, 'sla', cfg.SLA_COLUMNS);
+  var SAMPLE = {
+    seed: 20261110, windowDays: 125, perDay: 41.6, spread: 0.7, weekendKeep: 0.55,
+    cairFloor: 0.08, cairCurve: 1.3, cairPush: 0.55,
+    jenis: [['Pembelian Rumah Baru', 45], ['Pembelian Rumah Second', 18], ['Take Over Murni', 8], ['Take Over Top Up', 5],
+      ['Top Up', 6], ['Refinancing Rumah', 5], ['Pembangunan', 4], ['Refinancing Rumah Toko', 2],
+      ['Pembelian Rumah Kantor Baru', 2], ['Pembelian Rumah Toko Baru', 3], ['Pembelian Rumah Toko Second', 2]],
+    crs: [['Risiko sangat rendah', 12, 0.04], ['Risiko rendah', 22, 0.06], ['Risiko cukup rendah', 22, 0.09],
+      ['Risiko sedang', 18, 0.13], ['Risiko perlu mendapat perhatian', 12, 0.2], ['Risiko cukup tinggi', 9, 0.28],
+      ['Risiko tinggi', 5, 0.38]],
+    jobs: {
+      'Fix Income': [['KPR Perorangan PNS / BUMN', 35, 'payroll'], ['KPR Perorangan Karyawan Swasta', 50, 'nonpayroll'],
+        ['KPR Perorangan Pegawai BRI', 15, 'karyawan']],
+      'Non Fix Income': [['KPR Perorangan Profesional', 35, 'nonpayroll'], ['KPR Perorangan Wiraswasta', 65, 'sme']],
+    },
+  };
+
+  function sampleRandom(seed) {
+    var state = seed >>> 0;
+    var spare = null;
+    var next = function () {
+      state = (state + 0x6D2B79F5) >>> 0;
+      var x = state;
+      x = Math.imul(x ^ (x >>> 15), x | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+    var normal = function () {
+      if (spare !== null) { var keep = spare; spare = null; return keep; }
+      var u = 0;
+      while (u === 0) u = next();
+      var w = next();
+      var m = Math.sqrt(-2 * Math.log(u));
+      spare = m * Math.sin(2 * Math.PI * w);
+      return m * Math.cos(2 * Math.PI * w);
+    };
+    var weighted = function (items, weights) {
+      var total = weights.reduce(function (a, b) { return a + b; }, 0);
+      var x = next() * total;
+      for (var i = 0; i < items.length; i += 1) {
+        x -= weights[i];
+        if (x < 0) return items[i];
+      }
+      return items[items.length - 1];
+    };
+    return {
+      random: next,
+      choice: function (list) { return list[Math.floor(next() * list.length)]; },
+      pick: function (items) { return weighted(items, items.map(function (it) { return it[1]; })); },
+      weighted: weighted,
+      expo: function (mean) { return -Math.log(1 - next()) * mean; },
+      lognorm: function (mu, sigma) { return Math.exp(mu + sigma * normal()); },
+      uniform: function (a, b) { return a + (b - a) * next(); },
+      below: function (n) { return Math.floor(next() * n); },
+    };
+  }
+
+  function dayOf(ymd) { var p = ymd.split('-'); return Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000; }
+  function ymdOf(day) { return day === null ? null : new Date(day * 86400000).toISOString().slice(0, 10); }
+  function partsOf(day) { var d = new Date(day * 86400000); return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), wd: (d.getUTCDay() + 6) % 7 }; }
+  function monthLength(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+
+  function sampleWorkDay(r, start0, span) {
+    for (;;) {
+      var day = start0 + Math.floor((span + 1) * Math.pow(r.random(), SAMPLE.spread));
+      if (partsOf(day).wd < 5 || r.random() < SAMPLE.weekendKeep) return day;
+    }
+  }
+
+  function sampleCairDay(r, ready) {
+    if (r.random() > SAMPLE.cairPush) return ready;
+    var p = partsOf(ready);
+    var last = monthLength(p.y, p.m);
+    var days = []; var weights = [];
+    for (var k = 0; k <= last - p.d; k += 1) {
+      days.push(ready + k);
+      weights.push(SAMPLE.cairFloor + Math.pow((p.d + k - 1) / Math.max(1, last - 1), SAMPLE.cairCurve));
+    }
+    return r.weighted(days, weights);
+  }
+
+  function sampleRisingCair(rows, today) {
+    var now = partsOf(today);
+    var groups = {};
+    rows.forEach(function (row) {
+      if (row.cairDay === null) return;
+      var p = partsOf(row.cairDay);
+      var key = p.y * 100 + p.m;
+      (groups[key] = groups[key] || []).push(row);
+    });
+    Object.keys(groups).forEach(function (key) {
+      var y = Math.floor(key / 100); var m = key % 100;
+      var last = Math.min(monthLength(y, m), y === now.y && m === now.m ? now.d : 31);
+      var first = dayOf(y + '-' + m + '-1');
+      var counts = [];
+      for (var i = 0; i < last; i += 1) counts.push(0);
+      var group = groups[key];
+      group.forEach(function (row) { var i = row.cairDay - first; if (i >= 0 && i < last) counts[i] += 1; });
+      var sorted = counts.slice().sort(function (a, b) { return a - b; });
+      var slots = [];
+      sorted.forEach(function (n, i) { for (var j = 0; j < n; j += 1) slots.push(first + i); });
+      group.sort(function (a, b) { return a.cairDay - b.cairDay || a.no - b.no; });
+      group.forEach(function (row, i) { if (i < slots.length) row.cairDay = slots[i]; });
+    });
+  }
+
+  function sampleSla(cfg, out, meta) {
+    var pairs = [];
+    var seen = {};
+    var add = function (ro, kanca) {
+      if (typeof ro !== 'string' || !ro || typeof kanca !== 'string' || !kanca) return;
+      var id = ro + '\u0001' + kanca;
+      if (seen[id]) return;
+      seen[id] = 1;
+      pairs.push([ro, kanca]);
+    };
+    if (out['realisasi_daily.json']) decodeRows(out['realisasi_daily.json']).forEach(function (r) { add(r.ro, r.kanca); });
+    if (!pairs.length && out['dim_kanca.json']) decodeRows(out['dim_kanca.json']).forEach(function (r) { add(r.ro, r.kanca); });
+    if (!pairs.length) collectRefs(out, meta).ro.forEach(function (ro) { add(ro, 'Kanca ' + ro); });
+    if (!pairs.length) return null;
+    pairs.sort(function (a, b) { return cmp(a[0], b[0]) || cmp(a[1], b[1]); });
+    var ds = meta.datasets;
+    var last = (ds.realisasi && ds.realisasi.max_date) || (ds.performance && ds.performance.max_date) || String(meta.generated_at || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(last)) return null;
+    var today = dayOf(last);
+    var r = sampleRandom(SAMPLE.seed);
+    var start0 = today - SAMPLE.windowDays;
+    var span = today - start0;
+    var count = Math.round(SAMPLE.perDay * span);
+    var rows = [];
+    for (var n = 1; n <= count; n += 1) {
+      var pair = r.choice(pairs);
+      var jenis = r.pick(SAMPLE.jenis)[0];
+      var crs = r.pick(SAMPLE.crs);
+      var income = r.random() < 0.6 ? 'Fix Income' : 'Non Fix Income';
+      var job = r.pick(SAMPLE.jobs[income]);
+      var typ = job[2];
+      if ((jenis === 'Take Over Top Up' || jenis === 'Top Up') && r.random() < 0.5) typ = 'lnp';
+      var nominal = Math.round(Math.max(80, r.lognorm(Math.log(520), 0.55)) * 10) / 10 * 1000000;
+      var clf = nominal > 900000000 || r.random() < 0.15;
+      var start = sampleWorkDay(r, start0, span);
+      var slow = income === 'Non Fix Income' ? 1.6 : 1;
+      var d1 = Math.max(0, Math.floor(r.expo(1.6 * slow)));
+      var d2 = Math.max(0, Math.floor(r.expo((clf ? 2.6 : 1.7) * slow)));
+      var d3 = Math.max(0, Math.floor(r.expo(2.2)));
+      var extra = r.below(24) / 24;
+      var clfAwal = start + d1;
+      var putus = clfAwal + d2;
+      var cair = sampleCairDay(r, putus + d3);
+      var rejected = r.random() < crs[2];
+      var row = {
+        no: n, ro: pair[0], kanca: pair[1], jenis_kpr: jenis, crs: crs[0], pendapatan: income, pekerjaan: job[0], type: typ,
+        putusan: clf ? 'Putusan CLF' : 'Putusan Cabang', nominal_pengajuan: nominal, nominal_cair: null,
+        startDay: start, clfDay: null, putusDay: null, cairDay: null,
+        delta_prakarsa: null, delta_analisa: null, delta_putusan: null,
+      };
+      if (clfAwal > today) {
+        row.proses = 'Proses Prakarsa'; row.delta_prakarsa = today - start + extra;
+      } else if (putus > today) {
+        row.proses = 'Proses Analisis'; row.clfDay = clfAwal; row.delta_analisa = today - clfAwal + extra;
+      } else if (rejected) {
+        row.proses = 'Ditolak'; row.clfDay = clfAwal; row.putusDay = putus;
+      } else if (cair > today) {
+        row.proses = 'Sudah Diputus'; row.clfDay = clfAwal; row.putusDay = putus; row.delta_putusan = today - putus + extra;
+      } else {
+        row.proses = 'Sudah Cair'; row.clfDay = clfAwal; row.putusDay = putus; row.cairDay = cair;
+        row.nominal_cair = Math.round(nominal * r.uniform(0.9, 1) / 100000) * 100000;
+      }
+      rows.push(row);
+    }
+    sampleRisingCair(rows, today);
+    var cols = Object.keys(cfg.SLA_COLUMNS).map(function (k) { return cfg.SLA_COLUMNS[k]; });
+    var done = rows.map(function (row) {
+      var o = {};
+      cols.forEach(function (c) { o[c] = Object.prototype.hasOwnProperty.call(row, c) ? row[c] : null; });
+      o.tgl_prakarsa = ymdOf(row.startDay);
+      o.tgl_clf_awal = ymdOf(row.clfDay);
+      o.tgl_putusan = ymdOf(row.putusDay);
+      o.tgl_cair = ymdOf(row.cairDay);
+      o.today = last;
+      return o;
+    });
+    return {
+      columns: cols, rows: done,
+      info: { file: 'data contoh (sumber SLA belum diisi)', sheet: '-', header_row: 0, rows_in: done.length, columns_kept: cols, columns_dropped: [], sample: true },
+    };
+  }
+
+  function buildSla(src, cfg, out, meta, totals, log, opts) {
+    var t;
+    if (src) {
+      t = readSource(src, cfg.SLA_COLUMNS);
+      requireCols(t, cfg.SLA_REQUIRED, 'sla', cfg.SLA_COLUMNS);
+    } else if (opts && opts.slaSample) {
+      t = sampleSla(cfg, out, meta);
+      if (!t) { log.push('  sla         : sumber SLA belum diisi dan tidak ada RO/kanca untuk data contoh, halaman SLA dilewati'); return; }
+      log.push('  sla         : sumber SLA belum diisi, dipakai DATA CONTOH dengan RO dan kanca dari dashboard lain');
+    } else {
+      log.push('  sla         : sumber SLA belum diisi, halaman SLA dilewati');
+      return;
+    }
+    var fmtDate = src ? src.fmtDate : function (d) { return d.toISOString().slice(0, 10); };
     var has = function (c) { return t.columns.indexOf(c) >= 0; };
     var text = ['kanca', 'proses', 'pendapatan', 'putusan', 'jenis_kpr', 'crs', 'pekerjaan', 'type'].filter(has);
     var dates = ['tgl_prakarsa', 'tgl_clf_awal', 'tgl_putusan', 'tgl_cair', 'today'].filter(has);
@@ -522,10 +719,10 @@ var KPR = (function () {
       r.ro = canonicalRo(r.ro);
       if (has('kanca')) r.kanca = cleanText(r.kanca);
     });
-    alignNames(t.rows, collectRefs(out, meta), log);
+    if (!t.info.sample) alignNames(t.rows, collectRefs(out, meta), log);
     t.rows.forEach(function (r) {
       text.forEach(function (c) { r[c] = cleanText(r[c]); });
-      dates.forEach(function (c) { r[c] = parseDate(r[c], src.fmtDate); });
+      dates.forEach(function (c) { r[c] = parseDate(r[c], fmtDate); });
       deltas.forEach(function (c) { r[c] = parseDays(r[c]); });
       ['nominal_pengajuan', 'nominal_cair'].forEach(function (c) {
         var v = has(c) ? parseNumber(r[c]) : 0;
@@ -604,7 +801,7 @@ var KPR = (function () {
     var days = uniqSorted(daily, 'tanggal');
     var months = uniqSorted(agg, 'bulan').filter(Boolean);
     meta.datasets.sla = Object.assign({}, t.info, {
-      sample: false, rows_out: agg.length, bytes: utf8Len(JSON.stringify(payload)), snapshot: snapshot,
+      sample: !!t.info.sample, rows_out: agg.length, bytes: utf8Len(JSON.stringify(payload)), snapshot: snapshot,
       min_month: months.length ? months[0] : null, max_month: months.length ? months[months.length - 1] : null,
       proses: uniqSorted(agg, 'proses'),
       daily_rows: daily.length, daily_bytes: utf8Len(JSON.stringify(dailyPayload)),
@@ -636,37 +833,58 @@ var KPR = (function () {
     return t.rows.map(function (r) { return cleanText(r.__sensitive__); }).filter(Boolean);
   }
 
-  function buildAll(sources, opts) {
+  var STEPS = ['performance', 'kuadran', 'portfolio', 'realisasi', 'sla'];
+  var normName = function (v) { return String(v).replace(/\s+/g, ' ').trim().toUpperCase(); };
+
+  function begin(opts) {
+    return {
+      opts: { now: opts.now, isDummy: !!opts.isDummy, slaSample: !!opts.slaSample },
+      log: [], out: {}, totals: {}, errors: [], sensitive: {}, rm: [],
+      meta: { generated_at: opts.now, is_dummy: !!opts.isDummy, datasets: {}, ro: {}, ro_mismatch: {} },
+    };
+  }
+
+  function step(state, name, src) {
+    if (state.errors.length) return state;
     var cfg = KPR_CONFIG;
-    var log = []; var out = {}; var totals = {};
-    var meta = { generated_at: opts.now, is_dummy: !!opts.isDummy, datasets: {}, ro: {}, ro_mismatch: {} };
     try {
-      buildPerformance(sources.performance, cfg, out, meta, log);
-      buildKuadran(sources.kuadran, cfg, out, meta, log);
-      buildPortfolio(sources.portfolio, cfg, out, meta, totals, log);
-      buildRealisasi(sources.realisasi, cfg, out, meta, totals, log);
-      buildSla(sources.sla, cfg, out, meta, totals, log);
+      if (name === 'performance') buildPerformance(src, cfg, state.out, state.meta, state.log);
+      else if (name === 'kuadran') buildKuadran(src, cfg, state.out, state.meta, state.log);
+      else if (name === 'portfolio') buildPortfolio(src, cfg, state.out, state.meta, state.totals, state.log);
+      else if (name === 'realisasi') buildRealisasi(src, cfg, state.out, state.meta, state.totals, state.log);
+      else if (name === 'sla') buildSla(src, cfg, state.out, state.meta, state.totals, state.log, state.opts);
     } catch (e) {
-      if (e instanceof PipelineError) return { files: null, meta: meta, log: log, errors: [e.message], notes: [] };
+      if (e instanceof PipelineError) { state.errors = [e.message]; return state; }
       throw e;
     }
-    roReport(meta, log);
-    out['meta.json'] = meta;
-    var norm = function (v) { return String(v).replace(/\s+/g, ' ').trim().toUpperCase(); };
-    var sensitive = {};
-    Object.keys(cfg.SENSITIVE_SOURCE_COLUMNS).forEach(function (name) {
-      cfg.SENSITIVE_SOURCE_COLUMNS[name].forEach(function (col) {
-        rawColumn(sources[name], col).forEach(function (v) { sensitive[norm(v)] = 1; });
-      });
+    (cfg.SENSITIVE_SOURCE_COLUMNS[name] || []).forEach(function (col) {
+      rawColumn(src, col).forEach(function (v) { state.sensitive[normName(v)] = 1; });
     });
+    if (name === 'realisasi') {
+      var seen = {};
+      rawColumn(src, 'Nama RM').forEach(function (v) { var k = normName(v); if (!seen[k]) { seen[k] = 1; state.rm.push(k); } });
+    }
+    return state;
+  }
+
+  function finish(state) {
+    if (state.errors.length) return { files: null, meta: state.meta, log: state.log, errors: state.errors, notes: [] };
+    roReport(state.meta, state.log);
+    state.out['meta.json'] = state.meta;
     var overlap = {};
-    rawColumn(sources.realisasi, 'Nama RM').forEach(function (v) { if (sensitive[norm(v)]) overlap[norm(v)] = 1; });
-    var res = KPR_CHECKS.run(out, totals, sensitive, overlap, cfg);
-    return { files: res.errors.length ? null : out, meta: meta, log: log, errors: res.errors, notes: res.notes };
+    state.rm.forEach(function (k) { if (state.sensitive[k]) overlap[k] = 1; });
+    var res = KPR_CHECKS.run(state.out, state.totals, state.sensitive, overlap, KPR_CONFIG);
+    return { files: res.errors.length ? null : state.out, meta: state.meta, log: state.log, errors: res.errors, notes: res.notes };
+  }
+
+  function buildAll(sources, opts) {
+    var state = begin(opts);
+    STEPS.forEach(function (name) { step(state, name, sources[name]); });
+    return finish(state);
   }
 
   return {
-    buildAll: buildAll, readSource: readSource, parseNumber: parseNumber, parseDate: parseDate, parseMonth: parseMonth,
+    buildAll: buildAll, begin: begin, step: step, finish: finish, STEPS: STEPS, readSource: readSource, parseNumber: parseNumber, parseDate: parseDate, parseMonth: parseMonth,
     encodeTable: encodeTable, utf8Len: utf8Len, PipelineError: PipelineError,
   };
 })();

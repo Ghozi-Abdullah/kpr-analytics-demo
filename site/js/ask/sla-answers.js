@@ -670,6 +670,13 @@ function rejectedAnswer(q, D, kit, sel) {
 }
 
 export function slaAnswer(q, D, kit) {
+  const a = slaReply(q, D, kit);
+  if (!a?.ok || !D.sla?.sample) return a;
+  const note = 'Data SLA ini masih data contoh, bukan data asli. Angkanya hanya untuk mencoba halaman SLA.';
+  return { ...a, meaning: a.meaning ? `${a.meaning} ${note}` : note };
+}
+
+function slaReply(q, D, kit) {
   const S = D.sla;
   if (!S || !S.rows?.length) {
     return { ok: false, title: 'Data SLA belum tersedia, jadi pertanyaan soal berkas belum bisa dijawab.', lines: ['Data SLA dibaca dari sla.xlsx (atau sheet SLA di versi online). Setelah data diisi dan dashboard diperbarui, pertanyaan ini bisa dijawab.'] };
@@ -700,11 +707,11 @@ export function slaBrief(S, ro = '') {
   if (!S?.rows?.length) return null;
   const rows = ro ? S.rows.filter((r) => r.ro === ro) : S.rows;
   const run = tally(activeRows(rows));
-  return { run, line: `${num(run.berkas)} berkas KPR masih berjalan, ${num(run.late)} lewat SLA (kepatuhan ${pct(run.onTime, 1)}), posisi ${asOf(S)}.` };
+  return { run, line: `${num(run.berkas)} berkas KPR masih berjalan, ${num(run.late)} lewat SLA (kepatuhan ${pct(run.onTime, 1)}), posisi ${asOf(S)}.${S.sample ? ' Data SLA ini masih data contoh.' : ''}` };
 }
 
 export function slaByRo(S) {
-  if (!S?.rows?.length) return new Map();
+  if (!S?.rows?.length || S.sample) return new Map();
   return groupTally(activeRows(S.rows), 'ro');
 }
 

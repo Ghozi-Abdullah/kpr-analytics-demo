@@ -1891,7 +1891,7 @@ async function answerAttention(q, D) {
     if (g.length) lines.push(`Kanca dengan %NPL tertinggi: ${listJoin(g.map(([k, s]) => `${esc(k)} (${pct(s.nplR)})`))}.`);
   }
   const late = slaLateKanca(D.sla, ro);
-  if (late.length) lines.push(`Berkas lewat SLA terbanyak: ${listJoin(late.map(([k, t]) => `${esc(k)} (${num(t.berkas)})`))}.`);
+  if (late.length) lines.push(`Berkas lewat SLA terbanyak: ${listJoin(late.map(([k, t]) => `${esc(k)} (${num(t.berkas)})`))}.${D.sla.sample ? ' Data SLA ini masih data contoh.' : ''}`);
   if (D.real) {
     const P = resolvePeriod({ kind: 'monthRel', n: 0 }, D, 'real');
     const PR = prevRange(P);

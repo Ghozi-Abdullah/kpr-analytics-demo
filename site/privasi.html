@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Kebijakan privasi · KPR Analytics</title>
+  <meta name="theme-color" content="#0857C3">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <style>
+    :root { --ink: #1b2533; --muted: #556274; --line: #dfe5ee; --brand: #0857C3; --bg: #f6f8fb; --card: #fff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #e6ebf2; --muted: #a3afbf; --line: #2a3442; --brand: #71C5E8; --bg: #0f141b; --card: #161d27; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 44rem; margin: 0 auto; padding: 3rem 1rem 4rem; }
+    article { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 2rem clamp(1rem, 4vw, 2.5rem); }
+    h1 { margin: 0 0 .25rem; font-size: 1.75rem; line-height: 1.25; }
+    h2 { margin: 2rem 0 .5rem; font-size: 1.125rem; }
+    p, li { color: var(--ink); }
+    ul { padding-left: 1.25rem; margin: .5rem 0; }
+    li + li { margin-top: .35rem; }
+    .meta { color: var(--muted); margin: 0 0 1.5rem; font-size: .9375rem; }
+    a { color: var(--brand); }
+    a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 2px; }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .9375rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Kebijakan privasi KPR Analytics</h1>
+      <p class="meta">Berlaku sejak 19 November 2026</p>
+
+      <p>KPR Analytics adalah dashboard internal untuk memantau kinerja KPR. Isinya hanya bisa dilihat oleh orang yang alamat emailnya didaftarkan oleh admin dashboard.</p>
+
+      <h2>Data dari akun Google</h2>
+      <p>Saat login, dashboard hanya meminta alamat email dan tanda masuk dari Google (izin <code>openid</code> dan <code>email</code>). Keduanya dipakai untuk memastikan email kamu ada di daftar akses. Dashboard tidak meminta akses ke Gmail, Drive, kontak, atau data Google lain.</p>
+
+      <h2>Yang disimpan</h2>
+      <ul>
+        <li>Daftar akses: alamat email, peran, status, waktu ditambahkan, dan waktu terakhir masuk.</li>
+        <li>Permintaan akses: alamat email dan waktu permintaan, sampai disetujui atau ditolak admin.</li>
+        <li>Catatan aktivitas admin, misalnya menambah atau mencabut akses.</li>
+        <li>Tata letak panel yang kamu atur, per akun.</li>
+      </ul>
+      <p>Semua itu disimpan di layanan Google Apps Script milik pengelola dashboard. Di browser kamu, tanda masuk hanya disimpan di tab yang sedang dibuka dan hilang saat tab ditutup. Alamat email terakhir disimpan sebagai petunjuk login, bersama pengaturan tampilan seperti posisi menu.</p>
+
+      <h2>Angka di dashboard</h2>
+      <p>Angka yang tampil adalah ringkasan. Nama debitur dan nomor rekening dibuang sebelum data diringkas, jadi tidak pernah sampai ke browser. Angka dashboard tidak disimpan permanen di perangkat kamu.</p>
+
+      <h2>Pembagian data</h2>
+      <p>Data tidak dijual, tidak dipakai untuk iklan, dan tidak dibagikan ke pihak lain di luar pengelola dashboard.</p>
+
+      <h2>Mencabut akses</h2>
+      <p>Untuk berhenti memakai dashboard atau menghapus email kamu dari daftar akses, hubungi admin dashboard di unit kerja kamu. Kamu juga bisa mencabut izin login kapan saja lewat halaman <a href="https://myaccount.google.com/connections" rel="noopener noreferrer">Koneksi akun Google</a>.</p>
+
+      <footer><a href="./">Kembali ke dashboard</a></footer>
+    </article>
+  </main>
+</body>
+</html>

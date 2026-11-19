@@ -315,7 +315,7 @@ const flowWidget = () => ({
     const gap = '<li class="flow-gap" aria-hidden="true"></li>';
     api.sub(`${c.model.sample ? 'Data contoh. ' : ''}${c.where}. Posisi ${fmt.date(c.model.snapshot)}.`);
     api.body.innerHTML = `${stats([
-      ...(c.model.sample ? [{ label: 'Sumber data', value: 'Data contoh', tone: 'sample-t', title: 'sla.xlsx belum ada di data_raw. Angka ini buatan, RO dan kanca diambil dari dashboard lain.' }] : []),
+      ...(c.model.sample ? [{ label: 'Sumber data', value: 'Data contoh', tone: 'sample-t', title: 'Data SLA asli belum ada. Angka ini buatan untuk mencoba halaman, RO dan kanca diambil dari dashboard lain. Data asli otomatis dipakai begitu sumber SLA diisi.' }] : []),
       { label: 'Berkas berjalan', value: fmt.num(run.berkas) },
       { label: 'Lewat SLA', value: `${fmt.num(run.late)} (${share(run.late, run.ok + run.late)})`, tone: run.late ? 'late-t' : '' },
       { label: 'Kepatuhan SLA', value: fmt.pct(run.onTime, 1) },
@@ -586,7 +586,7 @@ export function slaDock(c) {
   const all = tally(pool);
   const t = tally(late);
   const scope = [c.sel.kanca || (c.sel.ro ? shortRo(c.sel.ro) : 'Nasional'), stage?.active ? `tahap ${stage.label}` : ''].filter(Boolean).join(', ');
-  const sub = `${esc(scope)}, posisi ${fmt.date(c.model.snapshot)}`;
+  const sub = `${c.model.sample ? 'Data contoh. ' : ''}${esc(scope)}, posisi ${fmt.date(c.model.snapshot)}`;
   if (!t.berkas) {
     return {
       key: 'sla', tone: 'ok', icon: 'check', title: 'Semua berkas dalam SLA', label: 'Status SLA',
@@ -699,7 +699,7 @@ export default {
   },
   subtitle(c) {
     if (!c.model.rows.length) return 'Data SLA belum ada';
-    return `${c.model.sample ? 'Data contoh (sla.xlsx belum ada). ' : ''}${c.where}, posisi ${fmt.date(c.model.snapshot)}. Batas SLA ${SLA_TARGET_HARI} hari per proses.`;
+    return `${c.model.sample ? 'Data contoh, data SLA asli belum ada. ' : ''}${c.where}, posisi ${fmt.date(c.model.snapshot)}. Batas SLA ${SLA_TARGET_HARI} hari per proses.`;
   },
   filters(c) {
     const { model: m, sel } = c;
