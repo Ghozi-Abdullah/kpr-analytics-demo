@@ -55,7 +55,10 @@ const ctx = vm.createContext({
       getProperties: () => Object.fromEntries([...props, ...store]),
     }),
   },
-  SpreadsheetApp: { openById: () => ({ getSheetByName: (n) => (n === 'data' ? { getDataRange: () => { sheetReads += 1; return { getValues: () => sheetRows }; } }
+  SpreadsheetApp: { openById: () => ({ getSheetByName: (n) => (n === 'data' ? {
+    getLastRow: () => { sheetReads += 1; return sheetRows.length; },
+    getRange: (r, c, h, w) => ({ getValues: () => sheetRows.slice(r - 1, r - 1 + h).map((row) => row.slice(c - 1, c - 1 + w)) }),
+  }
     : n === 'info' ? { getLastRow: () => 4, getRange: () => ({ getValues: () => [['status', 'OK'], ['waktu', '2026-11-08T10:00:00'], ['versi', '2026-11-08T09:58:00']] }) } : null) }) },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (text) => ({ text, setMimeType() { return this; } }) },
 });

@@ -291,16 +291,33 @@ function agg_() {
   return SpreadsheetApp.openById(id);
 }
 
+var READ_ROWS = 40;
+
+function readParts_(sh, paths) {
+  var want = {};
+  paths.forEach(function (x) { want[x] = []; });
+  var last = sh.getLastRow();
+  if (last < 2) return want;
+  var rows = [];
+  sh.getRange(2, 1, last - 1, 3).getValues().forEach(function (r, i) {
+    if (Object.prototype.hasOwnProperty.call(want, r[0])) rows.push({ path: r[0], part: Number(r[1]), enc: String(r[2]), at: i + 2 });
+  });
+  var text = {};
+  for (var i = 0; i < rows.length;) {
+    var j = i;
+    while (j + 1 < rows.length && rows[j + 1].at === rows[j].at + 1 && j + 1 - i < READ_ROWS) j += 1;
+    var start = rows[i].at;
+    sh.getRange(start, 4, j - i + 1, 1).getValues().forEach(function (v, k) { text[start + k] = String(v[0]); });
+    i = j + 1;
+  }
+  rows.forEach(function (r) { want[r.path].push([r.part, r.enc, text[r.at]]); });
+  return want;
+}
+
 function readSheet_(paths) {
   var sh = agg_().getSheetByName('data');
   if (!sh) throw new Error('DATA_KOSONG');
-  var values = sh.getDataRange().getValues();
-  var want = {};
-  paths.forEach(function (x) { want[x] = []; });
-  for (var i = 1; i < values.length; i += 1) {
-    var r = values[i];
-    if (Object.prototype.hasOwnProperty.call(want, r[0])) want[r[0]].push([Number(r[1]), String(r[2]), String(r[3])]);
-  }
+  var want = readParts_(sh, paths);
   var out = {};
   Object.keys(want).forEach(function (x) {
     var parts = want[x];

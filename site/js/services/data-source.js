@@ -74,7 +74,7 @@ async function apiCall(action, payload = {}) {
   if (body.error === 'FORBIDDEN') throw Object.assign(new Error('Halaman ini hanya untuk admin.'), { code: 'FORBIDDEN' });
   if (body.error === 'BUSY') throw new Error('Server sedang membatasi permintaan. Tunggu satu menit lalu muat ulang.');
   if (body.error === 'BAD') throw new Error(body.message || 'Permintaan ditolak server karena formatnya tidak sesuai.');
-  throw gasError(new Error(body.error || body.message || 'Kesalahan tidak dikenal'));
+  throw gasError(new Error(body.message || body.error || 'Kesalahan tidak dikenal'));
 }
 
 export const requestAccess = () => apiCall('requestAccess');
