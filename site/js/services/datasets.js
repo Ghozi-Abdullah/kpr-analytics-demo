@@ -4,6 +4,7 @@ const PERF_PATHS = ['perf_daily.json', 'perf_kuadran.json', 'dim_kanca.json'];
 const PF_PATHS = ['portfolio_index.json', 'portfolio_trend.json', 'portfolio/latest.json'];
 const SLA_PATHS = ['sla.json', 'sla_daily.json'];
 export const VIEW_PATHS = {
+  direktur: ['perf_daily.json', 'realisasi_daily.json', 'portfolio_index.json', 'portfolio_trend.json', ...SLA_PATHS],
   ringkasan: [...PERF_PATHS, 'realisasi_daily.json', ...PF_PATHS, ...SLA_PATHS],
   performance: PERF_PATHS,
   portofolio: PF_PATHS,

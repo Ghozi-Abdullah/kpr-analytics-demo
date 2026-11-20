@@ -13,7 +13,7 @@ import { createAskDialog } from './ask/ask-dialog.js';
 import { createDock } from './core/dock.js';
 import { snapFilters, balanceFilters } from './core/filter-snap.js';
 import { handleRedirect, login, logout, session, hasHint, isLocalHost, expiresIn, silentAllowed, markSilent, clearSilent, sessionEnded, claimTab, touch, endSession, SESSION_HOURS } from './services/auth.js';
-import { initRouter, navigate, route, hrefFor, peekView } from './services/router.js';
+import { initRouter, navigate, route, hrefFor, peekView, HOME_VIEW } from './services/router.js';
 import { VIEW_PATHS, prefetchAll } from './services/datasets.js';
 import { Board, compact } from './board/board.js';
 import ringkasan from './views/ringkasan.js';
@@ -21,9 +21,10 @@ import performance from './views/performance.js';
 import portofolio from './views/portofolio.js';
 import realisasi from './views/realisasi.js';
 import sla from './views/sla.js';
+import direktur from './views/direktur.js';
 
-const VIEWS = { ringkasan, performance, portofolio, realisasi, sla };
-const ORDER = ['ringkasan', 'performance', 'portofolio', 'realisasi', 'sla'];
+const VIEWS = { direktur, ringkasan, performance, portofolio, realisasi, sla };
+const ORDER = ['direktur', 'ringkasan', 'performance', 'portofolio', 'realisasi', 'sla'];
 const S = {
   info: null, view: null, model: null, ctx: null, board: null, editing: false,
   history: [], token: 0, saveTimer: 0, cleanups: new Map(), pendingFocus: '',
@@ -61,8 +62,10 @@ function renderShell() {
   const bottomNav = ORDER.map((v) => `<a data-view="${v}" href="${hrefFor(v)}">${icon(VIEWS[v].icon, 21)}<span>${VIEWS[v].title}</span></a>`).join('');
   $('app').innerHTML = `
     <a class="skip" href="#board">Langsung ke panel</a>
+    <button class="screen-menu" type="button" id="screen-menu" aria-controls="sidebar" aria-expanded="false" aria-label="Buka menu" title="Menu">${icon('logo', 22)}</button>
+    <div class="screen-scrim" id="screen-scrim" hidden></div>
     <aside class="side" id="sidebar" aria-label="Navigasi">
-      <a class="side-brand" href="${hrefFor('ringkasan')}" data-view="ringkasan" aria-label="KPR Analytics, ke Summary">
+      <a class="side-brand" href="${hrefFor(HOME_VIEW)}" data-view="${HOME_VIEW}" aria-label="KPR Analytics, ke halaman utama">
         <span class="side-ico">${icon('logo', 26)}</span><span class="side-label"><b>KPR Analytics</b><small>Dashboard internal</small></span></a>
       <button class="side-ask" type="button" data-open-ask aria-keyshortcuts="/ Control+K">
         <span class="side-ico">${icon('ask', 20)}</span><span class="side-label">Tanya data<kbd>/</kbd></span></button>
@@ -81,7 +84,7 @@ function renderShell() {
         <img class="page-logo page-logo-start" src="img/logo-danantara.webp" alt="Danantara Indonesia" width="423" height="112" decoding="async">
         <button class="ask-trigger" type="button" data-open-ask aria-keyshortcuts="/ Control+K">${icon('ask', 19)}<span>${askHint}</span><kbd>/</kbd></button>
         <div class="page-title">
-          <a class="brand" href="${hrefFor('ringkasan')}" data-view="ringkasan"><span class="mark">${icon('logo', 18)}</span>KPR Analytics</a>
+          <a class="brand" href="${hrefFor(HOME_VIEW)}" data-view="${HOME_VIEW}"><span class="mark">${icon('logo', 18)}</span>KPR Analytics</a>
           <h1 id="page-heading">KPR Analytics</h1><p id="page-subheading">Memuat data</p>
         </div>
         <div class="page-actions">
@@ -120,6 +123,7 @@ function renderShell() {
     <div class="sr-only" id="live-region" aria-live="assertive"></div>`;
 
   hideBrokenLogos();
+  bindScreenMenu();
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onDocKey);
   bindSide();
@@ -207,10 +211,31 @@ function bindSide() {
   });
 }
 
+function setScreenMenu(open) {
+  document.body.classList.toggle('screen-nav', open);
+  $('screen-scrim').hidden = !open;
+  const b = $('screen-menu');
+  b.setAttribute('aria-expanded', String(open));
+  b.setAttribute('aria-label', open ? 'Tutup menu' : 'Buka menu');
+  if (open) requestAnimationFrame(() => { fitRail(); placeIndicator(); });
+}
+
+function bindScreenMenu() {
+  $('screen-menu').addEventListener('click', () => setScreenMenu(!document.body.classList.contains('screen-nav')));
+  $('screen-scrim').addEventListener('click', () => setScreenMenu(false));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.body.classList.contains('screen-nav') && !document.querySelector('dialog[open]')) {
+      setScreenMenu(false);
+      $('screen-menu').focus();
+    }
+  });
+}
+
 function onDocClick(e) {
   const nav = e.target.closest('[data-view]');
   if (nav && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
     e.preventDefault();
+    setScreenMenu(false);
     if (nav.dataset.view !== S.view?.id) go(nav.dataset.view, {});
     return;
   }
@@ -251,7 +276,7 @@ function updateNav(view) {
 }
 
 function setTitle(title, sub) {
-  $('page-heading').textContent = /^(Performance|Portofolio|Realisasi|Summary|SLA)$/.test(title) ? `Dashboard ${title} KPR` : title;
+  $('page-heading').textContent = /^(Performance|Portofolio|Realisasi|Summary|SLA|Direktur)$/.test(title) ? `Dashboard ${title} KPR` : title;
   $('page-subheading').textContent = sub;
   document.title = `${title} – KPR Analytics`;
 }
@@ -260,7 +285,7 @@ const DS_LABEL = { performance: 'Performance', kuadran: 'Kuadran RM', portfolio:
 function updateStatus() {
   const meta = S.info?.meta;
   const dummy = !!meta?.is_dummy;
-  for (const id of ['sidebar-status-dot', 'header-status-dot']) $(id)?.classList.toggle('dummy', dummy);
+  for (const id of ['sidebar-status-dot', 'header-status-dot', 'exec-status-dot']) $(id)?.classList.toggle('dummy', dummy);
   $('sidebar-data').textContent = dummy ? 'Data dummy' : 'Data asli';
   updateFreshness();
 }
@@ -273,7 +298,7 @@ function updateFreshness() {
   const word = live === 'offline' ? 'Offline' : live === 'error' ? 'Gagal cek data' : `Diperbarui ${when}`;
   $('data-label').textContent = meta.is_dummy && live !== 'offline' && live !== 'error' ? `Dummy, ${when}` : word;
   $('sidebar-fresh').textContent = live === 'offline' ? 'Offline' : `Diperbarui ${when}`;
-  for (const id of ['sidebar-status-dot', 'header-status-dot']) {
+  for (const id of ['sidebar-status-dot', 'header-status-dot', 'exec-status-dot']) {
     const el = $(id);
     if (!el) continue;
     el.classList.toggle('live', live === 'live');
@@ -324,12 +349,49 @@ function openStatus() {
   dlg.showModal();
 }
 
+async function mountScreen(view, token) {
+  dock.hide();
+  S.board?.destroy();
+  S.board = null;
+  S.view = view;
+  S.model = null;
+  S.ctx = null;
+  S.history = [];
+  setTitle(view.title, 'Memuat data');
+  $('filters').innerHTML = '';
+  $('board').classList.remove('board');
+  $('board').setAttribute('aria-busy', 'true');
+  $('board').innerHTML = view.skeleton?.() || '';
+  try {
+    S.model = await view.load();
+  } catch (err) {
+    if (token === S.token) showError(err);
+    return false;
+  }
+  return token === S.token;
+}
+
+function renderScreen() {
+  const view = S.view;
+  destroyCharts(`${view.id}-`);
+  view.render($('board'), S.ctx, { set: setParams });
+  $('board').removeAttribute('aria-busy');
+  updateStatus();
+}
+
 async function mount({ view: vid, params }) {
   const token = ++S.token;
   setEditing(false);
   const view = VIEWS[vid];
   updateNav(vid);
+  document.body.classList.toggle('is-screen', !!view.screen);
+  if (view.screen) {
+    if ((S.view !== view || !S.model) && !(await mountScreen(view, token))) return;
+    await update(params, token);
+    return;
+  }
   if (S.view !== view || !S.model) {
+    if (S.view?.screen) destroyCharts(`${S.view.id}-`);
     dock.hide();
     S.board?.destroy();
     S.view = view;
@@ -370,6 +432,7 @@ async function update(params, token = S.token) {
   if (token !== S.token) return;
   S.ctx = view.context(S.model, sel);
   setTitle(view.title, view.subtitle(S.ctx));
+  if (view.screen) { renderScreen(); return; }
   const f = $('filters');
   const focused = f.contains(document.activeElement) ? document.activeElement.id : '';
   f.innerHTML = view.filters(S.ctx);
@@ -712,8 +775,8 @@ function demoSignOut() {
 
 function showDemoLogin() {
   const page = hashPage();
-  const route = !page || page === 'masuk' ? '#/ringkasan' : location.hash;
-  loginScreen($('app'), { demo: true, roles: true, onLogin: (role) => demoSignIn(route === '#/admin' && role !== 'admin' ? '#/ringkasan' : route, role) });
+  const route = !page || page === 'masuk' ? `#/${HOME_VIEW}` : location.hash;
+  loginScreen($('app'), { demo: true, roles: true, onLogin: (role) => demoSignIn(route === '#/admin' && role !== 'admin' ? `#/${HOME_VIEW}` : route, role) });
 }
 
 function leaveTo(view) {
@@ -740,20 +803,20 @@ function showLogin(message = '') {
 
 function showAdmin() {
   const demo = MODE === 'local';
-  if (demo && DEMO_GATE && demoRole() !== 'admin') { leaveTo('ringkasan'); return; }
+  if (demo && DEMO_GATE && demoRole() !== 'admin') { leaveTo(HOME_VIEW); return; }
   if (demo) {
     const api = demoAccessApi();
-    adminScreen($('app'), { api, me: api.me, demo, onBack: () => leaveTo('ringkasan') });
+    adminScreen($('app'), { api, me: api.me, demo, onBack: () => leaveTo(HOME_VIEW) });
     return;
   }
   $('app').innerHTML = '<main class="admin" aria-busy="true"><p class="admin-loading">Memeriksa akses…</p></main>';
   accessApi.list().then((initial) => {
-    adminScreen($('app'), { api: accessApi, me: session()?.email || '', demo, initial, onBack: () => leaveTo('ringkasan') });
+    adminScreen($('app'), { api: accessApi, me: session()?.email || '', demo, initial, onBack: () => leaveTo(HOME_VIEW) });
   }).catch((err) => {
     if (err instanceof AuthError) { reauth(err.message); return; }
     if (err instanceof AccessError) { showAccessDenied(err); return; }
-    if (err?.code === 'FORBIDDEN') { leaveTo('ringkasan'); return; }
-    adminScreen($('app'), { api: accessApi, me: session()?.email || '', demo, onBack: () => leaveTo('ringkasan') });
+    if (err?.code === 'FORBIDDEN') { leaveTo(HOME_VIEW); return; }
+    adminScreen($('app'), { api: accessApi, me: session()?.email || '', demo, onBack: () => leaveTo(HOME_VIEW) });
   });
 }
 
@@ -812,7 +875,7 @@ async function start() {
   }
   if (DEMO_GATE && (!demoSignedIn() || hashPage() === 'masuk')) { showDemoLogin(); return; }
   if (MODE === 'local' && hashPage() === 'masuk') {
-    loginScreen($('app'), { demo: true, onLogin: () => leaveTo('ringkasan') });
+    loginScreen($('app'), { demo: true, onLogin: () => leaveTo(HOME_VIEW) });
     return;
   }
   if (MODE !== 'gas' && hashPage() === 'admin') { showAdmin(); return; }

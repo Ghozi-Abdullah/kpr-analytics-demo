@@ -1,12 +1,13 @@
 import { IS_GAS } from './data-source.js';
 
-export const VIEW_IDS = ['ringkasan', 'performance', 'portofolio', 'realisasi', 'sla'];
-let current = { view: 'ringkasan', params: {} };
+export const HOME_VIEW = 'direktur';
+export const VIEW_IDS = ['direktur', 'ringkasan', 'performance', 'portofolio', 'realisasi', 'sla'];
+let current = { view: HOME_VIEW, params: {} };
 let handler = () => {};
 
 const clean = (params) => Object.fromEntries(Object.entries(params || {})
   .filter(([, v]) => v !== '' && v !== null && v !== undefined).map(([k, v]) => [k, String(v)]));
-const validView = (v) => (VIEW_IDS.includes(v) ? v : 'ringkasan');
+const validView = (v) => (VIEW_IDS.includes(v) ? v : HOME_VIEW);
 const key = (r) => `${r.view}?${new URLSearchParams(Object.entries(r.params).sort()).toString()}`;
 
 function parseHash(hash) {
@@ -40,7 +41,7 @@ export function initRouter(onChange) {
 }
 
 export const route = () => current;
-export const peekView = () => (IS_GAS ? 'ringkasan' : parseHash(location.hash).view);
+export const peekView = () => (IS_GAS ? HOME_VIEW : parseHash(location.hash).view);
 
 export function navigate(view, params = {}, { replace = false } = {}) {
   const next = { view: validView(view), params: clean(params) };

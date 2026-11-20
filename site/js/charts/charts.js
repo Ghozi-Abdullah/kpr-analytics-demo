@@ -297,12 +297,16 @@ function gradient(color) {
   };
 }
 
+const X_TICKS = { color: C.muted, autoSkip: true, autoSkipPadding: 10, maxRotation: 0, font: { size: FS.caption } };
 const xScale = (extra = {}) => ({
   grid: { display: false },
   border: { display: false },
-  ticks: { color: C.muted, autoSkip: true, autoSkipPadding: 10, maxRotation: 0, font: { size: FS.caption } },
+  ticks: X_TICKS,
   ...extra,
 });
+const xLabeled = (labels, xLabel) => (xLabel
+  ? xScale({ ticks: { ...X_TICKS, autoSkip: false, callback: (_v, i) => xLabel(labels[i], i) } })
+  : xScale());
 const yScale = (show, tickFormat, extra = {}) => (show ? {
   grid: { color: C.grid, drawTicks: false },
   border: { display: false, dash: [4, 4] },
@@ -320,7 +324,7 @@ function clickHandler(onClick) {
 
 export function lineChart(canvas, {
   labels, series, format, title, hint, footer, yAxis = false, tickFormat, pulse: withPulse = false,
-  onClick, sort = false, beginAtZero = null, grace = '8%', refs = [], values = 'auto', labelFormat,
+  onClick, sort = false, beginAtZero = null, grace = '8%', refs = [], values = 'auto', labelFormat, xLabel = null,
 }) {
   if (onClick) canvas.parentNode.classList.add('clickable');
   const allValues = series.flatMap((s) => s.data.filter(Number.isFinite));
@@ -366,7 +370,7 @@ export function lineChart(canvas, {
     options: {
       interaction: { mode: 'index', intersect: false },
       layout: { padding: values ? { top: 18, right: 22, left: 2 } : { top: 10, right: 10, left: 2 } },
-      scales: { x: xScale(), y: yScale(yAxis, tickFormat, { grace: values ? '14%' : grace, beginAtZero: zeroBased }) },
+      scales: { x: xLabeled(labels, xLabel), y: yScale(yAxis, tickFormat, { grace: values ? '14%' : grace, beginAtZero: zeroBased }) },
       onClick: clickHandler(onClick),
       plugins: {
         tooltip: { enabled: false, external: externalTooltip },
