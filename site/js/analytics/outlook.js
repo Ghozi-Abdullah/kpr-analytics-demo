@@ -47,6 +47,7 @@ function monthStats(rows) {
       month, rows: list, end, complete: dayOf(end.tanggal) === daysInMonth(month), osStart, os: end.os,
       disb: end.disburse, runoff, runoffRate: ratio(runoff, osStart), wd: end.hari_kerja, rate: ratio(end.disburse, end.hari_kerja),
       npl: end.npl, nplStart: end.helper_npl, rka: end.rka_os, rkaNpl: end.rka_npl, rm: end.jum_rm, guidance: end.guidance_disb,
+      sml: end.dpk, smlStart: end.helper_dpk, rkaSml: end.rka_dpk,
     };
   });
 }
@@ -134,11 +135,23 @@ function workdaysAhead(pm, roKey, month) {
   return { wd: ok(v) ? v : workdaysIn(month), fromData: ok(v) };
 }
 
-function rkaOf(pm, roKey, stats, month) {
-  const fut = (pm.future?.get(roKey) || []).filter((r) => r.tanggal.startsWith(month) && ok(r.rka_os));
-  if (fut.length) return fut.at(-1).rka_os;
+const STAT_KEY = { rka_os: 'rka', rka_npl: 'rkaNpl', rka_dpk: 'rkaSml' };
+
+function rkaOf(pm, roKey, stats, month, field = 'rka_os') {
+  const fut = (pm.future?.get(roKey) || []).filter((r) => r.tanggal.startsWith(month) && ok(r[field]));
+  if (fut.length) return fut.at(-1)[field];
   const s = stats.find((x) => x.month === month);
-  return s && ok(s.rka) ? s.rka : null;
+  const v = s ? s[STAT_KEY[field]] : null;
+  return ok(v) ? v : null;
+}
+
+const stepOf = (list, get) => median(okList(list.map(get)));
+
+function qualityAt({ now, trend, months, rka, rkaFrom, os }) {
+  return {
+    now, trend, months, rka, rkaFrom, ratioNow: ratio(now, os),
+    base: ok(now) && ok(trend) ? Math.max(0, now + trend * months) : null,
+  };
 }
 
 function latestRka(pm, roKey, stats, year) {
@@ -216,12 +229,13 @@ function planYear(ctx, yearTarget) {
   const first = stats.find((s) => yearOf(s.month) === curYear);
   const osYearStart = first && mmOf(first.month) === 1 && ok(first.osStart) && first.osStart > 0 ? first.osStart : null;
   const rkaDec = rkaOf(pm, roKey, stats, `${curYear}-12`);
+  const rkaPlan = year !== curYear ? rkaOf(pm, roKey, stats, end) : null;
   let target = null;
   let source = 'none';
   let growthRef = null;
-  if (ok(yearTarget) && yearTarget > 0) {
-    target = yearTarget;
-    source = 'input';
+  if (ok(rkaPlan)) {
+    target = rkaPlan;
+    source = 'rka';
   } else if (year === curYear && ok(rkaDec)) {
     target = rkaDec;
     source = 'rka';
@@ -249,6 +263,12 @@ function planYear(ctx, yearTarget) {
       target = (year === curYear ? osYearStart : startOs) * (1 + growthRef);
     }
   }
+  const targetDefault = target;
+  const sourceDefault = source;
+  if (ok(yearTarget) && yearTarget > 0) {
+    target = yearTarget;
+    source = 'input';
+  }
 
   const lift = ok(target) && slope > 0 ? (target - base.os) / slope : null;
   const capLift = slope > 0 ? Math.max(0, (capRun.os - base.os) / slope) : 0;
@@ -273,6 +293,17 @@ function planYear(ctx, yearTarget) {
   const nplEnd = ntrend && ok(nplNow) ? Math.max(0, nplNow + ntrend.slope * dampSum(monthsBetween(cur.month, end))) : null;
 
   const seasonal = season.used ? months.filter((_, i) => inPlan[i]).map((m) => ({ month: m, f: season.f[mmOf(m)] })) : null;
+  const h = monthsBetween(cur.month, end);
+  const span = dampSum(h) / DAMP;
+  const osRef = ok(targetDefault) ? targetDefault : base.os;
+  const qualityFor = (field, key, startKey, rkaKey) => {
+    const own = rkaOf(pm, roKey, stats, end, field);
+    const r = ratio(cur[rkaKey], cur.rka);
+    return qualityAt({
+      now: cur[key], trend: stepOf(done.slice(-3), (s) => (ok(s[key]) && ok(s[startKey]) ? s[key] - s[startKey] : null)),
+      months: span, rka: ok(own) ? own : ok(r) ? r * osRef : null, rkaFrom: ok(own) ? 'rka' : ok(r) ? 'ratio' : 'none', os: cur.os,
+    });
+  };
 
   return {
     year, end, months, planCount, startMonth, startOs, target, targetSource: source, growthRef,
@@ -289,6 +320,8 @@ function planYear(ctx, yearTarget) {
     perRm: ok(needDisb) && rm ? needDisb / planCount / rm : null, basePerRm: rm ? base.disb / planCount / rm : null,
     npl: { now: nplNow, end: nplEnd, slope: ntrend?.slope ?? null, target: ratio(cur.rkaNpl, cur.rka) },
     seasonal, wdBasis: wdInfo.some((w) => w.fromData) ? 'data' : holidayBasis(end),
+    targetDefault, sourceDefault,
+    quality: { npl: qualityFor('rka_npl', 'npl', 'nplStart', 'rkaNpl'), sml: qualityFor('rka_dpk', 'sml', 'smlStart', 'rkaSml') },
   };
 }
 
@@ -410,6 +443,16 @@ export function outlook(pm, { ro = '', real = null, target = null, yearTarget = 
   const nplBase = ok(nplNow) && ok(dNpl) ? nplNow + dNpl * months : null;
   const ratioNow = ratio(nplNow, cur.os);
   const ratioTarget = ratio(cur.rkaNpl, cur.rka);
+  const aheadOf = (field) => ahead.filter((r) => ok(r[field])).at(-1)?.[field] ?? null;
+  const dSml = stepOf(base, (s) => (ok(s.sml) && ok(s.smlStart) ? s.sml - s.smlStart : null));
+  const nextQuality = (field, now, trend, rkaNowV) => {
+    const own = aheadOf(field);
+    const r = ratio(rkaNowV, cur.rka);
+    return qualityAt({
+      now, trend, months, rka: ok(own) ? own : ok(r) && ok(targetN) ? r * targetN : null,
+      rkaFrom: ok(own) ? 'rka' : ok(r) && ok(targetN) ? 'ratio' : 'none', os: cur.os,
+    });
+  };
 
   const next = {
     month, wd: wdN, wdFromData: wdInfo.fromData, wdBasis: wdInfo.fromData ? 'data' : holidayBasis(month),
@@ -428,6 +471,7 @@ export function outlook(pm, { ro = '', real = null, target = null, yearTarget = 
       now: nplNow, trend: dNpl, months, base: nplBase, ratioNow, ratioBase: ratio(nplBase, baseOs), ratioTarget,
       ceilTarget: ok(ratioTarget) ? ratioTarget * baseOs : null, ceilKeep: ok(ratioNow) ? ratioNow * baseOs : null,
     },
+    quality: { npl: nextQuality('rka_npl', nplNow, dNpl, cur.rkaNpl), sml: nextQuality('rka_dpk', cur.end.dpk, dSml, cur.rkaSml) },
   };
 
   const current = cur.complete ? null : (() => {
@@ -452,6 +496,10 @@ export function outlook(pm, { ro = '', real = null, target = null, yearTarget = 
       perWd: ok(needRem) && remWd ? needRem / remWd : null, ratePerWd: remWd ? remDisb / remWd : null,
       needGuid, liftGuid: ok(needGuid) && remDisb > 0 ? needGuid / remDisb - 1 : null,
       npl: { now: nplNow, target: cur.rkaNpl, room: ok(cur.rkaNpl) && ok(nplNow) ? cur.rkaNpl - nplNow : null },
+      quality: {
+        npl: qualityAt({ now: nplNow, trend: dNpl, months: remWd / wdTot, rka: cur.rkaNpl, rkaFrom: ok(cur.rkaNpl) ? 'rka' : 'none', os: cur.os }),
+        sml: qualityAt({ now: cur.end.dpk, trend: dSml, months: remWd / wdTot, rka: cur.rkaSml, rkaFrom: ok(cur.rkaSml) ? 'rka' : 'none', os: cur.os }),
+      },
     };
   })();
 
@@ -504,4 +552,77 @@ export function simulateYear(o, lift) {
   const y = o.year;
   const os = y.base.os + lift * y.slope;
   return { disb: y.base.disb * (1 + lift), os, growth: os - y.startOs, ach: ratio(os, y.target), gap: ok(y.target) ? os - y.target : null };
+}
+
+export function simTarget(o, mode, os) {
+  if (mode === 'year') {
+    const y = o.year;
+    const lift = y.slope > 0 ? (os - y.base.os) / y.slope : 0;
+    const disb = y.base.disb * (1 + lift);
+    return {
+      os, disb, per: disb / y.planCount, perWd: y.wdPlan ? disb / y.wdPlan : null, base: y.base.disb / y.planCount, lift,
+      tier: tierOfLift(lift, y.capLift), growth: os - y.startOs, growthRka: ok(y.target) ? y.target - y.startOs : null, ach: ratio(os, y.target),
+    };
+  }
+  if (mode === 'current') {
+    const c = o.current;
+    const need = os - c.os + c.remRun;
+    return {
+      os, disb: need, per: need, perWd: c.remWd ? need / c.remWd : null, base: c.remDisb, lift: c.remDisb > 0 ? need / c.remDisb - 1 : null,
+      tier: tierOf(need, c.remDisb, c.capRem), growth: os - c.osStart, growthRka: c.growthGoal, ach: ratio(os, c.target),
+    };
+  }
+  const n = o.next;
+  const need = os - o.close.os + n.baseRun;
+  return {
+    os, disb: need, per: need, perWd: need / n.wd, base: n.baseDisb, lift: need / n.baseDisb - 1,
+    tier: tierOf(need, n.baseDisb, n.capDisb), growth: os - o.close.os, growthRka: n.growthGoal, ach: ratio(os, n.target),
+  };
+}
+
+export function simAnchors(o, mode) {
+  if (mode === 'year') {
+    const y = o.year;
+    return {
+      os: [
+        { key: 'base', v: y.base.os }, { key: 'best', v: y.cap.os },
+        y.levers.runoff > 0 ? { key: 'combo', v: y.combo.os } : null,
+        { key: 'rka', v: y.targetDefault, from: y.sourceDefault },
+      ].filter((a) => a && ok(a.v)),
+      quality: y.quality,
+      reset: y.targetDefault,
+    };
+  }
+  if (mode === 'current') {
+    const c = o.current;
+    const step = ok(c.growthGoal) ? c.osStart + c.growthGoal : null;
+    return {
+      os: [{ key: 'base', v: c.closeOs }, { key: 'best', v: c.os + c.capRem - c.remRun }, { key: 'step', v: step }, { key: 'rka', v: c.target, from: 'rka' }]
+        .filter((a) => ok(a.v)),
+      quality: c.quality, reset: ok(step) ? step : ok(c.target) ? c.target : c.closeOs,
+    };
+  }
+  const n = o.next;
+  const step = ok(n.growthGoal) ? o.close.os + n.growthGoal : null;
+  return {
+    os: [{ key: 'base', v: n.baseOs }, { key: 'best', v: n.capOs }, { key: 'step', v: step }, { key: 'rka', v: n.target, from: n.targetSource }]
+      .filter((a) => ok(a.v)),
+    quality: n.quality, reset: ok(step) ? step : ok(n.target) ? n.target : n.baseOs,
+  };
+}
+
+export function history(pm, ro, count = 12) {
+  const roKey = ro && pm.byRo.has(ro) ? ro : (pm.hasNasional ? NASIONAL : null);
+  if (!roKey) return [];
+  const stats = monthStats(pm.byRo.get(roKey) || []);
+  return stats.map((s, i) => {
+    const prev = stats[i - 1];
+    return {
+      month: s.month, complete: s.complete, day: dayOf(s.end.tanggal), os: s.os, rka: s.rka, ach: ratio(s.os, s.rka),
+      grown: ok(s.os) && ok(s.osStart) ? s.os - s.osStart : null,
+      rkaStep: prev && ok(prev.rka) && ok(s.rka) ? s.rka - prev.rka : null,
+      disb: s.disb, perWd: ratio(s.disb, s.wd), runoff: s.runoff, runoffRate: s.runoffRate,
+      npl: ratio(s.npl, s.os), sml: ratio(s.sml, s.os), rm: s.rm,
+    };
+  }).slice(-count);
 }

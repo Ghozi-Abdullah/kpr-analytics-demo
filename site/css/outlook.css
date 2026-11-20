@@ -11,10 +11,10 @@
 .outlook-figure-value { font-size: var(--fs-heading); line-height: 1.2; font-weight: 650; letter-spacing: -.01em; color: var(--navy); }
 .outlook-figures small { font-size: var(--fs-caption); color: var(--muted); }
 .outlook-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; align-items: stretch; }
-.outlook-sim, .outlook-quality, .outlook-strategy { display: grid; gap: 10px; align-content: start; padding: 14px 16px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); }
+.outlook-sim, .outlook-strategy { display: grid; gap: 10px; align-content: start; padding: 14px 16px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); }
 .outlook-sim header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.outlook-sim h3, .outlook-quality h3, .outlook-ro h3, .outlook-strategy h3, .outlook-path h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--fs-body); font-weight: 600; color: var(--ink-2); }
-.outlook-quality h3 svg, .outlook-strategy h3 svg, .outlook-path h3 svg { color: var(--accent); }
+.outlook-sim h3, .outlook-ro h3, .outlook-strategy h3, .outlook-path h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--fs-body); font-weight: 600; color: var(--ink-2); }
+.outlook-sim h3 svg, .outlook-strategy h3 svg, .outlook-path h3 svg { color: var(--accent); }
 .outlook-path { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); }
 .outlook-path header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; }
 .outlook-path header .legend { margin: 0; }
@@ -29,26 +29,8 @@
 .outlook-ro h3 { width: 100%; }
 .outlook-tier-key { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
 .outlook-tier-key .lift-pill { min-width: 0; font-weight: 500; }
-.outlook-target { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-caption); color: var(--muted); }
-.outlook-target input { width: 104px; height: 30px; padding: 0 10px; border: 0; border-radius: 9px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); font: inherit; font-size: var(--fs-body); font-weight: 600; color: var(--ink); text-align: right; }
-.outlook-target input:focus-visible { outline: 2px solid var(--cakrawala); outline-offset: 1px; }
-.outlook-slider { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; }
-.outlook-slider label { grid-column: 1 / -1; font-size: var(--fs-body); color: var(--ink-2); }
-.outlook-slider input { width: 100%; margin: 0; accent-color: var(--accent); }
-.outlook-slider output { min-width: 56px; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-body); font-weight: 650; text-align: center; font-variant-numeric: tabular-nums; }
-.outlook-result { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.outlook-result div { display: grid; gap: 2px; }
-.outlook-result dt { font-size: var(--fs-caption); color: var(--muted); }
-.outlook-result dd { margin: 0; font-size: var(--fs-title); font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
-.outlook-meter { position: relative; height: 8px; border-radius: 4px; background: var(--chip); }
-.outlook-meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--good); transition: width .18s var(--ease); }
-.outlook-meter i[data-level="warn"] { background: var(--warn-dot); }
-.outlook-meter i[data-level="bad"] { background: var(--bad); }
-.outlook-meter span { position: absolute; left: 71.43%; top: -4px; bottom: -4px; width: 2px; border-radius: 1px; background: var(--ink-2); }
 .outlook-notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: var(--fs-body); line-height: 1.55; color: var(--ink-2); }
 .outlook-notes li { position: relative; padding-left: 14px; }
-.outlook-quality .outlook-notes li { padding-left: 21px; }
-.outlook-quality .outlook-notes li::before { left: 5px; }
 .outlook-notes li::before { content: ""; position: absolute; left: 1px; top: .68em; width: 5px; height: 5px; border-radius: 50%; background: var(--line-2); }
 .outlook-notes b { font-weight: 650; color: var(--ink); }
 .outlook-muted { margin: 0; font-size: var(--fs-body); color: var(--muted); }
@@ -68,10 +50,76 @@
 .outlook-foot { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: var(--fs-caption); line-height: 1.5; color: var(--muted); }
 .outlook-foot svg { flex: none; margin-top: 2px; color: var(--faint); }
 @container (max-width: 760px) {
-  .outlook-result { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+  .sim-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .outlook-lead { font-size: var(--fs-lead); }
   .outlook-figures li { padding: 10px 12px; }
   .outlook-figure-value { font-size: var(--fs-title); }
 }
-@media (prefers-reduced-motion: reduce) { .outlook-meter i { transition: none; } }
 .board.stack .outlook { height: auto; overflow: visible; }
+.outlook-row { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 12px; align-items: stretch; }
+.outlook-row.solo { grid-template-columns: minmax(0, 1fr); }
+.outlook-row > .outlook-ro:not(.outlook-hist) { contain: size; min-height: 340px; }
+.outlook-row > .outlook-ro .outlook-ro-list { max-height: none; }
+.outlook-sim header { flex-wrap: nowrap; }
+.outlook-sim > .outlook-muted { margin-top: -4px; font-size: var(--fs-caption); }
+.sim-quality { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px 20px; }
+.sim-row { --thumb: 18px; display: grid; gap: 7px; align-content: start; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.sim-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.sim-head label { font-size: var(--fs-body); font-weight: 600; color: var(--ink-2); }
+.sim-value { margin-left: auto; font-size: var(--fs-lead); font-weight: 650; color: var(--navy); font-variant-numeric: tabular-nums; }
+.sim-tag { font-size: var(--fs-caption); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sim-track { position: relative; height: 24px; }
+.sim-track::before { content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 6px; border-radius: 3px; background: var(--chip); }
+.sim-tick { position: absolute; top: 5px; width: 3px; height: 14px; border-radius: 2px; left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--p) - 1.5px); background: var(--tick); pointer-events: none; }
+.sim-range { -webkit-appearance: none; appearance: none; position: relative; z-index: 1; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.sim-range::-webkit-slider-runnable-track { height: 6px; background: transparent; }
+.sim-range::-moz-range-track { height: 6px; background: transparent; }
+.sim-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: var(--thumb); height: var(--thumb); margin-top: -6px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 2px var(--accent), 0 1px 4px rgb(8 40 90 / .28); }
+.sim-range::-moz-range-thumb { box-sizing: border-box; width: var(--thumb); height: var(--thumb); border: 2px solid var(--accent); border-radius: 50%; background: var(--surface); box-shadow: 0 1px 4px rgb(8 40 90 / .28); }
+.sim-range:focus { outline: none; }
+.sim-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft); }
+.sim-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--accent-soft); }
+.sim-row [data-k="base"], .sim-row [data-k="now"] { --tick: #86868B; }
+.sim-row [data-k="best"], .sim-row [data-k="trend"] { --tick: #eb6834; }
+.sim-row [data-k="combo"], .sim-row [data-k="step"] { --tick: var(--cakrawala); }
+.sim-row [data-k="rka"] { --tick: var(--navy); }
+.sim-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.sim-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border: 0; border-radius: 999px; background: none; box-shadow: inset 0 0 0 1px var(--line-soft); font: inherit; font-size: var(--fs-caption); color: var(--muted); cursor: pointer; }
+.sim-chip i { width: 8px; height: 8px; border-radius: 2px; background: var(--tick); }
+.sim-chip b { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sim-chip:hover { background: var(--accent-tint); }
+.sim-chip[aria-pressed="true"] { background: var(--accent-soft); box-shadow: none; color: var(--accent); }
+.sim-chip[aria-pressed="true"] b { color: var(--accent); }
+.sim-chip:focus-visible { outline: 2px solid var(--cakrawala); outline-offset: 1px; }
+.sim-stats { margin: 2px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px 14px; }
+.sim-stats div { display: grid; gap: 1px; align-content: start; }
+.sim-stats dt { font-size: var(--fs-caption); color: var(--muted); }
+.sim-stats dd { margin: 0; font-size: var(--fs-body); font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sim-stats .lift-pill { min-width: 0; }
+.sim-note { margin: 0; font-size: var(--fs-caption); line-height: 1.5; color: var(--muted); }
+.sim-note:empty { display: none; }
+.outlook-strategy-lead { margin: 0; font-size: var(--fs-body); line-height: 1.55; color: var(--ink-2); }
+.outlook-strategy-lead b { font-weight: 650; color: var(--ink); }
+.lever-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+.lever-table th, .lever-table td { padding: 7px 0; border-bottom: 1px solid rgb(8 87 195 / .12); text-align: right; vertical-align: top; }
+.lever-table td + td, .lever-table th + th { padding-left: 12px; }
+.lever-table thead th { padding-top: 0; font-size: var(--fs-caption); font-weight: 500; color: var(--muted); white-space: nowrap; }
+.lever-table th:first-child { text-align: left; }
+.lever-table tbody th { font-weight: 600; color: var(--ink); }
+.lever-table small { display: block; font-size: var(--fs-caption); font-weight: 400; color: var(--muted); }
+.lever-table tbody tr:last-child > * { border-bottom: 0; }
+.lever-table .lift-pill { min-width: 58px; }
+.outlook-hist .pop-table-wrap { padding-right: 6px; }
+.hist-table td.hist-need { font-weight: 650; color: var(--navy); }
+.hist-table tr.hist-target > * { border-top: 2px solid var(--accent-soft); color: var(--navy); }
+.hist-table tr.hist-target th { font-weight: 650; }
+.hist-neg { color: var(--bad); }
+.hist-under { color: var(--warn); }
+.pop-card > p.hist-why { margin-top: 6px; font-size: var(--fs-body); line-height: 1.55; color: var(--ink-2); }
+.hist-why b { font-weight: 650; color: var(--ink); }
+.hist-foot { margin: 8px 0 0; font-size: var(--fs-caption); line-height: 1.5; color: var(--muted); }
+@container (max-width: 880px) {
+  .outlook-row { grid-template-columns: minmax(0, 1fr); }
+  .outlook-row > .outlook-ro:not(.outlook-hist) { contain: none; min-height: 0; }
+  .outlook-row > .outlook-ro .outlook-ro-list { max-height: 268px; }
+}

@@ -133,7 +133,7 @@ function currentText(o, where) {
 }
 
 const yearTargetWord = (y) => ({
-  input: 'target yang Anda isi',
+  input: 'target simulasi',
   rka: `RKA Desember ${y.year}`,
   'rka-growth': `tumbuh ${pct(y.growthRef, 1)}, setara RKA ${y.year - 1}`,
   'rka-trend': `tumbuh ${pct(y.growthRef, 1)}, setara laju RKA ${y.year - 1}`,
@@ -213,6 +213,32 @@ function yearText(o, where) {
     if (ok(y.npl.target) && y.npl.end > y.npl.target) quality.push(`Agar tetap di bawah ${pct(y.npl.target)}, penyelesaian NPL perlu berjalan seiring kenaikan disburse, karena tambahan debitur baru juga menambah risiko.`);
   }
   return { lead, figures: figures.filter(Boolean), facts: strategy, notes, quality, strategy };
+}
+
+export function yearLevers(o) {
+  const y = o.year;
+  const lv = y.levers;
+  const rows = [{ label: 'Laju biasa', sub: 'tanpa perubahan', os: y.base.os, add: 0 }];
+  if (lv.runoff > 0) rows.push({ label: 'Tekan runoff', sub: `ke ${pct(y.runBest, 2)} per bulan, kini ${pct(y.runRate, 2)}`, os: y.base.os + lv.runoff, add: lv.runoff });
+  if (lv.disburse > 0) rows.push({ label: 'Disburse di laju terbaik', sub: y.capFromRegions ? 'tiap RO di laju terbaiknya' : 'bulan terbaik 6 bulan terakhir', os: y.cap.os, add: lv.disburse });
+  if (lv.runoff > 0 && lv.disburse > 0) rows.push({ label: 'Kombinasi keduanya', sub: 'runoff ditekan dan disburse terbaik', os: y.combo.os, add: lv.combo });
+  return rows.map((r) => ({ ...r, ach: ratio(r.os, y.target) }));
+}
+
+export function yearBrief(o) {
+  const y = o.year;
+  const lines = [];
+  const grow = ok(y.target) ? y.target - y.startOs : null;
+  if (ok(grow)) {
+    lines.push(ok(y.lift) && y.lift > 0
+      ? `OS perlu tumbuh ${b(rpM(grow))} (${rpM(grow / y.planCount)} per bulan). Disburse rata-rata ${b(rpM(y.need.disb / y.planCount))} per bulan, ${liftWords(y.lift)}.`
+      : `OS perlu tumbuh ${b(rpM(grow))} (${rpM(grow / y.planCount)} per bulan). Laju biasa sudah cukup, kuncinya menjaga laju stabil.`);
+  }
+  if (ok(y.target) && y.combo.os < y.target && y.levers.combo > 0) lines.push(`Kombinasi terbaik pun belum sampai target, jadi perlu sumber pertumbuhan baru (program, kanal, kerja sama developer) atau target ditinjau.`);
+  if (ok(y.lift) && y.lift > 0 && ok(y.rmNeed) && y.rm && y.rmGap > 0) lines.push(`Pada produktivitas RM terbaik, butuh sekitar ${b(`${num(y.rmNeed)} RM`)} (kini ${num(y.rm)}, tambah ${num(y.rmGap)}).`);
+  const phase = phasingLine(y);
+  if (phase) lines.push(phase);
+  return lines;
 }
 
 export function moreNames(list, max = 4) {

@@ -24,7 +24,13 @@
   :is(.legend-chip, button.link, .data-table thead th button) { position: relative; }
   :is(.legend-chip, button.link, .data-table thead th button)::after { content: ""; position: absolute; inset: -9px -4px; }
   .legend-chip::after { inset: -5px -3px; }
-  .outlook-slider input[type="range"] { height: 32px; }
+  .sim-track { height: 32px; }
+  .sim-track::before { top: 13px; }
+  .sim-tick { top: 9px; }
+  .sim-range { height: 32px; }
+  .sim-row { --thumb: 22px; }
+  .sim-range::-webkit-slider-thumb { margin-top: -8px; }
+  .sim-chip { padding-block: 6px; }
 }
 @media print {
   .side, .bottom-nav, .filter-bar, .page-actions, .palette, .panel-tools { display: none !important; }
