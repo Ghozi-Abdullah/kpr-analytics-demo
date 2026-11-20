@@ -3,7 +3,7 @@ import { esc, fmt } from './core/format.js';
 import { toast, announce, openTable, emptyState } from './core/ui.js';
 import { enhancePicks } from './core/controls.js';
 import { downloadPng, destroyCharts } from './charts/charts.js';
-import { boot, MODE, AccessError, AuthError, clearCache, readLayout, writeLayout, requestAccess, accessApi } from './services/data-source.js';
+import { boot, MODE, AccessError, AuthError, clearCache, clearStash, readLayout, writeLayout, requestAccess, accessApi } from './services/data-source.js';
 import { loginScreen, deniedScreen } from './views/gate.js';
 import { adminScreen, demoAccessApi } from './views/admin.js';
 import { startLive, ago, LIVE_INTERVAL } from './services/live.js';
@@ -12,7 +12,7 @@ import { createAsk } from './ask/engine.js';
 import { createAskDialog } from './ask/ask-dialog.js';
 import { createDock } from './core/dock.js';
 import { snapFilters, balanceFilters } from './core/filter-snap.js';
-import { handleRedirect, login, logout, session, hasHint, isLocalHost, expiresIn, silentAllowed, markSilent, clearSilent } from './services/auth.js';
+import { handleRedirect, login, logout, session, hasHint, isLocalHost, expiresIn, silentAllowed, markSilent, clearSilent, sessionEnded, claimTab, touch, endSession, SESSION_HOURS } from './services/auth.js';
 import { initRouter, navigate, route, hrefFor, peekView } from './services/router.js';
 import { VIEW_PATHS, prefetchAll } from './services/datasets.js';
 import { Board, compact } from './board/board.js';
@@ -318,6 +318,7 @@ function openStatus() {
   dlg.querySelector('#demo-logout')?.addEventListener('click', () => demoSignOut());
   dlg.querySelector('#logout')?.addEventListener('click', () => {
     logout();
+    clearStash();
     try { sessionStorage.setItem('kpr.auth.msg', 'Anda sudah keluar.'); } catch {}
     location.replace(location.pathname);
   });
@@ -444,6 +445,7 @@ async function refreshData({ manual = false, version = '' } = {}) {
   if (S.editing) { S.pendingData = version || 'manual'; return; }
   S.refreshing = true;
   const before = S.info?.meta?.generated_at || '';
+  clearStash();
   try {
     clearCache();
     resetHub();
@@ -457,6 +459,7 @@ async function refreshData({ manual = false, version = '' } = {}) {
       await update(route().params);
     }
     const changed = (info.meta?.generated_at || '') !== before;
+    setTimeout(() => { prefetchAll().catch(() => null); }, 400);
     if (changed && !manual) {
       toast(`Data terbaru masuk (${fmt.date((info.meta.generated_at || '').slice(0, 10))} pukul ${(info.meta.generated_at || '').slice(11, 16).replace(':', '.')}). Panel sudah diperbarui.`);
       askDialog?.notifyData('Data baru masuk. Jawaban berikutnya memakai data terbaru.');
@@ -756,7 +759,7 @@ function showAdmin() {
 }
 
 function reauth(message) {
-  if (hasHint() && silentAllowed()) {
+  if (hasHint() && !sessionEnded() && silentAllowed()) {
     markSilent();
     login({ silent: true });
     return;
@@ -766,18 +769,22 @@ function reauth(message) {
 
 function keepSession() {
   if (MODE !== 'api') return;
-  const renew = () => {
-    if (document.visibilityState !== 'visible' || !session()) return;
+  const check = () => {
+    if (sessionEnded()) {
+      endSession();
+      clearStash();
+      try { sessionStorage.setItem('kpr.auth.msg', `Sesi kerja sudah ${SESSION_HOURS} jam. Silakan masuk lagi.`); } catch {}
+      location.replace(location.pathname);
+      return;
+    }
+    if (document.visibilityState !== 'visible') return;
     if (expiresIn() < 10 * 60 * 1000 && hasHint() && silentAllowed()) { markSilent(); login({ silent: true }); }
   };
-  document.addEventListener('visibilitychange', renew);
-  setInterval(renew, 60 * 1000);
+  for (const ev of ['pointerdown', 'keydown', 'wheel']) addEventListener(ev, touch, { passive: true });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') touch(); check(); });
+  setInterval(check, 60 * 1000);
 }
 
-function whenIdle(fn) {
-  if ('requestIdleCallback' in window) requestIdleCallback(fn, { timeout: 4000 });
-  else setTimeout(fn, 1500);
-}
 
 async function fontsReady() {
   await Promise.race([document.fonts?.ready || Promise.resolve(), new Promise((r) => { setTimeout(r, 1500); })]);
@@ -788,10 +795,18 @@ async function start() {
   if (MODE === 'api') {
     const r = handleRedirect();
     if (r.status === 'ok') clearSilent();
+    let msg = '';
+    try { msg = sessionStorage.getItem('kpr.auth.msg') || ''; sessionStorage.removeItem('kpr.auth.msg'); } catch {}
+    if (sessionEnded()) {
+      endSession();
+      clearStash();
+      showLogin(msg || r.message || '');
+      return;
+    }
+    claimTab();
+    touch();
     if (!session()) {
-      let msg = '';
-      try { msg = sessionStorage.getItem('kpr.auth.msg') || ''; sessionStorage.removeItem('kpr.auth.msg'); } catch {}
-      if (r.status === 'none' && !msg) { reauth(''); return; }
+      if (r.status !== 'error' && !msg) { reauth(''); return; }
       showLogin(msg || r.message || '');
       return;
     }
@@ -824,7 +839,7 @@ async function start() {
   await fontsReady();
   keepSession();
   await mount(r);
-  whenIdle(() => { prefetchAll().catch(() => null); });
+  setTimeout(() => { prefetchAll().catch(() => null); }, 400);
 }
 
 start();

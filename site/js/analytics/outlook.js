@@ -255,7 +255,9 @@ function planYear(ctx, yearTarget) {
   const need = ok(lift) ? run(lift) : null;
   const best = run(0, { planRun: runBest });
   const slopeBest = run(1, { planRun: runBest }).os - best.os;
-  const liftBest = ok(target) && slopeBest > 0 && ok(runBest) && runBest < runRate * 0.97 ? (target - best.os) / slopeBest : null;
+  const runLever = ok(runBest) && runBest < runRate * 0.97;
+  const liftBest = ok(target) && slopeBest > 0 && runLever ? (target - best.os) / slopeBest : null;
+  const combo = run(0, { rateKey: 'high', planRun: runLever ? runBest : runRate });
 
   const planPath = (p) => p.path.filter((x) => x.plan);
   const wdPlan = sum(planPath(base).map((x) => x.wd));
@@ -280,6 +282,8 @@ function planYear(ctx, yearTarget) {
     low: { os: lowRun.os, disb: lowRun.disb, path: lowRun.path },
     need: need ? { os: need.os, disb: need.disb, runoff: need.runoff, path: need.path } : null,
     lift, capLift, slope, tier: tierOfLift(lift, capLift), ach: ratio(base.os, target), achCap: ratio(capRun.os, target),
+    combo: { os: combo.os, disb: combo.disb, path: combo.path }, achCombo: ratio(combo.os, target),
+    levers: { runoff: runLever ? best.os - base.os : 0, disburse: capRun.os - base.os, combo: combo.os - base.os },
     runRate, runBest, liftBest,
     rm, wdPlan, prodCap, rmNeed, rmGap: ok(rmNeed) && rm ? rmNeed - rm : null,
     perRm: ok(needDisb) && rm ? needDisb / planCount / rm : null, basePerRm: rm ? base.disb / planCount / rm : null,
@@ -303,9 +307,35 @@ export function splitYear(year, regions) {
     rows: rows.map((r, i) => {
       const add = heads[i] * k;
       const lift = r.year.slope > 0 ? add / scale / r.year.slope : 0;
-      return { ro: r.ro, base: r.year.base, cap: r.year.cap, room: heads[i], add, os: r.year.base + add, disb: r.year.disb * (1 + lift), lift, share: gap > 0 ? add / gap : 0 };
+      return {
+        ro: r.ro, base: r.year.base, cap: r.year.cap, room: heads[i], add: add / scale, os: r.year.base + add / scale, startOs: r.year.startOs,
+        disbBase: r.year.disb, disb: r.year.disb * (1 + lift), planCount: r.year.planCount, lift, tier: lift <= 0.005 ? 'base' : 'stretch',
+        share: gap > 0 ? add / gap : 0,
+      };
     }).sort((a, b) => b.add - a.add || b.room - a.room),
   };
+}
+
+function useRegionCapacity(y) {
+  const room = y.split?.room;
+  if (!ok(room) || room <= 0 || !(y.slope > 0)) return;
+  const own = y.cap.os - y.base.os;
+  const plan = y.base.path.filter((p) => p.plan).length;
+  let k = 0;
+  y.cap.path = y.base.path.map((p, i) => {
+    if (p.plan) k += 1;
+    const w = own > 0 ? (y.cap.path[i].os - p.os) / own : k / plan;
+    return { ...y.cap.path[i], os: p.os + room * w };
+  });
+  y.cap.os = y.base.os + room;
+  y.capLift = room / y.slope;
+  y.achCap = ratio(y.cap.os, y.target);
+  y.tier = tierOfLift(y.lift, y.capLift);
+  y.levers.disburse = room;
+  y.levers.combo = y.levers.runoff + room;
+  y.combo.os = y.base.os + y.levers.combo;
+  y.achCombo = ratio(y.combo.os, y.target);
+  y.capFromRegions = true;
 }
 
 export function outlook(pm, { ro = '', real = null, target = null, yearTarget = null, perRo = true } = {}) {
@@ -365,11 +395,14 @@ export function outlook(pm, { ro = '', real = null, target = null, yearTarget = 
   const lowDisb = nr.low * wdN;
   const baseRun = runRate * close.os;
   const baseOs = close.os + baseDisb - baseRun;
-  const estTarget = ok(dRka) && ok(cur.rka) ? cur.rka + dRka : null;
+  const rkaNow = rkaOf(pm, roKey, stats, cur.month) ?? cur.rka;
+  const estTarget = ok(dRka) && ok(rkaNow) ? rkaNow + dRka : null;
   const targetSource = ok(target) ? 'input' : ok(aheadRka) ? 'rka' : 'estimate';
   const targetN = ok(target) ? target : ok(aheadRka) ? aheadRka : estTarget;
-  const needDisb = ok(targetN) ? targetN - close.os + baseRun : null;
-  const needDisbBest = ok(targetN) ? targetN - close.os + runBest * close.os : null;
+  const stepRka = ok(aheadRka) && ok(rkaNow) ? aheadRka - rkaNow : dRka;
+  const growthGoal = targetSource === 'input' ? (ok(targetN) ? targetN - close.os : null) : stepRka;
+  const needDisb = ok(growthGoal) ? growthGoal + baseRun : null;
+  const needDisbBest = ok(growthGoal) ? growthGoal + runBest * close.os : null;
   const rm = cur.end.jum_rm;
   const ticket = ticketOf(real, roKey === NASIONAL ? '' : roKey, done.slice(-3).map((s) => s.month));
   const months = (cur.complete ? 0 : remWd / wdTot) + 1;
@@ -381,6 +414,8 @@ export function outlook(pm, { ro = '', real = null, target = null, yearTarget = 
   const next = {
     month, wd: wdN, wdFromData: wdInfo.fromData, wdBasis: wdInfo.fromData ? 'data' : holidayBasis(month),
     baseDisb, baseRun, baseOs, target: targetN, estTarget, targetSource, targetGiven: targetSource !== 'estimate',
+    rkaNow, growthGoal,
+    growthBase: baseDisb - baseRun, achGrowth: ok(growthGoal) && growthGoal > 0 ? (baseDisb - baseRun) / growthGoal : null,
     capDisb, lowDisb, capOs: close.os + capDisb - baseRun, lowOs: close.os + lowDisb - baseRun, liftCap: capDisb / baseDisb - 1,
     tier: tierOf(needDisb, baseDisb, capDisb), season: nr.season,
     needDisb, lift: ok(needDisb) ? needDisb / baseDisb - 1 : null,
@@ -396,15 +431,22 @@ export function outlook(pm, { ro = '', real = null, target = null, yearTarget = 
   };
 
   const current = cur.complete ? null : (() => {
-    const needGrowth = ok(cur.rka) ? cur.rka - cur.os : null;
+    const prev = stats.at(-2);
+    const rkaEnd = rkaNow;
+    const rkaPrev = prev && prev.complete && ok(prev.rka) ? prev.rka : null;
+    const stepCur = ok(rkaEnd) && ok(rkaPrev) ? rkaEnd - rkaPrev : null;
+    const grown = cur.os - cur.osStart;
+    const growthLeft = ok(stepCur) ? stepCur - grown : (ok(rkaEnd) ? rkaEnd - cur.os : null);
     const remRun = close.runoff - (cur.runoff ?? 0);
     const remDisb = close.disb - cur.disb;
     const capRem = remDisb > 0 ? remDisb * (curRates.high / curRates.base) : remDisb;
-    const needRem = ok(needGrowth) ? needGrowth + remRun : null;
+    const needRem = ok(growthLeft) ? growthLeft + remRun : null;
     const needGuid = ok(cur.guidance) ? cur.guidance - cur.disb : null;
     return {
-      month: cur.month, wdNow, wdTot, remWd, target: cur.rka, os: cur.os, disb: cur.disb, guidance: cur.guidance,
-      closeOs: close.os, closeDisb: close.disb, ach: ratio(close.os, cur.rka), achDisb: ratio(close.disb, cur.guidance),
+      month: cur.month, wdNow, wdTot, remWd, target: rkaEnd, os: cur.os, osStart: cur.osStart, disb: cur.disb, guidance: cur.guidance,
+      growthGoal: stepCur, grown,
+      closeOs: close.os, closeDisb: close.disb, ach: ratio(close.os, rkaEnd), achDisb: ratio(close.disb, cur.guidance),
+      achGrowth: ok(stepCur) && stepCur > 0 ? (close.os - cur.osStart) / stepCur : null,
       remDisb, remRun, needRem, capRem, tier: tierOf(needRem, remDisb, capRem),
       lift: ok(needRem) && remDisb > 0 ? needRem / remDisb - 1 : null,
       perWd: ok(needRem) && remWd ? needRem / remWd : null, ratePerWd: remWd ? remDisb / remWd : null,
@@ -424,16 +466,19 @@ export function outlook(pm, { ro = '', real = null, target = null, yearTarget = 
       const o = outlook(pm, { ro: r, real, perRo: false });
       if (!o) return null;
       return {
-        ro: r, baseDisb: o.next.baseDisb, capDisb: o.next.capDisb, needDisb: o.next.needDisb, lift: o.next.lift, tier: o.next.tier,
+        ro: r, baseDisb: o.next.baseDisb, capDisb: o.next.capDisb, needDisb: o.next.needDisb, lift: o.next.lift, tier: o.next.tier, growthGoal: o.next.growthGoal,
         achBase: o.next.achBase, target: o.next.target, trend: o.trend,
         cur: o.current ? { needRem: o.current.needRem, remDisb: o.current.remDisb, capRem: o.current.capRem, lift: o.current.lift, ach: o.current.ach, tier: o.current.tier } : null,
         year: o.year ? {
-          base: o.year.base.os, cap: o.year.cap.os, target: o.year.target, lift: o.year.lift, tier: o.year.tier, slope: o.year.slope,
+          base: o.year.base.os, cap: o.year.cap.os, target: o.year.target, lift: o.year.lift, tier: o.year.tier, slope: o.year.slope, startOs: o.year.startOs,
           disb: o.year.base.disb, needDisb: o.year.need?.disb ?? null, planCount: o.year.planCount,
         } : null,
       };
     }).filter(Boolean);
-    if (out.year) out.year.split = splitYear(out.year, out.regions);
+    if (out.year) {
+      out.year.split = splitYear(out.year, out.regions);
+      useRegionCapacity(out.year);
+    }
   }
   return out;
 }
@@ -442,14 +487,17 @@ export function simulate(o, lift) {
   const n = o.next;
   const disb = n.baseDisb * (1 + lift);
   const os = o.close.os + disb - n.baseRun;
-  return { disb, os, growth: os - o.close.os, ach: ratio(os, n.target), gap: ok(n.target) ? os - n.target : null };
+  return { disb, os, growth: os - o.close.os, ach: ratio(os, n.target), gap: ok(n.target) ? os - n.target : null, achGrowth: ok(n.growthGoal) && n.growthGoal > 0 ? (os - o.close.os) / n.growthGoal : null };
 }
 
 export function simulateCurrent(o, lift) {
   const c = o.current;
   const rem = c.remDisb * (1 + lift);
   const os = c.os + rem - c.remRun;
-  return { disb: c.disb + rem, os, ach: ratio(os, c.target), achDisb: ratio(c.disb + rem, c.guidance), gap: ok(c.target) ? os - c.target : null };
+  return {
+    disb: c.disb + rem, os, ach: ratio(os, c.target), achDisb: ratio(c.disb + rem, c.guidance), gap: ok(c.target) ? os - c.target : null,
+    achGrowth: ok(c.growthGoal) && c.growthGoal > 0 ? (os - c.osStart) / c.growthGoal : null,
+  };
 }
 
 export function simulateYear(o, lift) {

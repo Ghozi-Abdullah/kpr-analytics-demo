@@ -23,6 +23,10 @@
 .outlook-strategy .outlook-notes li { padding-left: 0; }
 .outlook-strategy .outlook-notes li::before { display: none; }
 .outlook-strategy .outlook-notes b:first-child { color: var(--navy); }
+.outlook-ro-table { margin-left: auto; padding: 3px 10px; border: 0; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font: inherit; font-size: var(--fs-caption); font-weight: 600; cursor: pointer; }
+.outlook-ro-table:hover { background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent-soft); }
+.outlook-ro-table:focus-visible { outline: 2px solid var(--cakrawala); outline-offset: 1px; }
+.outlook-ro h3 { width: 100%; }
 .outlook-tier-key { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
 .outlook-tier-key .lift-pill { min-width: 0; font-weight: 500; }
 .outlook-target { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-caption); color: var(--muted); }

@@ -8,6 +8,32 @@ export { AuthError };
 
 const cache = new Map();
 const tables = new Map();
+const STASH = 'kpr.data.';
+const STASH_VER = 'kpr.data@';
+const LATEST = 'portfolio/latest.json';
+let stashOn = false;
+
+const stashKeys = () => { try { return Object.keys(sessionStorage).filter((k) => k.startsWith(STASH) || k === STASH_VER); } catch { return []; } };
+const stash = {
+  get(path) {
+    if (!stashOn) return null;
+    try { const raw = sessionStorage.getItem(STASH + path); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  },
+  put(path, payload) {
+    if (MODE !== 'api' || !stashOn || !payload) return;
+    try { sessionStorage.setItem(STASH + path, JSON.stringify(payload)); } catch {}
+  },
+  has(path) {
+    if (path === LATEST) return stashKeys().some((k) => /^kpr\.data\.portfolio\/\d{4}-\d{2}\.json$/.test(k));
+    try { return sessionStorage.getItem(STASH + path) !== null; } catch { return false; }
+  },
+  version() { try { return sessionStorage.getItem(STASH_VER) || ''; } catch { return ''; } },
+};
+
+export function clearStash() {
+  stashOn = false;
+  for (const k of stashKeys()) { try { sessionStorage.removeItem(k); } catch {} }
+}
 const NAME_FIELDS = ['ro', 'kanca', 'rm'];
 
 export const safeName = (v) => (typeof v === 'string' ? v.replace(/[<>"`]/g, '').replace(/&(?=#?[\w]+;)/g, '') : v);
@@ -135,6 +161,7 @@ function gasFetch(path) {
   queue.paths.push(path);
   return queue.promise.then((map) => {
     if (!map || !(path in map)) throw new Error(`Data ${path} tidak ada di spreadsheet agregat. Jalankan buildAll() di project pipeline.`);
+    stash.put(path, map[path]);
     return decodePayload(map[path]);
   });
 }
@@ -143,7 +170,10 @@ export function load(paths) {
   const missing = paths.filter((p) => !cache.has(p));
   if (missing.length) {
     if (MODE !== 'local') {
-      for (const p of missing) cache.set(p, gasFetch(p).then(cleanNames));
+      for (const p of missing) {
+        const hit = stash.get(p);
+        cache.set(p, (hit ? decodePayload(hit) : gasFetch(p)).then(cleanNames));
+      }
     } else {
       for (const p of missing) cache.set(p, fetchLocal(p).then(cleanNames));
     }
@@ -190,10 +220,22 @@ function keep(path, payload) {
 
 export async function boot(paths = []) {
   if (MODE !== 'local') {
-    const res = await remote('getBoot', MODE === 'api' ? paths : []);
+    const want = MODE === 'api' ? paths.filter((p) => !stash.has(p)) : [];
+    const res = await remote('getBoot', want);
     const meta = cleanNames(await decodePayload(res.meta));
     cache.set('meta.json', Promise.resolve(meta));
-    for (const [path, payload] of Object.entries(res.files || {})) keep(path, payload);
+    if (MODE === 'api') {
+      const ver = meta?.generated_at || '';
+      if (stash.version() !== ver) {
+        clearStash();
+        try { sessionStorage.setItem(STASH_VER, ver); } catch {}
+      }
+      stashOn = !!ver;
+    }
+    for (const [path, payload] of Object.entries(res.files || {})) {
+      keep(path, payload);
+      stash.put(path, payload);
+    }
     return { email: res.email || '', role: res.role || 'viewer', meta, layouts: res.layouts || {}, mode: MODE };
   }
   const meta = await loadOne('meta.json');

@@ -6,11 +6,23 @@ import { empty, chartBox, canvasOf, legend, legendOf } from './widget-kit.js';
 import { lineChart, bindLegend, C } from '../charts/charts.js';
 import { outlook, simulate, simulateCurrent, simulateYear } from '../analytics/outlook.js';
 import { rpM, pct, num, roName, monthName, monthYear } from '../analytics/wording.js';
-import { outlookText, roRows, liftText, moreNames, tierOf, yearLabel, yearTable } from '../analytics/outlook-text.js';
+import { outlookText, roRows, liftText, moreNames, tierOf, yearLabel, yearTable, yearRoTable } from '../analytics/outlook-text.js';
+import { openTable } from '../core/ui.js';
 
 const plainText = (h) => String(h || '').replace(/<[^>]+>/g, '');
 const figureHtml = (f) => `<li><span class="outlook-figure-label">${esc(f.label)}</span><b class="outlook-figure-value">${f.value}</b>${f.sub ? `<small>${f.sub}</small>` : ''}</li>`;
 const BASE_GRAY = '#86868B';
+const toT = (v) => (ok(v) ? fmt.num(v / 1000, 2) : '');
+
+function parseT(text) {
+  let t = String(text || '').replace(/rp|t|\s/gi, '');
+  if (t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(',', '.');
+  else if (t.includes(',')) t = t.replace(',', '.');
+  else if ((t.match(/\./g) || []).length > 1) t = t.replace(/\./g, '');
+  const v = Number(t);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  return v > 1000 ? v : v * 1000;
+}
 
 function roList(o, mode, cid) {
   const rows = roRows(o, mode);
@@ -26,11 +38,11 @@ function roList(o, mode, cid) {
   ].filter(Boolean).join(' ');
   const unit = mode === 'year' ? ' per bulan' : '';
   return `<section class="outlook-ro" aria-labelledby="${cid}">
-    <h3 id="${cid}">${icon('bars-horizontal', 15)}Kebutuhan per RO${mode === 'year' ? ', disburse per bulan' : ''}</h3>
+    <h3 id="${cid}">${icon('bars-horizontal', 15)}${mode === 'year' ? 'Pembagian target per RO, disburse per bulan' : 'Kebutuhan per RO'}${mode === 'year' ? '<button type="button" class="outlook-ro-table" data-ro-table>Tabel per RO</button>' : ''}</h3>
     ${summary ? `<p class="outlook-ro-sum">${esc(summary)}</p>` : ''}
     <ol class="outlook-ro-list">${rows.map((r) => {
       const t = tierOf(r.tier);
-      const title = `${roName(r.ro)}: dibutuhkan ${ok(r.need) ? rpM(Math.max(0, r.need)) : '–'}${unit}, laju biasa ${rpM(r.base)}${unit}${mode === 'year' ? '' : `, laju terbaik ${ok(r.cap) ? rpM(r.cap) : '–'}`}, kenaikan ${liftText(r.lift)}, ${t.word}`;
+      const title = `${roName(r.ro)}: dibutuhkan ${ok(r.need) ? rpM(Math.max(0, r.need)) : '–'}${unit}, laju biasa ${rpM(r.base)}${unit}${mode === 'year' ? '' : `, laju terbaik ${ok(r.cap) ? rpM(r.cap) : '–'}`}, kenaikan ${liftText(r.lift)}, ${t.word}${mode === 'year' && ok(r.target) ? `. Target OS akhir tahun ${rpM(r.target)}` : ''}`;
       return `<li><button type="button" data-ro="${esc(r.ro)}" title="${esc(title)}">
         <span class="outlook-ro-name">${esc(roName(r.ro))}</span>
         <span class="outlook-ro-need">${esc(ok(r.need) ? rpM(Math.max(0, r.need)) : '–')}</span>
@@ -90,7 +102,7 @@ export function outlookWidget(resolve) {
       const basis = mode === 'current'
         ? `${num(o.current.remWd)} hari kerja tersisa`
         : mode === 'year' ? `${num(y.wdPlan)} hari kerja di ${y.year}` : `${num(n.wd)} hari kerja di ${monthName(n.month)}`;
-      const targetInput = mode === 'current' ? '' : `<label class="outlook-target"><span>${mode === 'year' ? `Target OS akhir ${y.year}` : 'Target OS'}</span><input type="number" inputmode="decimal" step="10" min="0" id="${api.cid('target')}" value="${ok(targetValue) ? Math.round(targetValue) : ''}"><span>M</span></label>`;
+      const targetInput = mode === 'current' ? '' : `<label class="outlook-target"><span>${mode === 'year' ? `Target OS akhir ${y.year}` : 'Target OS'}</span><input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="${api.cid('target')}" value="${toT(targetValue)}" placeholder="0,00" title="Isi dalam triliun, misalnya 75,7"><span>T</span></label>`;
       const yearBlock = mode === 'year' ? `<section class="outlook-path" aria-labelledby="${api.cid('path')}">
           <header><h3 id="${api.cid('path')}">${icon('trend', 15)}Jalur OS sampai Desember ${y.year}</h3>${legend(api, 'ylg')}</header>
           ${chartBox(api, 'yc', `Jalur OS sampai akhir ${y.year}: target, laju terbaik, dan laju biasa`)}
@@ -130,45 +142,60 @@ export function outlookWidget(resolve) {
       const resultEl = api.body.querySelector(`#${CSS.escape(api.cid('result'))}`);
       const meterEl = api.body.querySelector(`#${CSS.escape(api.cid('meter'))}`);
       const outEl = api.body.querySelector(`#${CSS.escape(api.cid('lift-out'))}`);
-      const meter = (ach) => {
+      const markEl = meterEl.parentElement.querySelector('span');
+      const meter = (ach, growth) => {
+        if (ok(growth)) {
+          meterEl.style.width = `${Math.min(1.25, Math.max(0, growth)) / 1.25 * 100}%`;
+          meterEl.dataset.level = growth >= 1 ? 'good' : growth >= 0.9 ? 'warn' : 'bad';
+          markEl.style.left = '80%';
+          return;
+        }
         meterEl.style.width = `${ok(ach) ? Math.min(100, Math.max(0, (ach - 0.95) / 0.07 * 100)) : 0}%`;
         meterEl.dataset.level = !ok(ach) ? 'warn' : ach >= 1 ? 'good' : ach >= 0.99 ? 'warn' : 'bad';
+        markEl.style.left = '';
       };
+      const growthCell = (r, goal) => (ok(r) ? `<div title="${esc(`Target tumbuh menurut RKA ${rpM(goal)}`)}"><dt>Tumbuh vs target RKA</dt><dd>${esc(pct(r, 0))}</dd></div>` : '');
       const paint = (v) => {
         outEl.textContent = liftText(v);
         if (mode === 'current') {
           const s = simulateCurrent(o, v);
-          resultEl.innerHTML = `<div><dt>OS akhir ${esc(monthName(o.current.month))}</dt><dd>${esc(rpM(s.os))}</dd></div>
-            <div><dt>Capaian RKA OS</dt><dd>${esc(pct(s.ach, 1))}</dd></div>
+          resultEl.innerHTML = `${growthCell(s.achGrowth, o.current.growthGoal)}
+            <div><dt>OS akhir ${esc(monthName(o.current.month))}</dt><dd>${esc(rpM(s.os))}</dd></div>
             <div><dt>Capaian guidance</dt><dd>${esc(pct(s.achDisb, 1))}</dd></div>`;
-          meter(s.ach);
+          meter(s.ach, s.achGrowth);
         } else if (mode === 'year') {
           const s = simulateYear(o, v);
           resultEl.innerHTML = `<div><dt>Disburse ${esc(String(y.year))}</dt><dd>${esc(rpM(s.disb))}</dd></div>
             <div><dt>OS akhir ${esc(String(y.year))}</dt><dd>${esc(rpM(s.os))}</dd></div>
             <div><dt>Capaian target</dt><dd>${esc(ok(s.ach) ? pct(s.ach, 1) : '–')}</dd></div>`;
-          meter(s.ach);
+          meter(s.ach, null);
         } else {
           const s = simulate(o, v);
+          const growth = n.targetSource === 'input' ? null : s.achGrowth;
           resultEl.innerHTML = `<div><dt>Disburse ${esc(monthName(n.month))}</dt><dd>${esc(rpM(s.disb))}</dd></div>
-            <div><dt>OS akhir bulan</dt><dd>${esc(rpM(s.os))}</dd></div>
-            <div><dt>Capaian target</dt><dd>${esc(ok(s.ach) ? pct(s.ach, 1) : '–')}</dd></div>`;
-          meter(s.ach);
+            ${growthCell(growth, n.growthGoal) || `<div><dt>Capaian target</dt><dd>${esc(ok(s.ach) ? pct(s.ach, 1) : '–')}</dd></div>`}
+            <div><dt>OS akhir bulan</dt><dd>${esc(rpM(s.os))}</dd></div>`;
+          meter(s.ach, growth);
         }
       };
       paint(lift);
       const slider = api.body.querySelector(`#${CSS.escape(api.cid('lift'))}`);
       slider.addEventListener('input', () => { state.lift = Number(slider.value) / 100; paint(state.lift); });
       const targetEl = api.body.querySelector(`#${CSS.escape(api.cid('target'))}`);
+      targetEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); targetEl.blur(); } });
       targetEl?.addEventListener('change', () => {
-        const v = Number(String(targetEl.value).replace(',', '.'));
-        const value = Number.isFinite(v) && v > 0 ? v : null;
+        const value = parseT(targetEl.value);
         if (mode === 'year') state.yearTarget = value; else state.target = value;
         state.lift = null;
         this.render(api);
       });
       onSeg(api.body, api.cid('mode'), (v) => { state.mode = v; state.lift = null; this.render(api); });
       api.body.querySelectorAll('.outlook-ro-list [data-ro]').forEach((btn) => btn.addEventListener('click', () => api.set({ ro: btn.dataset.ro })));
+      api.body.querySelector('[data-ro-table]')?.addEventListener('click', () => openTable({
+        title: `Pembagian target ${y.year} per RO`, subtitle: ok(y.target) ? `Target OS nasional akhir ${y.year} ${rpM(y.target)}` : '',
+        columns: ['RO', `OS akhir ${y.year - 1} (proyeksi)`, `Target OS akhir ${y.year}`, 'Tumbuh', 'Disburse per bulan', 'Kenaikan dari laju biasa', 'Status'],
+        rows: yearRoTable(o),
+      }));
       const periodName = mode === 'current' ? `sisa ${monthYear(o.current.month)}` : mode === 'year' ? yearLabel(y).toLowerCase() : monthYear(n.month);
       api.tools({
         copy: () => [
@@ -180,7 +207,7 @@ export function outlookWidget(resolve) {
         png: mode === 'year' ? api.cid('yc') : null,
         table: mode === 'year' ? () => ({
           title: `Rencana bulanan ${y.year}`, subtitle: `${o.national ? 'Nasional' : roName(o.roKey)}${ok(y.target) ? `, target OS akhir ${y.year} ${rpM(y.target)}` : ''}`,
-          columns: ['Bulan', 'Hari kerja', 'Disburse laju biasa', 'Disburse jalur target', 'Disburse laju terbaik', 'OS laju biasa', 'OS jalur target', 'Catatan'],
+          columns: ['Bulan', 'Hari kerja', 'Disburse laju biasa', 'Disburse jalur target', 'Target tumbuh OS', 'OS laju biasa', 'OS jalur target', 'Catatan'],
           rows: yearTable(o),
         }) : o.national ? () => ({
           title: 'Kebutuhan per RO', subtitle: periodName,
@@ -193,20 +220,22 @@ export function outlookWidget(resolve) {
 }
 
 function footText(o, mode, baseMonths) {
-  const trend = o.trend > 0.002 ? `naik sekitar ${pct(o.trend, 1)} per bulan` : o.trend < -0.002 ? `turun sekitar ${pct(-o.trend, 1)} per bulan` : 'datar';
-  const method = `Laju biasa memakai tren disburse per hari kerja ${baseMonths} (${trend}, makin jauh makin diredam)${o.seasonUsed ? ', dikalikan pola bulanan yang dilunakkan separuh' : ''}. Laju terbaik diambil dari bulan-bulan terbaik dalam 6 bulan penuh terakhir (bulan terbaik kedua, atau lonjakan terbaik di atas tren), jadi pernah benar-benar dicapai.`;
-  if (mode === 'current') return `${method} Untuk sisa bulan, dipakai juga pola hari kerja 3 bulan penuh terakhir: berapa bagian disburse dan runoff yang biasanya terjadi setelah hari kerja yang sama.`;
+  const how = `Laju biasa = disburse per hari kerja menurut tren ${baseMonths}. Laju terbaik = bulan-bulan terbaik dalam 6 bulan itu. Runoff (angsuran dan pelunasan) = rata-rata 3 bulan terakhir, ${pct(o.runRate, 2)} dari OS per bulan.`;
+  if (mode === 'current') return `Target tumbuh = RKA OS akhir bulan ini dikurangi RKA akhir bulan lalu, dari kolom RKA. Disburse dibutuhkan = sisa target tumbuh + perkiraan runoff sisa bulan. ${how}`;
   if (mode === 'year') {
     const y = o.year;
-    const wd = y.wdBasis === 'data' ? 'kolom Hari Kerja' : y.wdBasis === 'skb' ? 'kalender kerja Senin sampai Jumat dikurangi libur nasional dan cuti bersama SKB 3 Menteri' : 'Senin sampai Jumat di luar libur nasional bertanggal tetap';
     const src = {
-      input: '', rka: `Target memakai RKA Desember ${y.year} dari data.`,
-      'rka-growth': `Target awal memakai pertumbuhan yang sama dengan RKA ${y.year - 1} terhadap OS akhir ${y.year - 2}; isi kolom target bila RKA ${y.year} sudah ada.`,
-      'rka-trend': `RKA Desember ${y.year - 1} belum ada di data, jadi target awal memakai laju RKA terakhir yang disetahunkan; isi kolom target bila RKA ${y.year} sudah ada.`,
-      trend: `Belum ada RKA di data, jadi target awal memakai pertumbuhan OS tahun ini yang disetahunkan; isi kolom target bila RKA ${y.year} sudah ada.`,
+      input: 'Target memakai angka yang Anda isi.',
+      rka: `Target = RKA Desember ${y.year} dari kolom RKA.`,
+      'rka-growth': `Target awal = proyeksi OS akhir ${y.year - 1} ditambah pertumbuhan yang sama dengan RKA ${y.year - 1} (${pct(y.growthRef, 1)}). Isi kolom target bila RKA ${y.year} sudah ada.`,
+      'rka-trend': `RKA Desember ${y.year - 1} belum ada, jadi target awal memakai laju RKA terakhir yang disetahunkan (${pct(y.growthRef, 1)}). Isi kolom target bila RKA ${y.year} sudah ada.`,
+      trend: `Belum ada RKA di data, jadi target awal memakai pertumbuhan OS tahun ini yang disetahunkan (${pct(y.growthRef, 1)}). Isi kolom target bila RKA ${y.year} sudah ada.`,
     }[y.targetSource] || '';
-    return `${method} Runoff memakai rasio 3 bulan terakhir. Hari kerja dari ${wd}. Bulan sebelum ${y.year} dihitung dengan laju biasa sebagai jembatan. ${src}`;
+    return `${src} Tiap bulan: OS bulan lalu + disburse − runoff. ${how} Hari kerja ${y.year} dari kalender libur nasional dan cuti bersama.`;
   }
   const n = o.next;
-  return `${method} Hari kerja ${monthName(n.month)} dari ${n.wdBasis === 'data' ? 'kolom Hari Kerja' : n.wdBasis === 'skb' ? 'kalender kerja dikurangi libur nasional dan cuti bersama' : 'Senin sampai Jumat di luar libur nasional bertanggal tetap'}. ${n.targetSource === 'rka' ? `Target memakai RKA ${monthName(n.month)} dari data.` : n.targetSource === 'estimate' ? `RKA ${monthName(n.month)} belum ada di data, jadi target memakai kenaikan RKA rata-rata 3 bulan terakhir; isi kolom Target OS bila angka resmi sudah ada.` : ''}`;
+  const target = n.targetSource === 'input' ? 'Target memakai angka yang Anda isi.'
+    : n.targetSource === 'rka' ? `Target tumbuh = RKA OS ${monthName(n.month)} dikurangi RKA ${monthName(o.cur.month)}, dari kolom RKA.`
+      : `RKA ${monthName(n.month)} belum ada di data, jadi target tumbuh = kenaikan RKA rata-rata 3 bulan terakhir.`;
+  return `${target} Disburse dibutuhkan = target tumbuh + perkiraan runoff. ${how}`;
 }

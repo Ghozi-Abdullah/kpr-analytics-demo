@@ -1314,7 +1314,7 @@ async function answerForecast(q, D) {
         title: `Dengan laju biasa, disburse ${where} ${m} diperkirakan ${b(rpM(c.closeDisb))}${ok(c.achDisb) ? ` (${pct(c.achDisb, 1)} dari guidance ${rpM(c.guidance)})` : ''} dan OS akhir bulan ${b(rpM(c.closeOs))}${ok(c.ach) ? ` (capaian RKA ${pct(c.ach, 1)})` : ''}.`,
         lines: [
           `Bulan berjalan baru ${num(c.wdNow)} hari kerja, jadi proyeksi memakai pola 3 bulan penuh terakhir: berapa bagian disburse dan runoff yang biasanya terjadi setelah hari kerja yang sama.`,
-          ok(c.lift) && c.lift > 0 ? `Agar OS akhir bulan sesuai RKA, disburse sisa bulan perlu ${rpM(c.needRem)}, ${liftText(c.lift)} dari laju biasa.` : '',
+          ok(c.lift) && c.lift > 0 ? `Agar OS tumbuh sesuai RKA bulan ini, disburse sisa bulan perlu ${rpM(c.needRem)}, ${liftText(c.lift)} dari laju biasa.` : '',
           'Proyeksi dari pola bulan berjalan sendiri tersedia mulai hari kerja ke-5.',
         ].filter(Boolean),
         link: { view: 'ringkasan', params: { ro }, widget: 'outlook', label: 'Buka panel Outlook' },
@@ -1329,7 +1329,7 @@ async function answerForecast(q, D) {
     if (n && ok(n.baseOs)) {
       const tw = { input: 'target', rka: 'RKA' }[n.targetSource] || 'perkiraan RKA';
       lines.push(`Bulan ${monthName(ps.bulan)} sudah selesai. Untuk ${monthName(n.month)}, dengan laju biasa OS diperkirakan ${b(rpM(n.baseOs))}${ok(n.achBase) ? `, ${pct(n.achBase, 1)} dari ${tw} ${rpM(n.target)}` : ''}.`);
-      if (ok(n.needDisb) && ok(n.lift)) lines.push(`Agar tepat 100%, disburse ${monthName(n.month)} perlu ${rpM(n.needDisb)}, ${liftText(n.lift)} dari laju biasa.`);
+      if (ok(n.needDisb) && ok(n.lift)) lines.push(`Agar OS tumbuh sesuai kenaikan RKA (${rpM(n.growthGoal)}), disburse ${monthName(n.month)} perlu ${rpM(Math.max(0, n.needDisb))}, ${liftText(n.lift)} dari laju biasa.`);
     }
   }
   return { ok: true, title: cards[0].implication || cards[0].headline, lines, insights: cards, chips: chips([['Metode', 'pola kumulatif hari kerja 6 bulan terakhir'], ['Wilayah', roName(ro || NASIONAL)], ['Sumber', 'Performance']]), link: linkFor('perf', q, D, null, 'pace'), followups: ['RO mana yang paling jauh dari guidance?', 'Kenapa disburse bulan lalu di bawah guidance?'] };
@@ -1509,7 +1509,7 @@ function answerPlan(q, D) {
         title: `Bila disburse sisa ${m} ${liftText(v)} dari laju biasa, OS ${where} akhir bulan sekitar ${b(rpM(r.os))}, capaian RKA ${b(pct(r.ach, 1))}.`,
         lines: [
           ok(r.gap) ? (r.gap >= 0 ? `Lebih ${rpM(r.gap)} dari RKA ${rpM(o.current.target)}.` : `Masih kurang ${rpM(-r.gap)} dari RKA ${rpM(o.current.target)}.`) : '',
-          ok(o.current.lift) ? `Kenaikan yang pas untuk 100% RKA: ${b(liftText(o.current.lift))} (sisa bulan ${rpM(Math.max(0, o.current.needRem))}).` : '',
+          ok(o.current.lift) ? `Kenaikan agar tumbuh sesuai RKA bulan ini: ${b(liftText(o.current.lift))} (sisa bulan ${rpM(Math.max(0, o.current.needRem))}).` : '',
           ok(r.achDisb) ? `Capaian guidance disburse menjadi ${pct(r.achDisb, 1)}.` : '',
         ].filter(Boolean),
         link,
@@ -1535,7 +1535,7 @@ function answerPlan(q, D) {
       title: `Bila disburse ${m} ${liftText(v)} dari laju biasa (${b(rpM(r.disb))}), OS ${where} akhir ${m} sekitar ${b(rpM(r.os))}${ok(r.ach) ? `, capaian ${b(pct(r.ach, 1))} terhadap ${{ input: 'target', rka: 'RKA' }[n.targetSource] || 'perkiraan RKA'} ${rpM(n.target)}` : ''}.`,
       lines: [
         ok(r.gap) ? (r.gap >= 0 ? `Lebih ${rpM(r.gap)} dari target.` : `Masih kurang ${rpM(-r.gap)} dari target.`) : '',
-        ok(n.lift) ? `Kenaikan yang pas untuk 100%: ${b(liftText(n.lift))} (disburse ${rpM(n.needDisb)}).` : '',
+        ok(n.lift) ? `Kenaikan agar tumbuh sesuai RKA: ${b(liftText(n.lift))} (disburse ${rpM(Math.max(0, n.needDisb))}).` : '',
         `Pertumbuhan OS ${rpM(r.growth)} setelah runoff sekitar ${rpM(n.baseRun)}.`,
       ].filter(Boolean),
       link,

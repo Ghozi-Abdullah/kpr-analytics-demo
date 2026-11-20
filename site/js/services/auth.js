@@ -6,6 +6,11 @@ const PENDING = 'kpr.auth.pending';
 const HINT = 'kpr.auth.hint';
 const SILENT = 'kpr.auth.silent';
 const SILENT_GAP = 2 * 60 * 1000;
+const TAB = 'kpr.auth.tab';
+export const SESSION_HOURS = 12;
+export const REOPEN_MINUTES = 30;
+const SESSION_MAX = SESSION_HOURS * 3600 * 1000;
+const REOPEN_GRACE = REOPEN_MINUTES * 60 * 1000;
 
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
 export const isLocalHost = () => LOCAL_HOSTS.includes(location.hostname);
@@ -74,14 +79,35 @@ export function handleRedirect() {
   let claims;
   try { claims = decodeJwt(token); } catch { return { status: 'error', message: 'Token login tidak terbaca.' }; }
   if (claims.nonce !== pending.nonce || claims.aud !== API.clientId) return { status: 'error', message: 'Token login tidak valid untuk dashboard ini.' };
-  store.set({ token, exp: claims.exp, email: claims.email || '' });
+  const prev = store.get();
+  const now = Date.now();
+  const renew = pending.silent && prev?.started && prev.email === (claims.email || '') && now - prev.started < SESSION_MAX;
+  store.set({ token, exp: claims.exp, email: claims.email || '', started: renew ? prev.started : now, seen: now });
+  ss.set(TAB, renew ? prev.started : now);
   if (claims.email) ls.set(HINT, claims.email);
   return { status: 'ok' };
 }
 
+export function sessionEnded() {
+  const s = store.get();
+  if (!s?.started) return true;
+  const now = Date.now();
+  if (now - s.started > SESSION_MAX) return true;
+  return ss.get(TAB) !== s.started && now - (s.seen || 0) > REOPEN_GRACE;
+}
+
+export function claimTab() { const s = store.get(); if (s?.started) ss.set(TAB, s.started); }
+
+export function touch() {
+  const s = store.get();
+  if (!s?.started) return;
+  const now = Date.now();
+  if (now - (s.seen || 0) > 30000) store.set({ ...s, seen: now });
+}
+
 export function session() {
   const s = store.get();
-  if (!s || !s.token || !s.exp || s.exp * 1000 - Date.now() < 60000) return null;
+  if (!s || !s.token || !s.exp || s.exp * 1000 - Date.now() < 60000 || sessionEnded()) return null;
   return s;
 }
 
@@ -98,9 +124,18 @@ export const clearSilent = () => ss.del(SILENT);
 
 export function logout() {
   store.del();
+  ss.del(TAB);
   ls.del(HINT);
 }
 
-export function dropSession() { store.del(); }
+export function endSession() {
+  store.del();
+  ss.del(TAB);
+}
+
+export function dropSession() {
+  const s = store.get();
+  if (s) store.set({ ...s, token: null });
+}
 
 addEventListener('storage', (e) => { if (API_MODE && e.key === HINT && !e.newValue) location.reload(); });

@@ -1,4 +1,4 @@
-import { ok } from '../core/values.js';
+import { ok, ratio } from '../core/values.js';
 import { fmt } from '../core/format.js';
 import { rpM, pct, signedPct, num, monthName, listJoin, roName } from './wording.js';
 
@@ -26,40 +26,59 @@ export const tierOf = (t) => TIER[t] || TIER.none;
 const figure = (label, value, sub) => ({ label, value, sub });
 const targetWords = { input: 'target yang Anda isi', rka: 'RKA', estimate: 'perkiraan RKA' };
 
-function tierLine(tier, what) {
-  if (tier === 'base') return `${what} sudah tercapai dengan laju biasa.`;
-  if (tier === 'stretch') return `${what} butuh dorongan, tetapi masih di bawah laju terbaik yang pernah dicapai, jadi ${b('realistis')}.`;
-  if (tier === 'beyond') return `${what} ${b('di atas laju terbaik yang pernah dicapai')}, jadi perlu langkah khusus atau target ditinjau.`;
+function tierLine(tier) {
+  if (tier === 'base') return 'Laju biasa sudah cukup.';
+  if (tier === 'stretch') return `Butuh dorongan, tetapi masih di bawah laju terbaik yang pernah dicapai, jadi ${b('realistis')}.`;
+  if (tier === 'beyond') return `Ini ${b('di atas laju terbaik yang pernah dicapai')}, jadi perlu langkah khusus atau target ditinjau.`;
   return '';
 }
+
+const liftWords = (v) => (!ok(v) ? '' : Math.abs(v) < 0.005 ? 'sama dengan laju biasa'
+  : v >= 0.95 ? `${num(1 + v, 1)} kali laju biasa`
+    : v > 0 ? `${pct(v, v < 0.1 ? 1 : 0)} di atas laju biasa` : `${pct(-v, -v < 0.1 ? 1 : 0)} di bawah laju biasa`);
 
 function nextText(o, where) {
   const n = o.next;
   const m = monthName(n.month);
-  const targetWord = targetWords[n.targetSource] || 'perkiraan RKA';
+  const prevM = monthName(o.cur.month);
   let lead;
-  if (!ok(n.target)) lead = `Laju biasa memberi disburse ${b(rpM(n.baseDisb))} dan OS akhir ${m} ${b(rpM(n.baseOs))}.`;
-  else if (n.lift <= 0) lead = `Dengan laju biasa, OS ${where} akhir ${m} diperkirakan ${b(rpM(n.baseOs))}, sudah di atas ${targetWord} ${b(rpM(n.target))}. Disburse ${b(rpM(n.needDisb))} sudah cukup.`;
-  else lead = `Agar OS ${where} akhir ${m} mencapai ${b(rpM(n.target))} (${targetWord}), disburse perlu sekitar ${b(rpM(n.needDisb))}, ${b(pct(n.lift, n.lift < 0.1 ? 1 : 0))} di atas laju biasa (${rpM(n.baseDisb)}). ${tierLine(n.tier, 'Target ini')}`;
+  if (n.targetSource === 'input') {
+    lead = ok(n.needDisb)
+      ? `Agar OS ${where} akhir ${m} mencapai ${b(rpM(n.target))} (target yang Anda isi), disburse perlu sekitar ${b(rpM(n.needDisb))}, ${liftWords(n.lift)}. ${tierLine(n.tier)}`
+      : `Laju biasa memberi disburse ${b(rpM(n.baseDisb))} dan OS akhir ${m} ${b(rpM(n.baseOs))}.`;
+  } else if (!ok(n.growthGoal)) {
+    lead = `Laju biasa memberi disburse ${b(rpM(n.baseDisb))} dan OS akhir ${m} ${b(rpM(n.baseOs))}.`;
+  } else {
+    const from = n.targetSource === 'rka'
+      ? `RKA OS naik ${b(rpM(n.growthGoal))} dari ${prevM} ke ${m}.`
+      : `RKA ${m} belum ada di data. Bila RKA naik seperti 3 bulan terakhir, kenaikannya ${b(rpM(n.growthGoal))}.`;
+    lead = n.growthGoal <= 0
+      ? `${from} Laju biasa (disburse ${rpM(n.baseDisb)}) sudah cukup.`
+      : `${from} Agar OS ${where} ikut naik sebesar itu, disburse ${m} perlu sekitar ${b(rpM(n.needDisb))}, ${liftWords(n.lift)}. ${tierLine(n.tier)}`;
+  }
   const figures = [
-    figure('Disburse dibutuhkan', ok(n.needDisb) ? rpM(n.needDisb) : '–', `laju biasa ${rpM(n.baseDisb)}`),
-    figure('Laju terbaik', rpM(n.capDisb), `OS akhir ${rpM(n.capOs)}`),
-    figure('Per hari kerja', ok(n.perWd) ? rpM(n.perWd) : '–', `biasanya ${rpM(n.rate)}, ${num(n.wd)} hari kerja`),
-    ok(n.needDeb) ? figure('Debitur baru', `± ${num(Math.round(n.needDeb / 10) * 10)}`, `biasanya ± ${num(Math.round(n.baseDeb / 10) * 10)}, tiket ${rpM(n.ticket / 1e9)}`)
-      : n.rm ? figure('Per RM', ok(n.perRm) ? rpM(n.perRm) : '–', `biasanya ${rpM(n.basePerRm)}, ${num(n.rm)} RM`)
-        : figure('Runoff diperkirakan', rpM(n.baseRun), `${pct(o.runRate, 2)} dari OS awal bulan`),
+    n.targetSource === 'input'
+      ? figure('Target OS', rpM(n.target), `kini ${rpM(o.close.os)}`)
+      : figure('Target tumbuh (RKA)', ok(n.growthGoal) ? rpM(n.growthGoal) : '–', ok(n.target) ? `RKA ${m} ${rpM(n.target)}` : ''),
+    figure('Disburse dibutuhkan', ok(n.needDisb) ? rpM(Math.max(0, n.needDisb)) : '–', `laju biasa ${rpM(n.baseDisb)}`),
+    figure('Per hari kerja', ok(n.perWd) ? rpM(Math.max(0, n.perWd)) : '–', `biasanya ${rpM(n.rate)}, ${num(n.wd)} hari kerja`),
+    figure('Laju terbaik', rpM(n.capDisb), `disburse ${m} yang pernah dicapai`),
   ];
   const facts = [
-    ok(n.perWd) ? `Per hari kerja ${b(rpM(n.perWd))}, biasanya ${rpM(n.rate)} (${num(n.wd)} hari kerja di ${m}).` : '',
-    n.rm && ok(n.perRm) ? `Per RM ${b(rpM(n.perRm))}, biasanya ${rpM(n.basePerRm)} (${num(n.rm)} RM).` : '',
-    ok(n.needDeb) ? `Setara sekitar ${b(num(Math.round(n.needDeb / 10) * 10))} debitur baru dengan tiket rata-rata ${rpM(n.ticket / 1e9)} (biasanya ${num(Math.round(n.baseDeb / 10) * 10)}).` : '',
-    `Laju terbaik 6 bulan terakhir memberi disburse ${rpM(n.capDisb)} dan OS akhir ${rpM(n.capOs)}.`,
+    ok(n.perWd) ? `Per hari kerja ${b(rpM(Math.max(0, n.perWd)))}, biasanya ${rpM(n.rate)} (${num(n.wd)} hari kerja di ${m}).` : '',
+    n.rm && ok(n.perRm) ? `Per RM ${b(rpM(Math.max(0, n.perRm)))}, biasanya ${rpM(n.basePerRm)} (${num(n.rm)} RM).` : '',
+    ok(n.needDeb) ? `Setara sekitar ${b(num(Math.max(0, Math.round(n.needDeb / 10) * 10)))} debitur baru dengan tiket rata-rata ${rpM(n.ticket / 1e9)} (biasanya ${num(Math.round(n.baseDeb / 10) * 10)}).` : '',
   ].filter(Boolean);
   const notes = [
-    `Laju biasa: OS akhir ${rpM(n.baseOs)}${ok(n.target) ? `, capaian ${pct(n.achBase, 1)}${n.baseOs < n.target ? `, kurang ${rpM(n.target - n.baseOs)}` : ''}` : ''}. Rentang wajar ${rpM(n.lowOs)} sampai ${rpM(n.capOs)}.`,
+    n.targetSource === 'input'
+      ? `Dengan laju biasa, OS akhir ${m} sekitar ${rpM(n.baseOs)} (capaian target ${pct(n.achBase, 1)}).`
+      : ok(n.growthGoal) && n.growthGoal > 0
+        ? `Dengan laju biasa, OS tumbuh ${rpM(n.growthBase)} di ${m}, ${pct(n.achGrowth, 0)} dari target tumbuh ${rpM(n.growthGoal)}.`
+        : `Dengan laju biasa, OS tumbuh ${rpM(n.growthBase)} di ${m}.`,
+    `Laju terbaik memberi disburse ${rpM(n.capDisb)} dan OS tumbuh ${rpM(n.capDisb - n.baseRun)}.`,
   ];
-  if (ok(n.liftBest) && o.runBest < o.runRate * 0.97) {
-    notes.push(`Bila runoff turun ke level terbaik 6 bulan terakhir (${pct(o.runBest, 2)} dari OS, kini ${pct(o.runRate, 2)}), kenaikan disburse yang dibutuhkan cukup ${b(liftText(n.liftBest))}.`);
+  if (ok(n.liftBest) && ok(n.lift) && n.lift > 0 && o.runBest < o.runRate * 0.97) {
+    notes.push(`Bila runoff turun ke level terbaik 6 bulan terakhir (${pct(o.runBest, 2)} dari OS, kini ${pct(o.runRate, 2)}), kenaikan disburse cukup ${b(liftText(n.liftBest))}.`);
   }
   const q = n.npl;
   const quality = [];
@@ -81,17 +100,18 @@ function currentText(o, where) {
   const m = monthName(c.month);
   let lead;
   if (!ok(c.needRem)) lead = `Sisa ${num(c.remWd)} hari kerja ${m}, proyeksi OS akhir bulan ${b(rpM(c.closeOs))}.`;
-  else if (c.lift <= 0) lead = `Dengan laju biasa, OS ${where} akhir ${m} sekitar ${b(rpM(c.closeOs))}, sudah di atas RKA ${b(rpM(c.target))}.`;
-  else lead = `Agar OS ${where} akhir ${m} sesuai RKA ${b(rpM(c.target))}, sisa ${num(c.remWd)} hari kerja perlu disburse ${b(rpM(c.needRem))}, ${b(pct(c.lift, c.lift < 0.1 ? 1 : 0))} di atas laju biasa untuk sisa bulan. ${tierLine(c.tier, 'Kebutuhan ini')}`;
+  else if (!ok(c.growthGoal)) lead = `Agar OS ${where} akhir ${m} sesuai RKA ${b(rpM(c.target))}, sisa ${num(c.remWd)} hari kerja perlu disburse ${b(rpM(Math.max(0, c.needRem)))}, ${liftWords(c.lift)}. ${tierLine(c.tier)}`;
+  else if (c.grown >= c.growthGoal && c.needRem <= c.remDisb) lead = `Target tumbuh ${m} menurut RKA ${b(rpM(c.growthGoal))} dan OS ${where} sudah tumbuh ${b(rpM(c.grown))}. Laju biasa untuk sisa bulan sudah cukup.`;
+  else lead = `Target tumbuh ${m} menurut RKA ${b(rpM(c.growthGoal))}, dan sejak awal bulan OS ${where} ${c.grown >= 0 ? `baru tumbuh ${b(rpM(c.grown))}` : `justru turun ${b(rpM(-c.grown))}`}. Agar tercapai, sisa ${num(c.remWd)} hari kerja perlu disburse ${b(rpM(Math.max(0, c.needRem)))}, ${liftWords(c.lift)}. ${tierLine(c.tier)}`;
   const figures = [
+    ok(c.growthGoal) ? figure('Target tumbuh (RKA)', rpM(c.growthGoal), c.grown >= 0 ? `sudah tumbuh ${rpM(c.grown)}` : `OS turun ${rpM(-c.grown)} sejak awal bulan`) : figure('RKA akhir bulan', rpM(c.target), ''),
     figure('Disburse dibutuhkan (sisa)', ok(c.needRem) ? rpM(Math.max(0, c.needRem)) : '–', `laju biasa ${rpM(c.remDisb)}`),
-    figure('Per hari kerja', ok(c.perWd) ? rpM(Math.max(0, c.perWd)) : '–', `biasanya ${rpM(c.ratePerWd)}`),
-    figure('Proyeksi OS akhir bulan', rpM(c.closeOs), `capaian RKA ${pct(c.ach, 1)}`),
+    figure('Proyeksi tumbuh bulan ini', rpM(c.closeOs - c.osStart), ok(c.achGrowth) ? `${pct(c.achGrowth, 0)} dari target, OS akhir ${rpM(c.closeOs)}` : `OS akhir ${rpM(c.closeOs)}`),
     figure('Agar capai guidance', ok(c.needGuid) ? rpM(Math.max(0, c.needGuid)) : '–', ok(c.liftGuid) ? `${liftText(c.liftGuid)} dari laju biasa` : ''),
   ];
   const facts = [
     ok(c.perWd) ? `Per hari kerja ${b(rpM(Math.max(0, c.perWd)))}, biasanya ${rpM(c.ratePerWd)}.` : '',
-    `Dengan laju biasa, OS akhir ${m} sekitar ${rpM(c.closeOs)} (capaian RKA ${pct(c.ach, 1)}).`,
+    `Dengan laju biasa, OS tumbuh ${rpM(c.closeOs - c.osStart)} di ${m}${ok(c.achGrowth) ? ` (${pct(c.achGrowth, 0)} dari target tumbuh)` : ''}.`,
     ok(c.needGuid) ? `Agar capai guidance disburse ${rpM(c.guidance)}, sisa bulan perlu ${rpM(Math.max(0, c.needGuid))} (${liftText(c.liftGuid)} dari laju biasa).` : '',
   ].filter(Boolean);
   const notes = [
@@ -123,23 +143,17 @@ const yearTargetWord = (y) => ({
 export const yearLabel = (y) => (y.months.every((m) => m.startsWith(String(y.year))) && y.planCount < 12 ? `Sisa ${y.year}` : `Tahun ${y.year}`);
 
 function regionLines(o) {
-  const y = o.year;
-  const rows = (o.regions || []).filter((r) => r.year);
-  if (!rows.length) return [];
-  const group = (t) => rows.filter((r) => r.year.tier === t).map((r) => roName(r.ro));
-  const easy = group('base');
-  const fit = group('stretch');
-  const hard = group('beyond');
+  const s = o.year.split;
+  if (!s) return [];
   const lines = [];
-  lines.push(`Dengan target pola RKA masing-masing: ${num(easy.length)} RO cukup dengan laju biasa, ${num(fit.length)} RO butuh dorongan tetapi masih dalam kemampuan, ${num(hard.length)} RO di atas kemampuan terbukti${hard.length ? ` (${moreNames(hard)})` : ''}.`);
-  const s = y.split;
-  if (s && s.gap > 0) {
-    const top = s.rows.filter((r) => r.add > 0).slice(0, 3);
-    if (top.length) lines.push(`Bila kekurangan nasional ${rpM(s.gap)} dibagi menurut ruang tumbuh tiap RO, porsi terbesar ada di ${listJoin(top.map((r) => `${roName(r.ro)} (${rpM(r.add)})`))}.`);
-    if (s.uncovered > 0) lines.push(`Bahkan bila semua RO bekerja di laju terbaiknya, OS nasional masih kurang ${b(rpM(s.uncovered))}. Target perlu ditinjau, atau butuh sumber pertumbuhan baru seperti program atau kanal baru.`);
-  } else if (s) {
-    lines.push('Target nasional sudah tercapai bila tiap RO menjaga laju biasa.');
+  if (s.gap <= 0) {
+    lines.push('Target nasional sudah tercapai bila tiap RO menjaga laju biasanya, jadi fokusnya menjaga laju di semua RO.');
+    return lines;
   }
+  const top = s.rows.filter((r) => r.add > 0).slice(0, 3);
+  const easy = s.rows.filter((r) => r.tier === 'base').map((r) => roName(r.ro));
+  lines.push(`Kekurangan ${rpM(s.gap)} di atas laju biasa dibagi menurut ruang tumbuh tiap RO (laju terbaik dikurangi laju biasa), jadi tiap RO hanya diminta yang pernah sanggup dicapainya.${top.length ? ` Porsi terbesar: ${listJoin(top.map((r) => `${roName(r.ro)} +${rpM(r.add)}`))}.` : ''}${easy.length ? ` ${moreNames(easy)} cukup menjaga laju biasa.` : ''}`);
+  if (s.uncovered > 0) lines.push(`Bahkan bila semua RO bekerja di laju terbaiknya, OS nasional masih kurang ${b(rpM(s.uncovered))}. Sisanya perlu sumber pertumbuhan baru (program, kanal, atau kerja sama developer), atau target ditinjau.`);
   return lines;
 }
 
@@ -160,7 +174,7 @@ function yearText(o, where) {
   let lead;
   if (!ok(y.target)) lead = baseLine;
   else if (y.lift <= 0) lead = `${baseLine} Itu sudah melewati target ${b(rpM(y.target))} (${tw}).`;
-  else lead = `Agar OS ${where} akhir ${y.year} mencapai ${b(rpM(y.target))} (${tw}), disburse ${label.toLowerCase()} perlu sekitar ${b(rpM(y.need.disb))}, rata-rata ${b(rpM(perMonth(y.need.disb)))} per bulan, ${b(pct(y.lift, y.lift < 0.1 ? 1 : 0))} di atas laju biasa. ${tierLine(y.tier, 'Target ini')}`;
+  else lead = `Agar OS ${where} akhir ${y.year} mencapai ${b(rpM(y.target))} (${tw}), disburse ${label.toLowerCase()} perlu sekitar ${b(rpM(y.need.disb))}, rata-rata ${b(rpM(perMonth(y.need.disb)))} per bulan, ${b(pct(y.lift, y.lift < 0.1 ? 1 : 0))} di atas laju biasa. ${tierLine(y.tier)}`;
   const figures = [
     figure(`Target OS akhir ${y.year}`, ok(y.target) ? rpM(y.target) : '–', ok(y.growth) ? `${signedPct(y.growth, 1)} dari proyeksi akhir ${monthName(y.startMonth)} ${y.startMonth.slice(0, 4)}` : ''),
     figure('Disburse per bulan', ok(y.need?.disb) ? rpM(perMonth(y.need.disb)) : '–', `laju biasa ${rpM(perMonth(y.base.disb))}`),
@@ -171,20 +185,28 @@ function yearText(o, where) {
     `Laju biasa: OS akhir ${y.year} ${rpM(y.base.os)}${ok(y.target) ? `, capaian ${pct(y.ach, 1)}${y.base.os < y.target ? `, kurang ${rpM(y.target - y.base.os)}` : ''}` : ''}. Rentang wajar ${rpM(y.low.os)} sampai ${rpM(y.cap.os)}.`,
   ];
   const strategy = [];
+  const grow = ok(y.target) ? y.target - y.startOs : null;
   if (ok(y.lift) && y.lift > 0) {
-    strategy.push(`${b('Disburse.')} Naikkan disburse rata-rata ke ${rpM(perMonth(y.need.disb))} per bulan, dari laju biasa ${rpM(perMonth(y.base.disb))}. Laju terbaik yang pernah dicapai setara ${b(liftText(y.capLift))} di atas laju biasa.`);
+    strategy.push(`${b('Target bulanan.')} OS perlu tumbuh ${rpM(grow)} sepanjang ${y.year}, rata-rata ${rpM(grow / y.planCount)} per bulan. Untuk itu disburse rata-rata ${b(rpM(perMonth(y.need.disb)))} per bulan, ${liftWords(y.lift)}.`);
+  } else if (ok(grow)) {
+    strategy.push(`${b('Target bulanan.')} OS perlu tumbuh ${rpM(grow)} sepanjang ${y.year}, rata-rata ${rpM(grow / y.planCount)} per bulan. Laju biasa (disburse ${rpM(perMonth(y.base.disb))} per bulan) sudah cukup, jadi kuncinya menjaga laju tetap stabil.`);
   }
   const phase = phasingLine(y);
   if (phase) strategy.push(`${b('Pola bulanan.')} ${phase}`);
-  if (ok(y.liftBest) && ok(y.lift) && y.lift > 0) {
-    strategy.push(`${b('Runoff.')} Bila runoff ditekan ke level terbaik 6 bulan terakhir (${pct(y.runBest, 2)} per bulan, kini ${pct(y.runRate, 2)}), kenaikan disburse cukup ${b(liftText(Math.max(0, y.liftBest)))}.`);
+  const lv = y.levers;
+  if (lv.runoff > 0) {
+    strategy.push(`${b('Tekan runoff.')} Bila runoff turun ke level terbaik 6 bulan terakhir (${pct(y.runBest, 2)} per bulan, kini ${pct(y.runRate, 2)}), OS akhir ${y.year} bertambah sekitar ${b(rpM(lv.runoff))}${ok(y.liftBest) && ok(y.lift) && y.lift > 0 ? ` dan kenaikan disburse yang dibutuhkan tinggal ${liftText(Math.max(0, y.liftBest))}` : ''}. Caranya antara lain menahan pelunasan dipercepat dan take over ke bank lain.`);
+  }
+  if (lv.disburse > 0) strategy.push(`${b('Jaga disburse di laju terbaik.')} Menambah OS akhir ${y.year} sekitar ${rpM(lv.disburse)}.`);
+  if (lv.runoff > 0 && ok(y.target)) {
+    strategy.push(`${b('Kombinasi keduanya.')} OS akhir ${y.year} sekitar ${b(rpM(y.combo.os))}, capaian ${pct(y.achCombo, 1)}. ${y.combo.os >= y.target ? 'Target masuk akal bila dua pengungkit ini dijalankan bersama.' : 'Target masih di atas kombinasi terbaik yang pernah dicapai, jadi perlu sumber pertumbuhan baru atau target ditinjau.'}`);
   }
   if (ok(y.lift) && y.lift > 0 && ok(y.perRm) && ok(y.rmNeed) && y.rm) {
     strategy.push(`${b('Tenaga RM.')} Dengan ${num(y.rm)} RM, tiap RM perlu ${rpM(y.perRm)} per bulan (biasanya ${rpM(y.basePerRm)}). ${y.rmGap > 0
       ? `Pada produktivitas terbaik yang pernah dicapai, butuh sekitar ${b(`${num(y.rmNeed)} RM`)}, tambah ${num(y.rmGap)}.`
       : 'Pada produktivitas terbaik yang pernah dicapai, jumlah RM sekarang sudah cukup.'}`);
   }
-  if (o.national) for (const line of regionLines(o)) strategy.push(`${b('Per RO.')} ${line}`);
+  if (o.national) for (const line of regionLines(o)) strategy.push(`${b('Pembagian per RO.')} ${line}`);
   const quality = [];
   if (ok(y.npl.end) && ok(y.npl.now)) {
     quality.push(`Bila tren %NPL 6 bulan terakhir berlanjut (makin lama makin diredam), %NPL akhir ${y.year} sekitar ${b(pct(y.npl.end))} (kini ${pct(y.npl.now)}${ok(y.npl.target) ? `, sasaran rasio RKA ${pct(y.npl.target)}` : ''}).`);
@@ -198,22 +220,32 @@ export function moreNames(list, max = 4) {
 }
 
 export function roRows(o, mode) {
+  if (mode === 'year') {
+    return (o.year?.split?.rows || []).map((r) => ({
+      ro: r.ro, base: r.disbBase / r.planCount, need: r.disb / r.planCount, lift: r.lift, tier: r.tier,
+      target: r.os, add: r.add, start: r.startOs, cap: r.cap,
+    })).sort((a, c) => c.add - a.add || (c.lift ?? 0) - (a.lift ?? 0));
+  }
   return (o.regions || []).map((r) => {
-    if (mode === 'current') return { ro: r.ro, base: r.cur?.remDisb, need: r.cur?.needRem, cap: r.cur?.capRem, lift: r.cur?.lift, ach: r.cur?.ach, tier: r.cur?.tier };
-    if (mode === 'year') {
-      const y = r.year;
-      return { ro: r.ro, base: y ? y.disb / y.planCount : null, need: ok(y?.needDisb) ? y.needDisb / y.planCount : null, cap: y?.cap, lift: y?.lift, ach: ok(y?.target) ? y.base / y.target : null, tier: y?.tier, target: y?.target, os: y?.base };
-    }
-    return { ro: r.ro, base: r.baseDisb, need: r.needDisb, cap: r.capDisb, lift: r.lift, ach: r.achBase, tier: r.tier };
+    if (mode === 'current') return { ro: r.ro, base: r.cur?.remDisb, need: r.cur?.needRem, cap: r.cur?.capRem, lift: r.cur?.lift, ach: r.cur?.ach, tier: r.cur?.tier, gap: r.cur?.gap };
+    if (mode === 'year') return null;
+    return { ro: r.ro, base: r.baseDisb, need: r.needDisb, cap: r.capDisb, lift: r.lift, ach: r.achBase, tier: r.tier, gap: r.gap };
   }).filter((r) => ok(r.base)).sort((a, c) => (c.lift ?? -Infinity) - (a.lift ?? -Infinity));
 }
 
 export function yearTable(o) {
   const y = o.year;
   const need = y.need?.path;
+  const start = (path, i) => (i ? path[i - 1].os : o.close.os);
   return y.base.path.map((p, i) => [
-    fmt.month(p.month, true), num(p.wd), rpM(p.disb), need ? rpM(need[i].disb) : '–', rpM(y.cap.path[i].disb),
-    rpM(p.os), need ? rpM(need[i].os) : '–', p.plan ? '' : 'jembatan',
+    fmt.month(p.month, true), num(p.wd), rpM(p.disb), need ? rpM(need[i].disb) : '–',
+    need ? rpM(need[i].os - start(need, i)) : '–', rpM(p.os), need ? rpM(need[i].os) : '–', p.plan ? '' : 'sebelum tahun rencana',
+  ]);
+}
+
+export function yearRoTable(o) {
+  return roRows(o, 'year').map((r) => [
+    roName(r.ro), rpM(r.start), rpM(r.target), rpM(r.target - r.start), rpM(r.need), liftText(r.lift), tierOf(r.tier).short,
   ]);
 }
 
