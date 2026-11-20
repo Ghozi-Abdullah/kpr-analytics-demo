@@ -461,7 +461,7 @@ function hugScales(bars, pct, { gap = 0.06, top = 0.86 } = {}) {
 
 export function bandCombo(canvas, {
   labels, bars, barColors, pct, color, lineColor = color, barLabel, pctLabel, format = (v) => fmt.num(v),
-  pctFormat = (v) => fmt.pct(v, 1), labelFormat, tickFormat, title, refs = [],
+  pctFormat = (v) => fmt.pct(v, 1), labelFormat, tickFormat, title, refs = [], barValues = true, lineValues = true,
 }) {
   const refMax = Math.max(0, ...refs.filter((r) => r.axis === 'y').map((r) => r.value));
   const { yMax, pMin, pMax } = hugScales(bars, pct);
@@ -474,11 +474,12 @@ export function bandCombo(canvas, {
       datasets: [
         { type: 'line', label: pctLabel, data: pct, yAxisID: 'p', order: 0, $color: lineColor, $base: lineColor, $lab: 'main',
           borderColor: lineColor, backgroundColor: lineColor, borderWidth: 2.2, tension: 0.3, pointRadius: 0, pointHoverRadius: 4,
-          datalabels: { ...lineLabels(pctFormat, 40), offset: 4 } },
+          datalabels: lineValues ? { ...lineLabels(pctFormat, 40), offset: 4 } : { display: false } },
         { type: 'bar', label: barLabel, data: bars, yAxisID: 'y', order: 1, $color: color, $lab: 'main',
           backgroundColor: barColors || color, borderRadius: 3, borderSkipped: 'start', barPercentage: 0.84, categoryPercentage: 0.88,
           datalabels: {
             display: (ctx) => {
+              if (!barValues) return false;
               const y = ctx.chart.scales.y;
               const v = ctx.dataset.data[ctx.dataIndex];
               if (!y || !Number.isFinite(v) || Math.abs(y.getPixelForValue(0) - y.getPixelForValue(v)) < 34) return false;

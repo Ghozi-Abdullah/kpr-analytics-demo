@@ -33,26 +33,6 @@ export function perfPeriods(pm, ro, months) {
   });
 }
 
-export function realPeriods(real, ro, months, mode) {
-  const key = sumberKey(mode);
-  const list = listOf(real, mode);
-  const sums = new Map(months.map((m) => [m, new Map()]));
-  for (const r of real.rows) {
-    const box = sums.get(r.bulan);
-    if (!box || (ro && r.ro !== ro)) continue;
-    const k = list.includes(r[key]) ? r[key] : '';
-    box.set(k, (box.get(k) || 0) + (ok(r.plafond) ? r.plafond : 0));
-  }
-  const other = months.some((m) => (sums.get(m).get('') || 0) > 0);
-  return {
-    tipes: [...list, ...(other ? [''] : [])],
-    months: months.map((m) => {
-      const by = sums.get(m);
-      return { month: m, by, total: [...by.values()].reduce((a, b) => a + b, 0) };
-    }),
-  };
-}
-
 const SPLIT_KAT = { os: ['OS FI', 'OS NFI'], sml: ['OS SML FI', 'OS SML NFI'], npl: ['OS NPL FI', 'OS NPL NFI'] };
 
 export function pfSplit(pf, ro) {
@@ -95,4 +75,29 @@ export function slaNow(sla, ro, months) {
     stages: active, berkas, late, onTime: aged ? 1 - late / aged : null, cair,
     sample: !!sla?.sample, dayMax: sla?.dayMax || '', hasRows: rows.length > 0,
   };
+}
+
+export function realCompare(real, ro, mode, month) {
+  const key = sumberKey(mode);
+  const list = listOf(real, mode);
+  const at = real.months.includes(month) ? month : real.months.at(-1);
+  const latest = at === real.months.at(-1);
+  const lastDay = latest ? Number(real.maxDate.slice(8, 10)) : daysInMonth(at);
+  const prev = shiftMonth(at, -1);
+  const cur = new Map();
+  const before = new Map();
+  for (const r of real.rows) {
+    if (ro && r.ro !== ro) continue;
+    const box = r.bulan === at ? cur : r.bulan === prev && r.hari <= lastDay ? before : null;
+    if (!box) continue;
+    const k = list.includes(r[key]) ? r[key] : '';
+    box.set(k, (box.get(k) || 0) + (ok(r.plafond) ? r.plafond : 0));
+  }
+  const tipes = [...list, ...(cur.get('') || before.get('') ? [''] : [])];
+  const rows = tipes.map((t) => ({ tipe: t, value: cur.get(t) || 0, prev: before.get(t) || 0 }))
+    .map((r) => ({ ...r, change: r.prev ? r.value / r.prev - 1 : null }))
+    .sort((a, b) => b.value - a.value);
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const prevTotal = rows.reduce((s, r) => s + r.prev, 0);
+  return { month: at, lastDay, full: !latest || lastDay === daysInMonth(at), rows, total, prevTotal, change: prevTotal ? total / prevTotal - 1 : null };
 }
