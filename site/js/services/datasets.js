@@ -1,4 +1,23 @@
 import { load, loadOne, loadTable } from './data-source.js';
+
+const PERF_PATHS = ['perf_daily.json', 'perf_kuadran.json', 'dim_kanca.json'];
+const PF_PATHS = ['portfolio_index.json', 'portfolio_trend.json', 'portfolio/latest.json'];
+const SLA_PATHS = ['sla.json', 'sla_daily.json'];
+export const VIEW_PATHS = {
+  ringkasan: [...PERF_PATHS, 'realisasi_daily.json', ...PF_PATHS, ...SLA_PATHS],
+  performance: PERF_PATHS,
+  portofolio: PF_PATHS,
+  realisasi: ['realisasi_daily.json'],
+  sla: SLA_PATHS,
+};
+const ALL_PATHS = [...new Set(Object.values(VIEW_PATHS).flat())].filter((p) => !p.includes('latest'));
+
+export async function prefetchAll() {
+  const settled = await Promise.allSettled(ALL_PATHS.map((p) => loadOne(p)));
+  const index = settled[ALL_PATHS.indexOf('portfolio_index.json')];
+  const month = index?.status === 'fulfilled' ? index.value?.months?.at(-1) : null;
+  if (month) await loadOne(`portfolio/${month}.json`).catch(() => null);
+}
 import { prepareSla } from '../models/sla-model.js';
 import { indexPerf } from '../models/performance-model.js';
 import { uniq, byText } from '../core/values.js';

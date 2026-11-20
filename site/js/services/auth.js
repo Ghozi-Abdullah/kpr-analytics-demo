@@ -4,6 +4,8 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const KEY = 'kpr.auth';
 const PENDING = 'kpr.auth.pending';
 const HINT = 'kpr.auth.hint';
+const SILENT = 'kpr.auth.silent';
+const SILENT_GAP = 2 * 60 * 1000;
 
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
 export const isLocalHost = () => LOCAL_HOSTS.includes(location.hostname);
@@ -20,6 +22,11 @@ const ls = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+const store = {
+  get() { try { return JSON.parse(ls.get(KEY)); } catch { return null; } },
+  set(v) { ls.set(KEY, JSON.stringify(v)); },
+  del() { ls.del(KEY); ss.del(KEY); },
 };
 
 const randomId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -67,22 +74,33 @@ export function handleRedirect() {
   let claims;
   try { claims = decodeJwt(token); } catch { return { status: 'error', message: 'Token login tidak terbaca.' }; }
   if (claims.nonce !== pending.nonce || claims.aud !== API.clientId) return { status: 'error', message: 'Token login tidak valid untuk dashboard ini.' };
-  ss.set(KEY, { token, exp: claims.exp, email: claims.email || '' });
+  store.set({ token, exp: claims.exp, email: claims.email || '' });
   if (claims.email) ls.set(HINT, claims.email);
   return { status: 'ok' };
 }
 
 export function session() {
-  const s = ss.get(KEY);
+  const s = store.get();
   if (!s || !s.token || !s.exp || s.exp * 1000 - Date.now() < 60000) return null;
   return s;
 }
 
+export const expiresIn = () => { const s = store.get(); return s?.exp ? s.exp * 1000 - Date.now() : 0; };
+
 export function hasHint() { return !!ls.get(HINT); }
 
+export function silentAllowed() {
+  const at = Number(ss.get(SILENT) || 0);
+  return !at || Date.now() - at > SILENT_GAP;
+}
+export const markSilent = () => ss.set(SILENT, Date.now());
+export const clearSilent = () => ss.del(SILENT);
+
 export function logout() {
-  ss.del(KEY);
+  store.del();
   ls.del(HINT);
 }
 
-export function dropSession() { ss.del(KEY); }
+export function dropSession() { store.del(); }
+
+addEventListener('storage', (e) => { if (API_MODE && e.key === HINT && !e.newValue) location.reload(); });

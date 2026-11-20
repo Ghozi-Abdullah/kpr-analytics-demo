@@ -5,6 +5,8 @@ var ROLES = ['viewer', 'admin'];
 var STATUSES = ['active', 'off'];
 var EMAIL_RE = /^[a-z0-9._%+-]{1,64}@[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63}){1,4}$/;
 var PATH_RE = /^(meta|perf_daily|perf_kuadran|portfolio_index|portfolio_trend|realisasi_daily|dim_kanca|sla|sla_daily)\.json$|^portfolio\/\d{4}-\d{2}\.json$/;
+var LATEST_PATH = 'portfolio/latest.json';
+var MONTH_PATH_RE = /^portfolio\/\d{4}-\d{2}\.json$/;
 var LAYOUT_ID_RE = /^[a-z][a-z0-9-]{0,39}$/;
 var GUARD = {
   bodyChars: 24000,
@@ -267,22 +269,55 @@ function isAllowed_(email, list) {
 
 function handle_(req, email, role) {
   if (req.action === 'boot') {
-    var data = readData_(['meta.json']);
+    var want = ['meta.json'];
+    cleanPaths_(req.paths, true).forEach(function (x) {
+      var real = x === LATEST_PATH ? latestMonthPath_() : x;
+      if (real && want.indexOf(real) < 0) want.push(real);
+    });
+    var data = readData_(want);
     if (!data['meta.json']) throw new Error('DATA_KOSONG');
-    return { email: email, role: role, meta: data['meta.json'], layouts: layouts_(email) };
+    var files = {};
+    Object.keys(data).forEach(function (x) { if (x !== 'meta.json') files[x] = data[x]; });
+    return { email: email, role: role, meta: data['meta.json'], layouts: layouts_(email), files: files };
   }
   if (req.action === 'adminList') return adminList_();
   if (req.action === 'adminSave') return adminSave_(email, req);
   if (req.action === 'adminRemove') return adminRemove_(email, req);
   if (req.action === 'adminDecide') return adminDecide_(email, req);
   if (req.action === 'bundle') {
-    var paths = req.paths;
-    if (!Array.isArray(paths) || !paths.length || paths.length > GUARD.bundlePaths) throw AuthFail_('BAD');
-    paths.forEach(function (x) { if (typeof x !== 'string' || !PATH_RE.test(x)) throw AuthFail_('BAD'); });
+    var paths = cleanPaths_(req.paths, false);
+    if (!paths.length) throw AuthFail_('BAD');
     return readData_(paths);
   }
   if (req.action === 'saveLayout') return saveLayout_(email, req.view, req.text);
   return version_();
+}
+
+function cleanPaths_(list, allowLatest) {
+  if (list === undefined || list === null) return [];
+  if (!Array.isArray(list) || list.length > GUARD.bundlePaths) throw AuthFail_('BAD');
+  list.forEach(function (x) {
+    if (typeof x !== 'string' || !(PATH_RE.test(x) || (allowLatest && x === LATEST_PATH))) throw AuthFail_('BAD');
+  });
+  return list;
+}
+
+function latestMonthPath_() {
+  var ver = version_().version || '';
+  var cache = CacheService.getScriptCache();
+  var key = 'paths:' + ver;
+  var hit = ver ? cache.get(key) : null;
+  var list = hit ? JSON.parse(hit) : null;
+  if (!list) {
+    var sh = agg_().getSheetByName('data');
+    if (!sh) throw new Error('DATA_KOSONG');
+    var last = sh.getLastRow();
+    var seen = {};
+    if (last >= 2) sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) { seen[String(r[0])] = 1; });
+    list = Object.keys(seen);
+    if (ver) cache.put(key, JSON.stringify(list), GUARD.dataCacheSec);
+  }
+  return list.filter(function (x) { return MONTH_PATH_RE.test(x); }).sort().pop() || null;
 }
 
 function agg_() {

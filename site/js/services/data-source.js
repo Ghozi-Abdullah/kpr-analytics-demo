@@ -87,7 +87,7 @@ export const accessApi = {
 
 function remote(fn, ...args) {
   if (IS_GAS) return gasCall(fn, ...args);
-  if (fn === 'getBoot') return apiCall('boot');
+  if (fn === 'getBoot') return apiCall('boot', args[0]?.length ? { paths: args[0] } : {});
   if (fn === 'getBundle') return apiCall('bundle', { paths: args[0] });
   if (fn === 'saveLayout') return apiCall('saveLayout', { view: args[0], text: args[1] });
   if (fn === 'getVersion') return apiCall('version');
@@ -181,11 +181,19 @@ export async function getVersion() {
   return (r && r.version) || '';
 }
 
-export async function boot() {
+function keep(path, payload) {
+  if (cache.has(path)) return;
+  const p = decodePayload(payload).then(cleanNames);
+  cache.set(path, p);
+  p.catch(() => cache.delete(path));
+}
+
+export async function boot(paths = []) {
   if (MODE !== 'local') {
-    const res = await remote('getBoot');
+    const res = await remote('getBoot', MODE === 'api' ? paths : []);
     const meta = cleanNames(await decodePayload(res.meta));
     cache.set('meta.json', Promise.resolve(meta));
+    for (const [path, payload] of Object.entries(res.files || {})) keep(path, payload);
     return { email: res.email || '', role: res.role || 'viewer', meta, layouts: res.layouts || {}, mode: MODE };
   }
   const meta = await loadOne('meta.json');

@@ -10,8 +10,8 @@ import { METRO_NAME, METRO_AREAS, metroArea } from '../map/metro-areas.js';
 import { provinceName } from '../map/indonesia-map.js';
 import { kancaLabel } from '../map/branch-locations.js';
 import { preparePf } from '../services/datasets.js';
-import { outlook, simulate, simulateCurrent } from '../analytics/outlook.js';
-import { outlookText, roRows, liftText, liftTone, LIFT_WORD } from '../analytics/outlook-text.js';
+import { outlook, simulate, simulateCurrent, simulateYear } from '../analytics/outlook.js';
+import { outlookText, roRows, liftText, tierOf, yearLabel } from '../analytics/outlook-text.js';
 import {
   perfScope, growthEngine, realFilter, realTotals, realGroup, workdaysOf, pfLabels, pfSums, pfGroup,
 } from '../analytics/measures.js';
@@ -1259,9 +1259,16 @@ async function answerWhy(q, D) {
   };
 }
 
+function wantsYearPlan(q, D) {
+  if (/\b(tahun depan|setahun|tahunan|strategi|rencana tahun|target tahun)\b/.test(q.norm)) return true;
+  const year = Number(String(D.perfLatest || '').slice(0, 4));
+  return !!year && (String(q.norm).match(/\b20\d\d\b/g) || []).some((y) => Number(y) > year);
+}
+
 async function answerForecast(q, D) {
   const ros = rosOf(q, D);
   const ro = ros.length === 1 ? ros[0] : '';
+  if (D.pm && !['realisasi', 'realdeb'].includes(q.metric) && pickSource(q) !== 'real' && wantsYearPlan(q, D)) return answerPlan(q, D);
   if (['realisasi', 'realdeb'].includes(q.metric) || pickSource(q) === 'real') {
     const rs = realScope(D.real, { ro, kanca: q.entities.kanca[0] || '', rm: q.entities.rm[0] || '', tipe: q.entities.tipe[0] || '' });
     const card = rs && realProjectionInsight(rs);
@@ -1485,12 +1492,13 @@ function answerPlan(q, D) {
   const o = outlook(D.pm, { ro, real: D.real });
   if (!o) return { ok: false, title: 'Riwayat data belum cukup untuk proyeksi. Proyeksi butuh minimal dua bulan penuh sebelum bulan berjalan.' };
   const wantsCurrent = (q.time?.kind === 'monthRel' && q.time.n === 0) || /\bsisa\b/.test(q.norm);
-  const mode = wantsCurrent && o.current ? 'current' : 'next';
+  const wantsYear = !!o.year && (/\b(tahun depan|setahun|tahunan|strategi|rencana tahun|target tahun)\b/.test(q.norm) || new RegExp(`\\b${o.year.year}\\b`).test(q.norm));
+  const mode = wantsYear ? 'year' : wantsCurrent && o.current ? 'current' : 'next';
   const where = o.national ? 'nasional' : roName(o.roKey);
-  const month = mode === 'current' ? o.current.month : o.next.month;
+  const month = mode === 'current' ? o.current.month : mode === 'year' ? o.year.end : o.next.month;
   const link = { view: D.pm ? 'ringkasan' : 'performance', params: { ro }, widget: 'outlook', label: 'Buka panel Outlook' };
   const view = outlookText(o, mode, where);
-  const m = monthName(month);
+  const m = mode === 'year' ? yearLabel(o.year).toLowerCase() : monthName(month);
   const lift = /(naik|tambah|lebih|turun|kurang|minus)\s*(\d+(?:[.,]\d+)?)\s*(%|persen)/.exec(String(q.raw).toLowerCase());
   if (lift) {
     const v = (Number(lift[2].replace(',', '.')) / 100) * (/(turun|kurang|minus)/.test(lift[1]) ? -1 : 1);
@@ -1503,6 +1511,19 @@ function answerPlan(q, D) {
           ok(r.gap) ? (r.gap >= 0 ? `Lebih ${rpM(r.gap)} dari RKA ${rpM(o.current.target)}.` : `Masih kurang ${rpM(-r.gap)} dari RKA ${rpM(o.current.target)}.`) : '',
           ok(o.current.lift) ? `Kenaikan yang pas untuk 100% RKA: ${b(liftText(o.current.lift))} (sisa bulan ${rpM(Math.max(0, o.current.needRem))}).` : '',
           ok(r.achDisb) ? `Capaian guidance disburse menjadi ${pct(r.achDisb, 1)}.` : '',
+        ].filter(Boolean),
+        link,
+      };
+    }
+    if (mode === 'year') {
+      const r = simulateYear(o, v);
+      const y = o.year;
+      return {
+        ok: true,
+        title: `Bila disburse ${m} ${liftText(v)} dari laju biasa (${b(rpM(r.disb))}), OS ${where} akhir ${y.year} sekitar ${b(rpM(r.os))}${ok(r.ach) ? `, capaian ${b(pct(r.ach, 1))} terhadap target ${rpM(y.target)}` : ''}.`,
+        lines: [
+          ok(r.gap) ? (r.gap >= 0 ? `Lebih ${rpM(r.gap)} dari target.` : `Masih kurang ${rpM(-r.gap)} dari target.`) : '',
+          ok(y.lift) ? `Kenaikan yang pas untuk 100%: ${b(liftText(y.lift))}. Laju terbaik yang pernah dicapai setara ${liftText(y.capLift)}.` : '',
         ].filter(Boolean),
         link,
       };
@@ -1532,12 +1553,12 @@ function answerPlan(q, D) {
     const top = sorted[0];
     return {
       ok: true,
-      title: top ? `${b(roName(top.ro))} ${asc ? 'paling ringan' : 'paling butuh dorongan'} ${mode === 'current' ? `di sisa ${m}` : `di ${m}`}: disburse perlu ${b(rpM(Math.max(0, top.need)))}, ${liftText(top.lift)} dari laju biasa ${rpM(top.base)}.` : 'Belum ada data per RO.',
+      title: top ? `${b(roName(top.ro))} ${asc ? 'paling ringan' : 'paling butuh dorongan'} ${mode === 'current' ? `di sisa ${m}` : `di ${m}`}: disburse perlu ${b(rpM(Math.max(0, top.need ?? 0)))}${mode === 'year' ? ' per bulan' : ''}, ${liftText(top.lift)} dari laju biasa ${rpM(top.base)}. Status: ${tierOf(top.tier).word.toLowerCase()}.` : 'Belum ada data per RO.',
       lines: [
-        `${rows.filter((r) => liftTone(r.lift) === 'bad').length} RO butuh kenaikan di atas 40%, ${rows.filter((r) => liftTone(r.lift) === 'good').length} RO cukup dengan laju biasa.`,
-        'Kenaikan dihitung terhadap rata-rata disburse per hari kerja 3 bulan penuh terakhir; target memakai RKA bila ada, atau perkiraan dari kenaikan RKA 3 bulan terakhir.',
+        `${rows.filter((r) => r.tier === 'beyond').length} RO di atas laju terbaiknya, ${rows.filter((r) => r.tier === 'stretch').length} RO butuh dorongan tetapi masih dalam kemampuan, ${rows.filter((r) => r.tier === 'base').length} RO cukup dengan laju biasa.`,
+        'Laju biasa memakai tren disburse per hari kerja 6 bulan penuh terakhir yang makin jauh makin diredam. Laju terbaik diambil dari bulan-bulan terbaik dalam periode itu, jadi pernah benar-benar dicapai.',
       ],
-      list: { items: sorted.slice(0, q.topN || 8).map((r, i) => ({ rank: i + 1, label: esc(roName(r.ro)), sub: LIFT_WORD[liftTone(r.lift)], v: r.lift ?? 0, text: `${liftText(r.lift)}, ${rpM(Math.max(0, r.need ?? 0))}` })) },
+      list: { items: sorted.slice(0, q.topN || 8).map((r, i) => ({ rank: i + 1, label: esc(roName(r.ro)), sub: tierOf(r.tier).word, v: r.lift ?? 0, text: `${liftText(r.lift)}, ${rpM(Math.max(0, r.need ?? 0))}` })) },
       link,
     };
   }

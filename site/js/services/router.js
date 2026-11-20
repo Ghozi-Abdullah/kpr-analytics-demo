@@ -40,6 +40,7 @@ export function initRouter(onChange) {
 }
 
 export const route = () => current;
+export const peekView = () => (IS_GAS ? 'ringkasan' : parseHash(location.hash).view);
 
 export function navigate(view, params = {}, { replace = false } = {}) {
   const next = { view: validView(view), params: clean(params) };

@@ -12,8 +12,9 @@ import { createAsk } from './ask/engine.js';
 import { createAskDialog } from './ask/ask-dialog.js';
 import { createDock } from './core/dock.js';
 import { snapFilters, balanceFilters } from './core/filter-snap.js';
-import { handleRedirect, login, logout, session, hasHint, isLocalHost } from './services/auth.js';
-import { initRouter, navigate, route, hrefFor } from './services/router.js';
+import { handleRedirect, login, logout, session, hasHint, isLocalHost, expiresIn, silentAllowed, markSilent, clearSilent } from './services/auth.js';
+import { initRouter, navigate, route, hrefFor, peekView } from './services/router.js';
+import { VIEW_PATHS, prefetchAll } from './services/datasets.js';
 import { Board, compact } from './board/board.js';
 import ringkasan from './views/ringkasan.js';
 import performance from './views/performance.js';
@@ -446,7 +447,7 @@ async function refreshData({ manual = false, version = '' } = {}) {
   try {
     clearCache();
     resetHub();
-    const info = await boot();
+    const info = await boot(VIEW_PATHS[S.view?.id] || []);
     S.info = { ...S.info, meta: info.meta };
     askEngine.invalidate();
     updateStatus();
@@ -463,6 +464,7 @@ async function refreshData({ manual = false, version = '' } = {}) {
       toast(changed ? 'Data terbaru dimuat' : 'Data sudah yang terbaru');
     }
   } catch (err) {
+    if (err instanceof AuthError && document.visibilityState === 'visible' && silentAllowed()) { reauth(err.message); return; }
     if (manual) showError(err);
     else console.warn(err);
   } finally {
@@ -754,14 +756,27 @@ function showAdmin() {
 }
 
 function reauth(message) {
-  let tried = false;
-  try { tried = sessionStorage.getItem('kpr.auth.silent') === '1'; } catch {}
-  if (hasHint() && !tried) {
-    try { sessionStorage.setItem('kpr.auth.silent', '1'); } catch {}
+  if (hasHint() && silentAllowed()) {
+    markSilent();
     login({ silent: true });
     return;
   }
   showLogin(message);
+}
+
+function keepSession() {
+  if (MODE !== 'api') return;
+  const renew = () => {
+    if (document.visibilityState !== 'visible' || !session()) return;
+    if (expiresIn() < 10 * 60 * 1000 && hasHint() && silentAllowed()) { markSilent(); login({ silent: true }); }
+  };
+  document.addEventListener('visibilitychange', renew);
+  setInterval(renew, 60 * 1000);
+}
+
+function whenIdle(fn) {
+  if ('requestIdleCallback' in window) requestIdleCallback(fn, { timeout: 4000 });
+  else setTimeout(fn, 1500);
 }
 
 async function fontsReady() {
@@ -772,7 +787,7 @@ async function start() {
   if (MODE !== 'gas' && !isLocalHost() && isFramed()) { showFramed(); return; }
   if (MODE === 'api') {
     const r = handleRedirect();
-    if (r.status === 'ok') { try { sessionStorage.removeItem('kpr.auth.silent'); } catch {} }
+    if (r.status === 'ok') clearSilent();
     if (!session()) {
       let msg = '';
       try { msg = sessionStorage.getItem('kpr.auth.msg') || ''; sessionStorage.removeItem('kpr.auth.msg'); } catch {}
@@ -790,7 +805,7 @@ async function start() {
   addEventListener('hashchange', () => { if (STANDALONE_PAGES.includes(hashPage())) location.reload(); });
   renderShell();
   try {
-    S.info = await boot();
+    S.info = await boot(VIEW_PATHS[peekView()] || []);
   } catch (err) {
     if (err instanceof AccessError) { showAccessDenied(err); return; }
     if (err instanceof AuthError) { reauth(err.message); return; }
@@ -807,7 +822,9 @@ async function start() {
   document.addEventListener('pointermove', () => document.body.classList.remove('tips-off'), { passive: true });
   const r = await initRouter(onRoute);
   await fontsReady();
-  mount(r);
+  keepSession();
+  await mount(r);
+  whenIdle(() => { prefetchAll().catch(() => null); });
 }
 
 start();

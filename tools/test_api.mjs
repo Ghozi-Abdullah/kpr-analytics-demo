@@ -28,7 +28,8 @@ const store = new Map();
 const props = new Map(Object.entries({ AGG_ID: 'agg', CLIENT_ID, ALLOWED_EMAILS: 'andi@gmail.com,\n budi@gmail.com; @kantor.co.id', ADMIN_EMAILS: 'bos@gmail.com' }));
 const cacheMap = new Map();
 let sheetReads = 0;
-const sheetRows = [['path', 'part', 'enc', 'content'], ['meta.json', '0', 'gz64', 'b:AAA'], ['perf_daily.json', '1', 'gz64', 'b:CCC'], ['perf_daily.json', '0', 'gz64', 'b:BBB']];
+const sheetRows = [['path', 'part', 'enc', 'content'], ['meta.json', '0', 'gz64', 'b:AAA'], ['perf_daily.json', '1', 'gz64', 'b:CCC'], ['perf_daily.json', '0', 'gz64', 'b:BBB'],
+  ['portfolio/2026-09.json', '0', 'gz64', 'b:SEP'], ['portfolio/2026-10.json', '0', 'gz64', 'b:OKT']];
 const quiet = { log() {}, info() {}, warn() {}, error() {} };
 const ctx = vm.createContext({
   console: quiet,
@@ -76,6 +77,10 @@ function expect(name, res, check) {
 
 const good = makeToken({});
 expect('token sah + email terdaftar: boot', post({ action: 'boot', token: good }), (r) => r.ok && r.data.email === 'andi@gmail.com' && r.data.meta.data === 'AAA');
+expect('boot ikut membawa data halaman pertama', post({ action: 'boot', token: good, paths: ['perf_daily.json', 'portfolio/latest.json'] }),
+  (r) => r.ok && r.data.meta.data === 'AAA' && r.data.files['perf_daily.json'].data === 'BBBCCC' && r.data.files['portfolio/2026-10.json'].data === 'OKT' && !r.data.files['portfolio/2026-09.json']);
+expect('boot menolak nama data aneh', post({ action: 'boot', token: good, paths: ['../rahasia'] }), (r) => !r.ok && r.error === 'BAD');
+expect('portfolio/latest hanya untuk boot', post({ action: 'bundle', token: good, paths: ['portfolio/latest.json'] }), (r) => !r.ok && r.error === 'BAD');
 expect('bundle menyusun potongan berurutan', post({ action: 'bundle', token: good, paths: ['perf_daily.json'] }), (r) => r.ok && r.data['perf_daily.json'].data === 'BBBCCC');
 expect('nama data tak dikenal ditolak', post({ action: 'bundle', token: good, paths: ['../rahasia'] }), (r) => !r.ok && r.error === 'BAD');
 expect('simpan tata letak', post({ action: 'saveLayout', token: good, view: 'performance', text: '{"v":1,"items":[{"id":"trend","x":0,"y":0,"w":6,"h":8,"evil":"<img src=x onerror=alert(1)>"}]}' }), (r) => r.ok);
