@@ -241,7 +241,7 @@ var KPR = (function () {
       rows: rows,
       columns: keep.map(function (k) { return k.std; }),
       info: { file: src.file, sheet: src.sheet || '(sheet pertama)', header_row: hr + 1, rows_in: rows.length,
-        columns_kept: keep.map(function (k) { return k.std; }), columns_dropped: dropped.concat(src.skipped || []) },
+        dropped: dropped.concat(src.skipped || []).length },
     };
   }
 
@@ -693,7 +693,7 @@ var KPR = (function () {
     });
     return {
       columns: cols, rows: done,
-      info: { file: 'data contoh (sumber SLA belum diisi)', sheet: '-', header_row: 0, rows_in: done.length, columns_kept: cols, columns_dropped: [], sample: true },
+      info: { file: 'data contoh (sumber SLA belum diisi)', sheet: '-', header_row: 0, rows_in: done.length, dropped: 0, sample: true },
     };
   }
 

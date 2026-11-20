@@ -1,3 +1,7 @@
+if (self !== top) {
+  try { top.location = self.location; } catch (e) { document.documentElement.style.display = 'none'; }
+}
+
 if (location.protocol === 'file:') {
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('app').innerHTML = '<div class="fatal" role="alert"><h2>Buka lewat Live Server</h2>'

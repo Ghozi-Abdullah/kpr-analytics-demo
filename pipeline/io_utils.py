@@ -148,8 +148,7 @@ def read_source(name: str, allowlist: dict[str, str], required=()) -> tuple[pd.D
         "note": note,
         "header_row": header_row + 1,
         "rows_in": int(len(df)),
-        "columns_kept": list(keep.values()),
-        "columns_dropped": dropped,
+        "dropped": len(dropped),
     }
     return df.reset_index(drop=True), info
 

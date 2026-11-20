@@ -254,7 +254,7 @@ def sample_sla() -> tuple[pd.DataFrame, dict] | tuple[None, None]:
     for c in ("tgl_prakarsa", "tgl_clf_awal", "tgl_putusan", "tgl_cair", "today"):
         df[c] = df[c].map(lambda d: d.isoformat() if d else None)
     info = {"file": "data contoh (sla.xlsx belum ada)", "sheet": "-", "header_row": 0, "rows_in": int(len(df)),
-            "columns_kept": cols, "columns_dropped": [], "sample": True}
+            "dropped": 0, "sample": True}
     return df, info
 
 def align_names(df: pd.DataFrame) -> tuple[int, int, int, int]:

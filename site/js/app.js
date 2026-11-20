@@ -290,10 +290,9 @@ function openStatus() {
   const items = Object.entries(meta?.datasets || {}).map(([k, d]) => {
     const period = d.max_date ? `${fmt.dateShort(d.min_date)} s.d. ${fmt.dateShort(d.max_date)}`
       : `${fmt.month(d.min_month, true)} s.d. ${fmt.month(d.max_month, true)}`;
-    const dropped = (d.columns_dropped || []).map((c) => `<span class="tag off">${esc(c)}</span>`).join('');
     return `<div class="data-status-item"><b>${esc(DS_LABEL[k] || k)}</b>
       <small>${esc(d.file)}, ${fmt.num(d.rows_in)} baris sumber menjadi ${fmt.num(d.rows_out)} baris agregat. Periode ${esc(period)}.</small>
-      ${dropped ? `<small>Kolom yang tidak dibawa ke dashboard:</small><div class="tags">${dropped}</div>` : ''}</div>`;
+      ${d.dropped ? '<small class="data-status-priv">Kolom data pribadi dibuang di server sebelum diringkas, jadi tidak pernah sampai ke browser.</small>' : ''}</div>`;
   }).join('');
   const how = MODE === 'api'
     ? `<p class="note">Masuk sebagai <b>${esc(S.info.email || '')}</b>${S.info.role === 'admin' ? ' (admin)' : ''}. Data dikirim oleh Apps Script setelah login Anda dicek. Tata letak panel tersimpan untuk email ini.</p>

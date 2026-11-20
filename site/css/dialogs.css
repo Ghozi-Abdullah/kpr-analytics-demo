@@ -9,6 +9,7 @@ dialog::backdrop { background: rgb(0 0 0 / .26); }
 .data-status { display: grid; gap: 8px; }
 .data-status-item { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
 .data-status-item small { color: var(--muted); font-size: var(--fs-body); }
+.data-status-priv { color: var(--good); }
 .credit { margin: 16px 0 0; font-size: var(--fs-caption); color: var(--muted); }
 .credit a { color: inherit; text-underline-offset: 2px; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; }
