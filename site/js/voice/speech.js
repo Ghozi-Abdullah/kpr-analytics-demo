@@ -55,21 +55,29 @@ export function createRecognizer({ lang = 'id-ID', onResult, onEnd, onError, onS
 }
 
 const MALE = /andika|ardi|\bmale\b|pria|laki/i;
+const NATURAL = /natural|online|neural|enhanced|premium|siri/i;
 let browserVoices = [];
-let browserPick = 0;
+let choice = '';
 const listVoices = () => {
   const list = globalThis.speechSynthesis?.getVoices() || [];
   const id = list.filter((v) => /^id([-_]|$)/i.test(v.lang) || /indonesia/i.test(v.name));
-  const female = id.filter((v) => !MALE.test(v.name));
-  const rank = (v) => (/gadis/i.test(v.name) && /natural|online/i.test(v.name) ? 0 : /gadis/i.test(v.name) ? 1 : /google/i.test(v.name) ? 2 : /damayanti/i.test(v.name) ? 3 : 4);
-  return [...female].sort((a, b) => rank(a) - rank(b)).concat(female.length ? [] : id);
+  const rank = (v) => (MALE.test(v.name) ? 10 : 0) + (/gadis/i.test(v.name) && NATURAL.test(v.name) ? 0 : NATURAL.test(v.name) ? 1 : /gadis/i.test(v.name) ? 2 : /google/i.test(v.name) ? 3 : /damayanti/i.test(v.name) ? 4 : 5);
+  return [...id].sort((a, b) => rank(a) - rank(b));
 };
-const browserVoice = () => browserVoices[browserPick % Math.max(1, browserVoices.length)] || null;
+const labelOf = (v) => (/google/i.test(v.name) ? 'Google' : v.name.replace(/^Microsoft\s+/i, '').replace(/\s*-\s*Indonesian.*$/i, '').replace(/\s*Online\s*\(Natural\)/i, ' Natural').replace(/\s*\([^)]*\)/g, '').trim() || v.name);
+const browserVoice = () => {
+  if (choice.startsWith('web:')) {
+    const v = browserVoices.find((x) => x.name === choice.slice(4));
+    if (v) return v;
+  }
+  return browserVoices[0] || null;
+};
 const tempoOf = (v) => {
-  if (!v) return { rate: 1.1, pitch: 1.04 };
-  if (/microsoft/i.test(v.name) && /natural|online/i.test(v.name)) return { rate: 1.08, pitch: 1 };
-  if (/google/i.test(v.name)) return { rate: 1.16, pitch: 1.05 };
-  return { rate: 1.07, pitch: 1.02 };
+  if (!v) return { rate: 1.02, pitch: 1.08 };
+  if (/microsoft/i.test(v.name) && NATURAL.test(v.name)) return { rate: 1, pitch: 1.04 };
+  if (/google/i.test(v.name)) return { rate: 1.08, pitch: 1.14 };
+  if (/damayanti/i.test(v.name)) return { rate: 1, pitch: 1.06 };
+  return { rate: 1.02, pitch: 1.08 };
 };
 if (voiceSupport.speak) {
   browserVoices = listVoices();
@@ -77,25 +85,54 @@ if (voiceSupport.speak) {
 }
 
 export const CLOUD_VOICES = [
-  ['id-ID-Chirp3-HD-Despina', 'Despina'], ['id-ID-Chirp3-HD-Sulafat', 'Sulafat'], ['id-ID-Chirp3-HD-Aoede', 'Aoede'],
-  ['id-ID-Chirp3-HD-Leda', 'Leda'], ['id-ID-Chirp3-HD-Erinome', 'Erinome'], ['id-ID-Chirp3-HD-Kore', 'Kore'],
+  ['id-ID-Chirp3-HD-Vindemiatrix', 'Vindemiatrix'], ['id-ID-Chirp3-HD-Achernar', 'Achernar'], ['id-ID-Chirp3-HD-Sulafat', 'Sulafat'],
+  ['id-ID-Chirp3-HD-Despina', 'Despina'], ['id-ID-Chirp3-HD-Callirrhoe', 'Callirrhoe'], ['id-ID-Chirp3-HD-Aoede', 'Aoede'],
 ];
-const CLOUD_RATE = 1.06;
+const CLOUD_RATE = 1;
 const CLOUD_WAIT_MS = 7000;
 let cloud = null;
 let cloudOff = false;
-let cloudPick = 0;
+let cloudOk = false;
 let rateMul = 1;
+let pitchMul = 1;
+let volume = 1;
 const audioCache = new Map();
 
 export function setCloudSpeaker(fn) { cloud = typeof fn === 'function' ? fn : null; }
-export function setVoiceChoice(i) { cloudPick = Math.max(0, Number(i) || 0) % CLOUD_VOICES.length; browserPick = Math.max(0, Number(i) || 0); }
+export function setVoice(id) { choice = typeof id === 'string' ? id : ''; }
 export function setRate(mul) { rateMul = Math.min(1.35, Math.max(0.8, Number(mul) || 1)); }
-export const usingCloud = () => !!cloud && !cloudOff;
+export function setPitch(mul) { pitchMul = Math.min(1.3, Math.max(0.8, Number(mul) || 1)); }
+export function setVolume(v) { volume = Math.min(1, Math.max(0.3, Number(v) || 1)); }
+const cloudReady = () => !!cloud && !cloudOff;
+export const usingCloud = () => cloudReady() && !choice.startsWith('web:');
+const cloudVoiceId = () => (choice.startsWith('cloud:') && CLOUD_VOICES.some(([id]) => id === choice.slice(6)) ? choice.slice(6) : CLOUD_VOICES[0][0]);
+
+export function voiceList() {
+  if (voiceSupport.speak && !browserVoices.length) browserVoices = listVoices();
+  const current = usingCloud() ? `cloud:${cloudVoiceId()}` : browserVoice() ? `web:${browserVoice().name}` : '';
+  const cloudList = cloudReady() ? CLOUD_VOICES.map(([id, name]) => ({ id: `cloud:${id}`, name, kind: 'cloud' })) : [];
+  const webList = browserVoices.map((v) => ({ id: `web:${v.name}`, name: labelOf(v), kind: 'web', male: MALE.test(v.name), natural: NATURAL.test(v.name) }));
+  return { current, cloud: cloudList, cloudOn: cloudOk, web: webList, natural: cloudOk || webList.some((v) => v.natural && !v.male) };
+}
+
+export function findVoice(name) {
+  const q = String(name || '').toLowerCase().trim();
+  if (!q) return null;
+  const { cloud: c, web } = voiceList();
+  const all = [...c, ...web];
+  if (/^(cowok|pria|laki( laki)?)$/.test(q)) return web.find((v) => v.male) || null;
+  if (/^(cewek|wanita|perempuan)$/.test(q)) return c[0] || web.find((v) => !v.male) || null;
+  if (q === 'google') return c[0] || web.find((v) => v.name === 'Google') || null;
+  return all.find((v) => v.name.toLowerCase() === q) || all.find((v) => v.name.toLowerCase().includes(q) || q.includes(v.name.toLowerCase().split(' ')[0])) || null;
+}
+
 export function nextVoice() {
-  if (usingCloud()) { cloudPick = (cloudPick + 1) % CLOUD_VOICES.length; return { index: cloudPick, name: CLOUD_VOICES[cloudPick][1] }; }
-  browserPick = (browserPick + 1) % Math.max(1, browserVoices.length);
-  return { index: browserPick, name: (browserVoice()?.name || 'bawaan').replace(/^(Microsoft|Google)\s*/i, '').replace(/\s*-.*$/, '') };
+  const { current, cloud: c, web } = voiceList();
+  const all = [...c, ...web.filter((v) => !v.male)];
+  if (!all.length) return { id: '', name: 'bawaan' };
+  const next = all[(all.findIndex((v) => v.id === current) + 1) % all.length];
+  choice = next.id;
+  return next;
 }
 
 function sentences(text) {
@@ -121,8 +158,8 @@ function ctx() {
   return audioCtx;
 }
 
-function cloudAudio(text) {
-  const voiceId = CLOUD_VOICES[cloudPick][0];
+function cloudAudio(text, voice) {
+  const voiceId = voice || cloudVoiceId();
   const rate = Math.round(CLOUD_RATE * rateMul * 100) / 100;
   const key = `${voiceId}|${rate}|${text}`;
   if (audioCache.has(key)) return audioCache.get(key);
@@ -134,11 +171,12 @@ function cloudAudio(text) {
     if (res.off) { cloudOff = true; return null; }
     const ac = ctx();
     if (!ac || !res.audio) return null;
+    cloudOk = true;
     const bin = atob(res.audio);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
     return ac.decodeAudioData(bytes.buffer);
-  }).catch(() => null);
+  }).catch(() => { cloudOff = true; return null; });
   audioCache.set(key, job);
   job.then((buf) => { if (!buf) audioCache.delete(key); });
   if (audioCache.size > 40) audioCache.delete(audioCache.keys().next().value);
@@ -161,7 +199,8 @@ function speakBrowser(parts, mine, { onStart, finish }) {
     u.lang = 'id-ID';
     if (v) u.voice = v;
     u.rate = Math.min(1.6, rate * rateMul);
-    u.pitch = pitch;
+    u.pitch = Math.min(2, pitch * pitchMul);
+    u.volume = volume;
     u.onstart = onStart;
     u.onend = next;
     u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') finish(); else next(); };
@@ -180,7 +219,9 @@ async function speakCloud(parts, mine, hooks) {
     const ac = ctx();
     const src = ac.createBufferSource();
     src.buffer = buf;
-    src.connect(ac.destination);
+    const gain = ac.createGain();
+    gain.gain.value = volume;
+    src.connect(gain).connect(ac.destination);
     playing = src;
     hooks.onStart();
     await new Promise((resolve) => { src.onended = resolve; src.start(); });

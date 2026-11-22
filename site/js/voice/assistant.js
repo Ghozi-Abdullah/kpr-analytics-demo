@@ -4,9 +4,11 @@ import { ok } from '../core/values.js';
 import { checkSmooth } from '../core/smooth.js';
 import { speakRemote } from '../services/data-source.js';
 import { roStanding } from '../models/direktur-model.js';
-import { voiceSupport, createRecognizer, speak, hush, createLevel, chime, setCloudSpeaker, setVoiceChoice, setRate, nextVoice, usingCloud } from './speech.js';
+import { voiceSupport, createRecognizer, speak, hush, createLevel, chime, setCloudSpeaker, setVoice, setRate, setPitch, setVolume, nextVoice, usingCloud, voiceList, findVoice } from './speech.js';
 import { routeCommand, findWake, cleanSpoken, spoken, shortRo, WAKE_NAME, WAKE_PHRASE } from './command.js';
-import { regionData, showcaseHtml, regionTalk, compareHtml, compareTalk, flyIn } from './showcase.js';
+import { regionData, showcaseHtml, regionTalk, compareHtml, compareTalk, flyIn, toneOf, regionMore } from './showcase.js';
+import { createPersona, pickOne, salam, partOfDay, clockText, dateText, workdaysLeft, longDate, parseReminder, nameFrom } from './persona.js';
+import { pct } from '../views/direktur-format.js';
 
 const PREF_KEY = 'kpr.assistant';
 const FOLLOW_MS = 9000;
@@ -20,14 +22,74 @@ const DETAIL_NAME = {
   split: 'Fix Income dan Non Fix Income', sla: 'berkas SLA', history: 'riwayat bulanan', watch: 'semua RO',
 };
 const PAGE_NAME = { ringkasan: 'Summary', performance: 'Performance', realisasi: 'Realisasi', portofolio: 'Portofolio', sla: 'SLA', direktur: 'Direktur' };
-const HINTS = ['Briefing hari ini', 'Lihat Bandung', 'Bandingkan Bandung dan Surabaya', 'RO mana yang perlu perhatian?'];
+const HINTS = ['Briefing hari ini', 'Lihat Bandung', 'Kabar baik hari ini apa?', 'RO mana yang perlu perhatian?'];
 const HELP = [
-  ['Kondisi wilayah', ['Briefing hari ini', 'Lihat Bandung', 'Gimana Jakarta 2?', 'Tampilkan RO terburuk']],
-  ['Bandingkan', ['Bandingkan Bandung dan Surabaya', 'Medan vs Makassar', 'Bandingkan NPL Jakarta 1 dan Jakarta 2']],
-  ['Buka detail', ['Buka realisasi', 'Detail NPL Surabaya', 'Riwayat 3 bulan', 'Semua RO']],
-  ['Tanya angka', ['NPL Bandung bulan lalu?', 'Top 5 kanca realisasi bulan ini', 'RO dengan NPL di atas 4 persen', 'Kenapa OS naik bulan lalu?', 'Kalau disburse naik 15 persen bulan depan?', 'Berapa berkas lewat SLA?']],
-  ['Atur dashboard', ['Fokus ke Makassar', 'Kembali ke nasional', '5 sumber', 'Buka halaman realisasi', 'Refresh data']],
-  ['Ngobrol', ['Ulangi', 'Lebih pelan', 'Ganti suara', 'Berikutnya', 'Kembali', 'Tutup']],
+  { name: 'Wilayah', key: /wilayah|regional|ro\b/, items: [
+    ['Briefing hari ini', 'Ringkasan nasional dan RO yang perlu perhatian'],
+    ['Lihat Bandung', 'Empat kartu kondisi satu RO'],
+    ['Gimana Jakarta 2?', 'Sama, dengan bahasa santai'],
+    ['Tampilkan RO terbaik', 'RO dengan capaian OS tertinggi, juga "terburuk"'],
+    ['Berikutnya', 'Pindah ke RO berikutnya, juga "sebelumnya"'],
+  ] },
+  { name: 'Bandingkan', key: /banding/, items: [
+    ['Bandingkan Bandung dan Surabaya', 'Adu sembilan ukuran berdampingan'],
+    ['Medan vs Makassar', 'Cara singkat'],
+    ['Bandingkan NPL Jakarta 1 dan Jakarta 2', 'Fokus ke satu ukuran'],
+  ] },
+  { name: 'Detail', key: /detail|pop/, items: [
+    ['Detail NPL Surabaya', 'Pop-out detail NPL satu RO'],
+    ['Buka realisasi', 'Pop-out realisasi per sumber'],
+    ['Riwayat 3 bulan', 'Tabel bulanan semua KPI'],
+    ['Semua RO', 'Capaian semua RO dalam satu tabel'],
+  ] },
+  { name: 'Tanya angka', key: /angka|tanya|data/, items: [
+    ['NPL Bandung bulan lalu?', 'Nilai per wilayah dan periode'],
+    ['Top 5 kanca realisasi bulan ini', 'Peringkat kanca atau RM'],
+    ['RO dengan NPL di atas 4 persen', 'Daftar dengan syarat'],
+    ['Kenapa OS naik bulan lalu?', 'Penyebab perubahan'],
+    ['Kalau disburse naik 15 persen bulan depan?', 'Simulasi target'],
+    ['Berapa berkas lewat SLA?', 'Proses berkas'],
+  ] },
+  { name: 'Ngobrol', key: /ngobrol|obrol|percakapan/, items: [
+    ['Kabar baik hari ini apa?', 'Yang sedang bagus'],
+    ['Kabar buruknya apa?', 'Yang perlu diwaspadai'],
+    ['Maksudnya?', 'Penjelasan tampilan terakhir'],
+    ['Kenapa?', 'Penyebab angka yang sedang tampil'],
+    ['Terus?', 'Lanjut ke tawaran berikutnya'],
+    ['Kembali', 'Tampilan sebelumnya, juga "ulangi"'],
+  ] },
+  { name: 'Atur dashboard', key: /atur|dashboard|filter|halaman/, items: [
+    ['Fokus ke Makassar', 'Filter semua panel ke satu RO'],
+    ['Kembali ke nasional', 'Lepas filter'],
+    ['5 sumber', 'Ganti hitungan realisasi'],
+    ['Buka halaman realisasi', 'Pindah halaman'],
+    ['Refresh data', 'Ambil data terbaru'],
+    ['Layar penuh', 'Mode presentasi'],
+  ] },
+  { name: 'Asisten', key: /asisten|pengingat|ingat/, items: [
+    ['Panggil saya Pak Andi', 'Kirana ingat nama panggilan'],
+    ['Ingatkan saya 10 menit lagi untuk rapat', 'Pengingat, juga "jam 3 sore"'],
+    ['Jam berapa sekarang?', 'Jam dan tanggal'],
+    ['Sisa hari kerja bulan ini', 'Hari kerja tersisa, libur sudah dihitung'],
+    ['Data per tanggal berapa?', 'Posisi data terakhir'],
+    ['Salin jawabannya', 'Salin ke clipboard, juga "bagikan"'],
+  ] },
+  { name: 'Suara', key: /suara|voice|volume/, items: [
+    ['Jawab singkat aja', 'Hanya inti, balik dengan "jawab lengkap"'],
+    ['Lebih pelan', 'Tempo bicara, juga "lebih cepat"'],
+    ['Kerasin suaranya', 'Volume, juga "kecilin suaranya"'],
+    ['Nada lebih tinggi', 'Nada suara, juga "lebih rendah"'],
+    ['Bisukan', 'Jawab teks saja, balik dengan "nyalakan suara"'],
+    ['Matikan mode dengar', 'Berhenti mendengar "Hai Kirana"'],
+  ] },
+  { name: 'Santai', key: /santai|lucu|fun/, items: [
+    ['Apa kabar?', 'Sapa Kirana'],
+    ['Cerita lucu dong', 'Lelucon, bilang "lagi" untuk yang lain'],
+    ['Kasih semangat dong', 'Kata penyemangat'],
+    ['Capek banget hari ini', 'Kirana tawarkan ringkasan singkat'],
+    ['Kamu robot ya?', 'Kenalan dengan Kirana'],
+    ['Dadah', 'Tutup Kirana dengan salam'],
+  ] },
 ];
 const MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Z"/><path d="M18.5 11.5a6.5 6.5 0 0 1-13 0M12 18v3.5"/></svg>';
 const SOUND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>';
@@ -44,11 +106,25 @@ const ERRORS = {
 
 const readPref = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch { return {}; } };
 const writePref = (p) => { try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch {} };
-const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
-const salam = () => {
-  const h = new Date().getHours();
-  return h < 11 ? 'Selamat pagi' : h < 15 ? 'Selamat siang' : h < 18 ? 'Selamat sore' : 'Selamat malam';
+const plain = (html) => String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+const shorten = (text) => {
+  const parts = String(text).split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (parts.length <= 2) return text;
+  const keep = [parts[0]];
+  const num = parts.slice(1).find((x) => /\d/.test(x) && !x.endsWith('?'));
+  if (!/\d/.test(parts[0]) && num) keep.push(num);
+  else if (!parts[1].endsWith('?')) keep.push(parts[1]);
+  if (parts.at(-1).endsWith('?')) keep.push(parts.at(-1));
+  return keep.join(' ');
 };
+const minutesText = (ms) => {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m} menit`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h} jam ${r} menit` : `${h} jam`;
+};
+const MAX_REMINDERS = 5;
 const sameText = (a, b) => {
   const x = String(a || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
   const y = String(b || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
@@ -89,9 +165,19 @@ function revealWords(el) {
 }
 
 export function createAssistant({ engine, getContext, set, openDetail, closeDetail }) {
-  const pref = { wake: false, mute: false, voice: 0, rate: 1, ...readPref() };
-  setVoiceChoice(pref.voice);
+  const pref = { wake: false, mute: false, voiceId: '', rate: 1, pitch: 1, volume: 1, short: false, name: '', askedName: false, ...readPref() };
+  delete pref.voice;
+  setVoice(pref.voiceId);
   setRate(pref.rate);
+  setPitch(pref.pitch);
+  setVolume(pref.volume);
+  const persona = createPersona(pref);
+  const line = persona.line;
+  let lastAnswer = null;
+  let lastRegion = null;
+  let lastKind = '';
+  let greetOnOpen = false;
+  const reminders = [];
   setCloudSpeaker(speakRemote);
   let dlg = null;
   let launcher = null;
@@ -132,6 +218,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         <button class="va-pill" type="button" id="va-mute" aria-pressed="true">${SOUND}<span>Jawab dengan suara</span></button>
         <button class="va-x" type="button" id="va-close" aria-label="Tutup ${esc(WAKE_NAME)}">${icon('close')}</button>
       </div>
+
       <div class="va-stage" id="va-stage"></div>
       <div class="va-dock">
         <p class="va-heard" id="va-heard" aria-live="polite"></p>
@@ -177,9 +264,17 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     awake();
   }
 
+  function chooseVoice(id) {
+    pref.voiceId = id;
+    setVoice(id);
+    writePref(pref);
+  }
+
   function onClick(e) {
     awake();
     if (e.target === dlg || e.target.id === 'va-stage') { close(); return; }
+    const tab = e.target.closest('[data-help-tab]');
+    if (tab) { helpTab(Number(tab.dataset.helpTab)); return; }
     const sayBtn = e.target.closest('[data-say]');
     if (sayBtn) { handle(sayBtn.dataset.say, { typed: true }); return; }
     const f = e.target.closest('[data-va-filter]');
@@ -223,7 +318,12 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (next === 'listen' && dlg.open && voiceSupport.level) level.start();
     const idleText = !voiceSupport.listen ? ERRORS.unsupported
       : pref.wake ? `Ucapkan "${WAKE_PHRASE}" atau klik bola untuk bicara` : 'Klik bola atau tekan Ctrl+Spasi untuk bicara';
-    $('va-status').textContent = text || { listen: 'Mendengarkan', think: 'Sebentar ya', speak: '', idle: idleText, error: '' }[next] || '';
+    let listenText = 'Mendengarkan';
+    if (next === 'listen' && greetOnOpen) {
+      greetOnOpen = false;
+      listenText = `${salam()}${pref.name ? `, ${pref.name}` : ''}. Silakan bicara`;
+    }
+    $('va-status').textContent = text || { listen: listenText, think: 'Sebentar ya', speak: '', idle: idleText, error: '' }[next] || '';
     if (next === 'idle') snooze();
   }
 
@@ -257,6 +357,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       setStage(showing || $('va-stage').childElementCount ? 'show' : 'empty');
       checkSmooth();
       setMood('surprised', 800);
+      greetOnOpen = true;
     }
     if (phase !== 'think') setPhase('idle');
     if (focusInput || !voiceSupport.listen || matchMedia('(pointer: fine)').matches) $('va-input').focus({ preventScroll: true });
@@ -472,7 +573,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (!text || pref.mute || (!voiceSupport.speak && !usingCloud())) { done(); return; }
     if (isOpen()) setPhase('think', usingCloud() ? 'Menyiapkan suara' : '');
     speakingUntil = Date.now() + 60000;
-    speak(spoken(text), {
+    const words = spoken(text);
+    speak(pref.short ? shorten(words) : words, {
       onStart: () => { if (isOpen()) setPhase('speak'); },
       onEnd: () => {
         speakingUntil = Date.now() + ECHO_MS;
@@ -503,23 +605,67 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     say(speakText ?? html);
   }
 
-  function helpCard() {
+  function helpRows(i) {
+    return HELP[i].items.map(([say, what]) => `<li><button type="button" data-say="${esc(say)}">${esc(say)}</button><span>${esc(what)}</span></li>`).join('');
+  }
+
+  function helpTab(i, focus = false) {
+    const card = $('va-stage')?.querySelector('.va-help');
+    if (!card) return;
+    card.querySelectorAll('[data-help-tab]').forEach((b) => {
+      const on = Number(b.dataset.helpTab) === i;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      if (on && focus) b.focus();
+    });
+    const list = card.querySelector('#va-cmds');
+    list.innerHTML = helpRows(i);
+    list.setAttribute('aria-labelledby', `va-tab-${i}`);
+  }
+
+  function helpCard(topic = '') {
     build();
     showing = '';
-    $('va-stage').innerHTML = `<article class="va-card va-answer va-help in"><p class="va-code">${esc(WAKE_NAME)}</p>
-      <h2>Ucapkan atau ketik perintah seperti ini</h2>
-      <div class="va-help-grid">${HELP.map(([t, items]) => `<section><h3>${esc(t)}</h3>${items.map((i) => `<button type="button" data-say="${esc(i)}">${esc(i)}</button>`).join('')}</section>`).join('')}</div>
-      <p class="va-note">${voiceSupport.listen ? `Nyalakan mode dengar di kanan atas supaya cukup bilang "${esc(WAKE_PHRASE)}" tanpa klik.` : 'Browser ini hanya bisa perintah ketik.'} Boleh pakai bahasa santai, angka boleh diucapkan. Tutup dengan Esc atau bilang "tutup".</p></article>`;
+    const t = String(topic || '').toLowerCase();
+    const at = Math.max(0, HELP.findIndex((g) => g.key.test(t)));
+    $('va-stage').innerHTML = `<article class="va-card va-answer va-help in">
+      <header class="va-help-head"><div><p class="va-code">${esc(WAKE_NAME)}</p><h2>Daftar perintah</h2></div>
+        <p>Klik untuk mencoba. Boleh juga diucapkan dengan kata sendiri.</p></header>
+      <div class="va-help-body">
+        <div class="va-help-rail" role="tablist" aria-label="Kelompok perintah" aria-orientation="vertical">${HELP.map((g, i) => `<button type="button" role="tab" id="va-tab-${i}" data-help-tab="${i}" aria-selected="${i === at}" aria-controls="va-cmds" tabindex="${i === at ? 0 : -1}"><span>${esc(g.name)}</span><small>${g.items.length}</small></button>`).join('')}</div>
+        <ul class="va-cmds" id="va-cmds" role="tabpanel" aria-labelledby="va-tab-${at}">${helpRows(at)}</ul>
+      </div>
+      <p class="va-note">${voiceSupport.listen ? `Nyalakan mode dengar di kanan atas supaya cukup bilang "${esc(WAKE_PHRASE)}".` : 'Browser ini hanya bisa perintah ketik.'} Tutup dengan Esc atau bilang "tutup".</p></article>`;
+    const rail = $('va-stage').querySelector('.va-help-rail');
+    rail.addEventListener('keydown', (e) => {
+      const cur = Number(document.activeElement?.dataset?.helpTab);
+      if (Number.isNaN(cur)) return;
+      const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+      if (step) { e.preventDefault(); helpTab((cur + step + HELP.length) % HELP.length, true); }
+      else if (e.key === 'Home') { e.preventDefault(); helpTab(0, true); }
+      else if (e.key === 'End') { e.preventDefault(); helpTab(HELP.length - 1, true); }
+    });
     setStage('show');
     suggest(HINTS);
     setMood('happy');
-    remember({ kind: 'help', args: [] });
-    say(`Saya ${WAKE_NAME}. Saya bisa menampilkan kondisi wilayah, membandingkan dua RO, membuka detail, menjawab pertanyaan angka, dan mengatur dashboard. Bicara santai saja.`);
+    remember({ kind: 'help', args: [topic] });
+    say(`${pref.name ? `${pref.name}, ` : ''}saya bisa menampilkan kondisi wilayah, membandingkan dua RO, membuka detail, menjawab pertanyaan angka, mengingatkan jadwal, dan diajak ngobrol. Bicara santai saja, seperti ngobrol biasa.`);
   }
 
-  function showRegion(ro, { lead = '', quiet = false } = {}) {
+  function openerFor(d, lead) {
+    if (pref.short) return lead ? lead.split(/(?<=[.!?])\s+/)[0] : '';
+    const tone = toneOf(d);
+    const react = line(tone, { n: d.name });
+    if (lead) return `${lead} ${react}`;
+    const key = d.ro || '';
+    const same = lastRegion && lastRegion.key === key;
+    const first = same ? line('regionSame', { n: d.name }) : lastRegion ? line('regionSwitch', { n: d.name, prev: lastRegion.name }) : line('regionFirst', { n: d.name });
+    return `${first} ${react}`;
+  }
+
+  function showRegion(ro, { lead = '', quiet = false, tail = '', tailOffer = null } = {}) {
     const c = getContext();
-    if (!c) return;
+    if (!c) return null;
     const d = regionData(c, ro);
     if (!d.now?.end) { reply(`Data ${esc(shortRo(ro) || 'Nasional')} belum ada.`, { mood: 'confused' }); return null; }
     build();
@@ -528,7 +674,10 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     stage.innerHTML = showcaseHtml(d);
     setStage('show');
     flyIn(stage, $('va-orb'));
-    const talk = regionTalk(d, lead);
+    const talk = regionTalk(d, openerFor(d, lead));
+    if (tail) talk.text = `${talk.text.replace(talk.offer.ask, '').trim()} ${tail}${tailOffer ? ` ${tailOffer.ask}` : ''}`;
+    if (tailOffer) talk.offer = tailOffer;
+    lastRegion = { key: d.ro || '', name: d.name, d };
     offer = talk.offer;
     suggest(talk.next);
     setMood('happy');
@@ -555,23 +704,149 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     setMood('happy');
     ding('done');
     remember({ kind: 'compare', args: [roA, roB, focus] });
-    say(quiet ? `Kembali ke perbandingan ${a.name} dan ${b.name}.` : `${pickOne(['Ini perbandingannya.', 'Siap, saya bandingkan.', 'Oke, adu angka ya.'])} ${compareTalk(a, b, focus)}`);
+    lastRegion = null;
+    say(quiet ? `Kembali ke perbandingan ${a.name} dan ${b.name}.` : `${line('compare', { a: a.name, b: b.name })} ${compareTalk(a, b, focus)} Mau saya buka salah satunya?`);
   }
 
   async function brief() {
-    const talk = showRegion('', { lead: `${salam()}. Ini ringkasan nasional hari ini.` });
-    if (!talk) return;
+    const lead = `${salam()}${pref.name ? `, ${pref.name}` : ''}. Ini ringkasan nasional hari ini.`;
+    let names = [];
     try {
       const { a } = await engine.ask('ro mana yang perlu perhatian', { context: { ro: '' } });
-      if (a?.title && a.ok !== false && showing === '') {
-        const names = (a.title.replace(/<[^>]+>/g, '').split(':')[1] || '').split(',').map((x) => x.trim().replace(/\.$/, '')).filter(Boolean).slice(0, 3);
-        if (names.length) {
-          suggest(names.map((n) => `Lihat ${n}`));
-          lastSpeech = `${talk.text.replace(talk.offer.ask, '')} Yang perlu perhatian: ${names.join(', ')}.`;
-          say(lastSpeech);
-        }
-      }
+      if (a?.title && a.ok !== false) names = (a.title.replace(/<[^>]+>/g, '').split(':')[1] || '').split(',').map((x) => x.trim().replace(/\.$/, '')).filter(Boolean).slice(0, 3);
     } catch {}
+    const talk = names.length
+      ? showRegion('', { lead, tail: `Yang perlu perhatian: ${names.join(', ')}.`, tailOffer: { say: `Lihat ${names[0]}`, ask: `Mau lihat ${names[0]} dulu?` } })
+      : showRegion('', { lead });
+    if (talk && names.length) suggest(names.map((n) => `Lihat ${n}`));
+  }
+
+  function talkOnly(text, mood = '') {
+    if (mood) setMood(mood);
+    say(text);
+  }
+
+  function chat(text, { mood = 'happy', next = null, lines = [], keep = false, chime = '' } = {}) {
+    if (chime) ding(chime);
+    reply(esc(text), { mood, next: next || (showing ? null : HINTS), lines, keep });
+  }
+
+  function standing() {
+    const c = getContext();
+    return c ? roStanding(c.pm).filter((x) => ok(x.achOs)) : [];
+  }
+
+  function goodNews() {
+    const list = standing();
+    if (!list.length) { chat('Belum ada data capaian RO untuk dicari kabar baiknya.', { mood: 'confused' }); return; }
+    const reached = list.filter((x) => x.achOs >= 1);
+    const best = [...list].sort((a, b) => b.achOs - a.achOs)[0];
+    const calm = list.filter((x) => ok(x.nplPct) && ok(x.rkaNplPct) && x.nplPct <= x.rkaNplPct);
+    const lowNpl = [...list].filter((x) => ok(x.nplPct)).sort((a, b) => a.nplPct - b.nplPct)[0];
+    const parts = [reached.length ? `${reached.length} dari ${list.length} RO sudah mencapai RKA outstanding.` : `Belum ada RO yang mencapai RKA outstanding, tapi yang paling dekat ${shortRo(best.ro)}.`];
+    parts.push(`Capaian tertinggi ${shortRo(best.ro)}, ${pct(best.achOs, 1)} dari RKA.`);
+    if (lowNpl) parts.push(`NPL terendah ${shortRo(lowNpl.ro)}, ${pct(lowNpl.nplPct)}.`);
+    if (calm.length) parts.push(`${calm.length} RO punya NPL di bawah RKA.`);
+    offer = { say: `Lihat ${shortRo(best.ro)}`, ask: `Mau lihat ${shortRo(best.ro)}?` };
+    reply(`${pickOne(['Ada kabar baik nih.', 'Kabar baiknya begini.', 'Oke, yang bikin senang dulu ya.'])} ${parts[0]}`, {
+      lines: parts.slice(1).map(esc), mood: 'happy', next: [`Lihat ${shortRo(best.ro)}`, 'Kabar buruknya apa?', 'Briefing hari ini'],
+      speakText: `${parts.join(' ')} ${offer.ask}`,
+    });
+    ding('love');
+  }
+
+  function badNews() {
+    const list = standing();
+    if (!list.length) { chat('Belum ada data capaian RO.', { mood: 'confused' }); return; }
+    const worst = [...list].sort((a, b) => a.achOs - b.achOs)[0];
+    const over = list.filter((x) => ok(x.nplPct) && ok(x.rkaNplPct) && x.nplPct > x.rkaNplPct).sort((a, b) => (b.nplPct - b.rkaNplPct) - (a.nplPct - a.rkaNplPct));
+    const parts = [`Capaian outstanding terendah ${shortRo(worst.ro)}, ${pct(worst.achOs, 1)} dari RKA.`];
+    if (over.length) parts.push(`${over.length} RO punya NPL di atas RKA, paling jauh ${shortRo(over[0].ro)} dengan ${pct(over[0].nplPct)}.`);
+    else parts.push('Untungnya, belum ada RO dengan NPL di atas RKA.');
+    const target = over[0]?.ro || worst.ro;
+    offer = { say: `Lihat ${shortRo(target)}`, ask: `Mau saya tampilkan ${shortRo(target)}?` };
+    reply(`${pickOne(['Oke, yang perlu diwaspadai ya.', 'Ini yang perlu perhatian.', 'Baik, kabar kurang enaknya begini.'])} ${parts[0]}`, {
+      lines: parts.slice(1).map(esc), mood: 'sad', next: [`Lihat ${shortRo(target)}`, 'Kabar baiknya apa?', 'RO mana yang perlu perhatian?'],
+      speakText: `${parts.join(' ')} ${offer.ask}`,
+    });
+  }
+
+  function explain() {
+    if (showing !== '' || (lastRegion && trail.at(-1)?.kind === 'region')) {
+      const d = lastRegion?.d;
+      const more = d ? regionMore(d) : [];
+      if (more.length) {
+        offer = { say: `Detail outstanding ${d.name}`, ask: 'Mau saya bukakan detailnya?' };
+        talkOnly(`${pickOne(['Maksudnya begini.', 'Jadi begini.', 'Saya jelaskan sedikit ya.'])} ${more.join(' ')} ${offer.ask}`, 'happy');
+        return;
+      }
+    }
+    if (lastAnswer?.lines?.length) {
+      talkOnly(`${pickOne(['Maksudnya begini.', 'Jadi begini.'])} ${lastAnswer.lines.map(plain).join(' ')}`, 'happy');
+      return;
+    }
+    if (lastRegion?.d) {
+      talkOnly(`${pickOne(['Jadi begini.', 'Saya jelaskan ya.'])} ${regionMore(lastRegion.d).join(' ')}`, 'happy');
+      return;
+    }
+    chat('Yang mana ya maksudnya? Coba sebut wilayah atau angkanya, misalnya "jelaskan NPL Bandung".', { mood: 'confused' });
+  }
+
+  function remind(text) {
+    const r = parseReminder(text);
+    if (!r) { chat('Mau diingatkan kapan? Misalnya, "ingatkan saya 10 menit lagi untuk rapat".', { mood: 'confused', next: ['Ingatkan saya 10 menit lagi', 'Ingatkan saya jam 3 sore'] }); return; }
+    if (reminders.length >= MAX_REMINDERS) { chat(`Pengingatnya sudah ${MAX_REMINDERS}. Bilang "batalkan pengingat" dulu ya.`, { mood: 'confused' }); return; }
+    const about = r.about.replace(/\s+(ya|dong|nanti)$/, '');
+    const item = { about, due: Date.now() + r.ms, at: r.at || '' };
+    item.timer = setTimeout(() => fireReminder(item), r.ms);
+    reminders.push(item);
+    const when = r.at ? `jam ${r.at} nanti` : `${minutesText(r.ms)} lagi`;
+    chat(`Siap, ${when} saya ingatkan${about ? ` untuk ${about}` : ''}.`, { lines: ['Pengingat aktif selama halaman dashboard ini terbuka.'], chime: 'done' });
+  }
+
+  function fireReminder(item) {
+    const at = reminders.indexOf(item);
+    if (at >= 0) reminders.splice(at, 1);
+    if (!isOpen()) open({ listenNow: false });
+    ding('done');
+    setMood('surprised', 1500);
+    chat(`${pref.name ? `${pref.name}, ` : ''}ini pengingatnya${item.about ? `: ${item.about}` : ''}.`, { mood: 'surprised', lines: [item.at ? `Sesuai permintaan, jam ${item.at}.` : 'Sesuai waktu yang diminta tadi.'] });
+  }
+
+  async function copyText(share = false) {
+    const text = plain(lastAnswer?.text || lastSpeech || '');
+    if (!text) { chat('Belum ada jawaban yang bisa disalin.', { mood: 'confused' }); return; }
+    if (share && navigator.share) {
+      try { await navigator.share({ title: 'Dashboard KPR', text }); talkOnly('Siap, silakan pilih tujuannya.', 'happy'); return; } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      talkOnly(share ? 'Sudah saya salin. Tinggal tempel di WhatsApp atau email ya.' : 'Sudah saya salin, tinggal tempel.', 'happy');
+    } catch {
+      chat('Browser belum mengizinkan menyalin otomatis. Blok teksnya lalu tekan Ctrl+C ya.', { mood: 'confused' });
+    }
+  }
+
+  function personal(type) {
+    const moods = { joke: 'happy', sing: 'happy', isAi: 'happy', whoMade: 'love', age: 'happy', love: 'love', like: 'happy', eat: 'happy', weather: 'confused', english: 'confused', sad: 'love', tired: 'love', motivate: 'happy', congrats: 'love' };
+    const offers = {
+      tired: { say: 'Briefing hari ini', ask: 'Mau saya ringkas sekarang?' },
+      sad: { say: 'Kabar baiknya apa?', ask: '' },
+      motivate: { say: 'Tampilkan RO terbaik', ask: '' },
+      sing: { say: 'Briefing hari ini', ask: '' },
+    };
+    const text = line(type);
+    if (offers[type]) offer = offers[type];
+    const next = type === 'joke' ? ['Lagi dong', 'Briefing hari ini'] : type === 'tired' ? ['Briefing hari ini', 'Jawab singkat aja'] : type === 'sad' ? ['Kabar baiknya apa?'] : null;
+    chat(text, { mood: moods[type] || 'happy', next, chime: type === 'congrats' || type === 'love' ? 'love' : '' });
+  }
+
+  function continueTalk(pending) {
+    if (pending) { handle(pending.say); return; }
+    if (lastKind === 'joke') { personal('joke'); return; }
+    if (showing !== '' && trail.at(-1)?.kind === 'region') { stepRo(1); return; }
+    if (lastAnswer?.lines?.length) { talkOnly(`${pickOne(['Lanjut ya.', 'Terus begini.'])} ${lastAnswer.lines.map(plain).join(' ')}`); return; }
+    brief();
   }
 
   function stepRo(dir) {
@@ -587,7 +862,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const list = roStanding(c.pm).filter((x) => ok(x.achOs)).sort((x, y) => (order === 'worst' ? x.achOs - y.achOs : y.achOs - x.achOs));
     if (!list.length) { reply('Belum ada data capaian RO.', { mood: 'confused' }); return; }
     const top = list[0];
-    showRegion(top.ro, { lead: order === 'worst' ? `Capaian OS terendah saat ini ${shortRo(top.ro)}.` : `Capaian OS tertinggi saat ini ${shortRo(top.ro)}.` });
+    showRegion(top.ro, { lead: order === 'worst' ? `Capaian outstanding terendah saat ini ${shortRo(top.ro)}, ${pct(top.achOs, 1)} dari RKA.` : `Capaian outstanding tertinggi saat ini ${shortRo(top.ro)}, ${pct(top.achOs, 1)} dari RKA.` });
   }
 
   function goBack() {
@@ -596,7 +871,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (!prev) { reply('Belum ada tampilan sebelumnya.', { keep: false, next: HINTS }); return; }
     if (prev.kind === 'region') showRegion(prev.args[0], { quiet: true });
     else if (prev.kind === 'compare') showCompare(prev.args[0], prev.args[1], prev.args[2], { quiet: true });
-    else if (prev.kind === 'help') helpCard();
+    else if (prev.kind === 'help') helpCard(prev.args[0]);
     else reply(prev.args[0], { ...prev.args[1], speakText: 'Ini tampilan sebelumnya.' });
   }
 
@@ -617,30 +892,183 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const cmd = routeCommand(text, { q, regions: list, showing });
     const pending = offer;
     if (cmd.type !== 'yes' && cmd.type !== 'no') offer = null;
+    const prevKind = lastKind;
+    lastKind = cmd.type;
+    const onStage = !!showing || !!$('va-stage')?.childElementCount;
     switch (cmd.type) {
       case 'none': setPhase('idle'); return;
       case 'yes':
         offer = null;
         if (pending) { handle(pending.say); return; }
+        if (/\b(lanjut|gas|terus)\b/.test(cmd.text)) { lastKind = prevKind; continueTalk(null); return; }
+        if (onStage) { talkOnly(line('ack'), 'happy'); return; }
         reply('Siap. Mau lihat apa?', { next: HINTS, mood: 'happy' });
         return;
-      case 'no': offer = null; reply(pickOne(['Baik.', 'Oke, siap.', 'Baik, tidak jadi.']), { next: showing ? null : HINTS, keep: false }); return;
+      case 'no': offer = null; if (onStage) talkOnly(line('no')); else reply(esc(line('no')), { next: HINTS, keep: false }); return;
       case 'hush': setPhase(pref.wake ? 'listen' : 'idle'); return;
       case 'close': ding('off'); closeDetail(); close(); return;
-      case 'bye': setMood('love'); ding('off'); say(pickOne(['Sampai jumpa, semoga harinya lancar.', 'Dadah, panggil saya lagi kapan saja.', 'Sampai nanti ya.']), { after: close }); return;
-      case 'thanks': ding('love'); reply(pickOne(['Sama-sama.', 'Sama-sama, senang bisa bantu.', 'Dengan senang hati.']), { mood: 'love', next: HINTS, keep: false }); return;
-      case 'praise': ding('love'); reply(pickOne(['Aduh, makasih. Jadi semangat!', 'Hehe, terima kasih!', 'Makasih, saya jadi malu.']), { mood: 'love', keep: false }); return;
-      case 'intro': reply(`Halo, saya ${esc(WAKE_NAME)}, asisten dashboard KPR.`, { lines: ['Saya bisa menampilkan kondisi wilayah, membandingkan RO, membuka detail, menjawab pertanyaan angka, dan mengatur dashboard. Panggil saja "Hai Kirana".'], mood: 'love', next: HINTS }); return;
-      case 'smalltalk': reply(pickOne(['Kabar baik, terima kasih sudah bertanya. Datanya juga siap. Mau lihat apa?', 'Baik sekali. Hari ini mau cek wilayah mana?']), { mood: 'happy', next: HINTS, keep: false }); return;
+      case 'bye': setMood('love'); ding('off'); say(line(partOfDay() === 'malam' ? 'byeNight' : 'bye'), { after: close }); return;
+      case 'goodnight': setMood('sleepy', 0); ding('off'); say(line('byeNight'), { after: close }); return;
+      case 'thanks': ding('love'); if (onStage) talkOnly(`${line('thanks')} ${pickOne(['Ada lagi?', '', ''])}`, 'love'); else reply(esc(line('thanks')), { mood: 'love', next: HINTS, keep: false }); return;
+      case 'praise':
+        if (showing !== '' && lastRegion && !/\b(kamu|kirana)\b/i.test(text)) {
+          const tone = toneOf(lastRegion.d);
+          talkOnly(tone === 'good' ? `Iya, ${lastRegion.name} memang lagi bagus.` : tone === 'bad' ? `Hmm, sebenarnya ${lastRegion.name} masih perlu dikejar.` : `Iya, sebagian sudah bagus. Tinggal dijaga.`, tone === 'bad' ? 'confused' : 'happy');
+          return;
+        }
+        ding('love'); if (onStage) talkOnly(line('praise'), 'love'); else reply(esc(line('praise')), { mood: 'love', keep: false });
+        return;
+      case 'reactBad':
+        if (pending?.ask) { offer = pending; talkOnly(`Iya, betul. ${pending.ask}`, 'sad'); return; }
+        offer = { say: 'Kabar buruknya apa?', ask: '' };
+        talkOnly(showing !== '' && lastRegion ? `Iya, ${lastRegion.name} memang perlu perhatian. Mau saya rangkum yang perlu dikejar?` : 'Iya, yang ini perlu dikejar. Mau saya rangkum yang perlu diwaspadai?', 'sad');
+        return;
+      case 'ack': talkOnly(line('ack'), 'happy'); return;
+      case 'present': talkOnly(line('present'), 'happy'); return;
+      case 'wait': talkOnly(line('wait'), 'happy'); return;
+      case 'sorry': talkOnly(line('sorry'), 'love'); return;
+      case 'annoyed': ding('oops'); talkOnly(line('annoyed'), 'sad'); return;
+      case 'joke': case 'sing': case 'isAi': case 'whoMade': case 'age': case 'love': case 'like': case 'eat': case 'weather': case 'english': case 'sad': case 'tired': case 'motivate': case 'congrats':
+        personal(cmd.type); return;
+      case 'continue': lastKind = prevKind; continueTalk(pending); return;
+      case 'more':
+        lastKind = prevKind;
+        if (['joke', 'motivate', 'sing', 'like'].includes(prevKind)) { personal(prevKind); return; }
+        continueTalk(pending);
+        return;
+      case 'explain': explain(); return;
+      case 'why':
+        if (lastRegion?.d && trail.at(-1)?.kind === 'region') {
+          const d = lastRegion.d;
+          const rose = ok(d.now?.nplPct) && ok(d.before?.nplPct) && d.now.nplPct > d.before.nplPct;
+          handle(rose ? `kenapa npl ${d.name} naik` : `kenapa os ${d.name} naik`);
+          return;
+        }
+        break;
+      case 'goodNews': goodNews(); return;
+      case 'badNews': badNews(); return;
+      case 'time': chat(clockText(), { mood: 'happy' }); return;
+      case 'date': chat(dateText(), { mood: 'happy' }); return;
+      case 'daysLeft': {
+        const w = workdaysLeft();
+        chat(w.work ? `Bulan ${w.month} tinggal ${w.work} hari kerja lagi, termasuk hari ini.` : `Hari kerja bulan ${w.month} sudah habis.`, { lines: [w.last ? `Hari kerja terakhir ${w.last.getDate()} ${w.month}. Sisa hari kalender ${w.calendar}.` : ''].filter(Boolean), mood: 'happy' });
+        return;
+      }
+      case 'dataDate': {
+        const d = c ? regionData(c, '').now : null;
+        const when = longDate(d?.date);
+        offer = { say: 'Status data', ask: '' };
+        chat(when ? `Data terakhir per ${when}.` : 'Tanggal data belum terbaca.', { lines: ['Dashboard mengecek data baru secara otomatis. Bilang "status data" untuk rincian.'], next: ['Status data', 'Refresh data'] });
+        return;
+      }
+      case 'fullscreen':
+        try {
+          await document.documentElement.requestFullscreen();
+          talkOnly('Siap, layar penuh. Bilang "keluar layar penuh" untuk kembali.', 'happy');
+        } catch {
+          chat('Browser belum mengizinkan layar penuh lewat suara. Tekan F11 ya.', { mood: 'confused' });
+        }
+        return;
+      case 'exitFull':
+        if (document.fullscreenElement) { document.exitFullscreen?.().catch(() => null); talkOnly('Oke, layar penuh dimatikan.'); }
+        else talkOnly('Sekarang tidak sedang layar penuh kok. Kalau pakai F11, tekan F11 lagi ya.');
+        return;
+      case 'print': ding('done'); close(); setTimeout(() => window.print(), 350); return;
+      case 'copy': copyText(false); return;
+      case 'share': copyText(true); return;
+      case 'remind': remind(cmd.text); return;
+      case 'remindCancel': {
+        const n = reminders.length;
+        reminders.splice(0).forEach((x) => clearTimeout(x.timer));
+        chat(n ? `Siap, ${n} pengingat saya batalkan.` : 'Belum ada pengingat yang aktif.', { mood: 'happy' });
+        return;
+      }
+      case 'remindList':
+        chat(reminders.length ? `Ada ${reminders.length} pengingat aktif.` : 'Belum ada pengingat yang aktif.', { lines: reminders.map((x) => esc(`${x.about || 'Pengingat'}: ${minutesText(Math.max(0, x.due - Date.now()))} lagi`)) });
+        return;
+      case 'volUp':
+      case 'volDown': {
+        const before = pref.volume;
+        pref.volume = Math.min(1, Math.max(0.3, Math.round(((pref.volume || 1) + (cmd.type === 'volUp' ? 0.15 : -0.15)) * 100) / 100));
+        setVolume(pref.volume);
+        writePref(pref);
+        if (cmd.type === 'volUp' && before >= 1) { talkOnly('Suara saya sudah paling keras. Coba naikkan volume laptop ya.'); return; }
+        talkOnly(cmd.type === 'volUp' ? 'Oke, saya keraskan. Segini terdengar?' : 'Baik, saya kecilkan. Segini?');
+        return;
+      }
+      case 'short': pref.short = true; writePref(pref); talkOnly('Siap, mulai sekarang saya jawab singkat.', 'happy'); return;
+      case 'long': pref.short = false; writePref(pref); talkOnly('Baik, saya jawab lengkap lagi.', 'happy'); return;
+      case 'whereAmI': {
+        const view = (location.hash.match(/^#\/([a-z]+)/) || [])[1] || 'direktur';
+        const ro = c?.sel?.ro || '';
+        talkOnly(`Sekarang di halaman ${PAGE_NAME[view] || view}, ${ro ? `filter ${shortRo(ro)}` : 'tampilan Nasional'}.${showing ? ` Di layar saya sedang tampil ${shortRo(showing)}.` : ''}`);
+        return;
+      }
+      case 'setName': {
+        pref.name = nameFrom(cmd.name);
+        pref.askedName = true;
+        writePref(pref);
+        ding('love');
+        chat(`Salam kenal, ${pref.name}. Mulai sekarang saya panggil ${pref.name} ya.`, { mood: 'love' });
+        return;
+      }
+      case 'whoAmI':
+        chat(pref.name ? `Tentu ingat, ${pref.name}.` : 'Saya belum tahu nih. Mau dipanggil siapa?', { mood: pref.name ? 'love' : 'confused', lines: pref.name ? [] : ['Bilang saja, misalnya, "panggil saya Pak Andi".'] });
+        return;
+      case 'forgetName': pref.name = ''; writePref(pref); chat('Baik, nama sudah saya lupakan.', { mood: 'happy' }); return;
+      case 'intro': {
+        const ask = !pref.name && !pref.askedName;
+        if (ask) { pref.askedName = true; writePref(pref); }
+        reply(`Halo, saya ${esc(WAKE_NAME)}, asisten dashboard KPR.`, { lines: ['Saya bisa menampilkan kondisi wilayah, membandingkan RO, membuka detail, menjawab pertanyaan angka, mengingatkan jadwal, dan mengatur dashboard. Panggil saja "Hai Kirana".', ...(ask ? ['Oh iya, mau dipanggil siapa? Bilang saja, misalnya, "panggil saya Pak Andi".'] : [])], mood: 'love', next: HINTS });
+        return;
+      }
+      case 'smalltalk': {
+        const part = partOfDay();
+        if (part === 'sore' || part === 'pagi') offer = { say: 'Briefing hari ini', ask: '' };
+        reply(esc(line(`smalltalk.${part}`)), { mood: 'happy', next: HINTS, keep: false });
+        return;
+      }
       case 'wakeOff': setWake(false, true); return;
       case 'wakeOn': setWake(true, true); return;
       case 'mute': setMute(true); reply('Suara jawaban dimatikan. Jawaban tetap tampil di layar.', { keep: false }); return;
       case 'unmute': setMute(false); reply('Suara jawaban menyala lagi.', { mood: 'happy', keep: false }); return;
       case 'voice': {
+        const list = voiceList();
+        if (list.cloud.length + list.web.filter((v) => !v.male).length <= 1) {
+          reply('Browser ini cuma punya satu suara perempuan bahasa Indonesia, jadi belum ada yang bisa diganti.', { lines: [list.natural ? 'Kecepatan dan nada tetap bisa diatur: "lebih pelan", "nada lebih tinggi".' : 'Buka dashboard di Microsoft Edge untuk suara Gadis Natural yang lebih lembut, atau nyalakan suara Google.'], keep: false });
+          return;
+        }
         const v = nextVoice();
-        pref.voice = v.index;
+        pref.voiceId = v.id;
         writePref(pref);
-        reply(`Ini suara ${esc(v.name)}. Suka yang ini?`, { mood: 'happy', keep: false, next: ['Ganti suara', 'Lebih pelan', 'Lebih cepat'] });
+        reply(`Ini suara ${esc(v.name)}. Suka yang ini?`, { mood: 'happy', keep: false, next: ['Ganti suara', 'Lebih pelan', 'Nada lebih tinggi'] });
+        return;
+      }
+      case 'voicePick': {
+        const v = findVoice(cmd.name);
+        if (!v) {
+          const names = [...voiceList().cloud, ...voiceList().web].map((x) => x.name);
+          reply(`Suara “${esc(cmd.name)}” tidak ada di browser ini.`, { lines: [names.length ? `Pilihan yang ada: ${esc(names.join(', '))}.` : 'Browser ini tidak punya suara bahasa Indonesia.'], mood: 'confused', keep: false });
+          return;
+        }
+        if (pref.mute) setMute(false);
+        chooseVoice(v.id);
+        reply(`Siap, sekarang saya pakai suara ${esc(v.name)}. Begini kedengarannya.`, { mood: 'happy', keep: false, next: ['Ganti suara', 'Lebih pelan', 'Lebih cepat'] });
+        return;
+      }
+      case 'voiceList': {
+        const { cloud, web } = voiceList();
+        const names = [...cloud, ...web].map((x) => x.name);
+        reply(names.length ? `Ada ${names.length} pilihan suara: ${esc(names.join(', '))}.` : 'Browser ini tidak punya suara bahasa Indonesia.', { lines: names.length ? [`Bilang “pakai suara ${esc(names[0])}” untuk mengganti.`] : [], keep: false });
+        return;
+      }
+      case 'pitchUp':
+      case 'pitchDown': {
+        if (usingCloud()) { reply('Nada suara Google tidak bisa diubah. Coba ganti suara, misalnya “pakai suara Aoede”.', { keep: false, next: ['Daftar suara', 'Ganti suara'] }); return; }
+        pref.pitch = Math.min(1.3, Math.max(0.8, Math.round(((pref.pitch || 1) + (cmd.type === 'pitchUp' ? 0.06 : -0.06)) * 100) / 100));
+        setPitch(pref.pitch);
+        writePref(pref);
+        reply(cmd.type === 'pitchUp' ? 'Oke, nada saya naikkan sedikit. Segini?' : 'Baik, nada saya turunkan sedikit. Segini?', { keep: false, next: ['Nada lebih tinggi', 'Nada lebih rendah', 'Ganti suara'] });
         return;
       }
       case 'slower':
@@ -655,21 +1083,27 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         if (lastSpeech) { say(lastSpeech); return; }
         reply('Belum ada yang perlu diulang. Mau lihat apa?', { next: HINTS, keep: false });
         return;
-      case 'help': helpCard(); return;
-      case 'greet': reply(`${salam()}. Saya ${esc(WAKE_NAME)}. Mau lihat apa?`, { lines: ['Contoh: "briefing hari ini", "lihat Bandung", atau "bandingkan Bandung dan Surabaya".'], next: HINTS, mood: 'happy', keep: false }); return;
+      case 'help': helpCard(cmd.text); return;
+      case 'greet': {
+        const ask = !pref.name && !pref.askedName;
+        if (ask) { pref.askedName = true; writePref(pref); }
+        reply(`${salam()}${pref.name ? `, ${esc(pref.name)}` : ''}. ${pickOne(['Ada yang bisa saya bantu?', 'Mau lihat apa hari ini?', 'Senang ketemu lagi. Mau mulai dari mana?'])}`, { lines: [ask ? 'Oh iya, mau dipanggil siapa? Bilang saja, misalnya, "panggil saya Pak Andi".' : 'Contoh: "briefing hari ini", "lihat Bandung", atau "kabar baik hari ini apa".'], next: HINTS, mood: 'happy', keep: false });
+        return;
+      }
       case 'sumber': set({ sumber: cmd.mode === '7' ? '' : cmd.mode }); reply(`Siap, realisasi sekarang memakai ${esc(cmd.mode)} sumber.`, { mood: 'happy', keep: false }); return;
-      case 'nasional': set({ ro: '' }); clearStage(); reply(pickOne(['Baik, dashboard kembali ke Nasional.', 'Siap, kembali ke Nasional.']), { mood: 'happy', next: HINTS, keep: false }); return;
+      case 'nasional': set({ ro: '' }); clearStage(); reply(esc(line('nasional')), { mood: 'happy', next: HINTS, keep: false }); return;
       case 'filter': {
         set({ ro: cmd.ro });
         setMood('happy');
         ding('done');
-        say(pickOne([`Siap, dashboard saya fokuskan ke ${shortRo(cmd.ro)}.`, `Baik, sekarang dashboard menampilkan ${shortRo(cmd.ro)}.`]), { after: close });
+        say(line('filter', { n: shortRo(cmd.ro) }), { after: close });
         return;
       }
       case 'page': {
         ding('done');
         close();
         location.hash = `#/${cmd.view}`;
+        say(line('page', { p: PAGE_NAME[cmd.view] || cmd.view }));
         return;
       }
       case 'pageUnknown': ding('oops'); reply('Halaman itu belum ada.', { lines: ['Halaman yang tersedia: Direktur, Summary, Performance, Realisasi, Portofolio, dan SLA.'], mood: 'confused', next: ['Buka halaman realisasi', 'Buka halaman performance', 'Buka halaman SLA'], keep: false }); return;
@@ -683,7 +1117,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         ding('done');
         close();
         openDetail(cmd.id, ro);
-        say(pickOne([`Baik, ini detail ${name}${where}.`, `Siap, saya bukakan detail ${name}${where}.`, `Ini detail ${name}${where}.`]));
+        say(line('detail', { what: `${name}${where}` }));
         return;
       }
       case 'region': showRegion(cmd.ro); return;
@@ -707,10 +1141,15 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       ].slice(0, 3);
       const failed = a.ok === false;
       if (failed) ding('oops');
-      reply(a.title || 'Belum ada jawaban.', { lines, chips, next: next.length ? next : HINTS, mood: failed ? 'confused' : 'happy' });
+      const title = a.title || 'Belum ada jawaban.';
+      if (!failed && ros.length === 1 && Math.random() < 0.6) offer = { say: `Lihat ${shortRo(ros[0])}`, ask: `Mau saya tampilkan kondisi lengkap ${shortRo(ros[0])}?` };
+      const lead = failed ? line('confused') : line('askLead');
+      const tail = failed ? 'Coba pakai kata lain, misalnya "NPL Bandung berapa?"' : offer ? offer.ask : line('askClose');
+      lastAnswer = { text: [title, ...lines].map(plain).join(' '), lines };
+      reply(title, { lines, chips, next: next.length ? next : HINTS, mood: failed ? 'confused' : 'happy', speakText: [lead, title, tail].filter(Boolean).join(' ') });
     } catch (err) {
       console.error(err);
-      reply('Maaf, jawabannya belum bisa dihitung. Coba ulangi dengan kata lain ya.', { mood: 'sad' });
+      reply(pickOne(['Maaf, jawabannya belum bisa dihitung. Coba ulangi dengan kata lain ya.', 'Aduh, ada yang macet waktu menghitung. Boleh diulang dengan kata lain?']), { mood: 'sad' });
     }
   }
 

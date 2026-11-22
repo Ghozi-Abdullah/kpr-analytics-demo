@@ -475,9 +475,9 @@ function speak_(email, req) {
   if (!text || text.length > GUARD.speakChars) throw AuthFail_('BAD');
   var key = props_().getProperty('TTS_KEY');
   if (!key) return { off: true };
-  var voice = typeof req.voice === 'string' && VOICE_RE.test(req.voice) ? req.voice : (props_().getProperty('TTS_VOICE') || 'id-ID-Chirp3-HD-Despina');
+  var voice = typeof req.voice === 'string' && VOICE_RE.test(req.voice) ? req.voice : (props_().getProperty('TTS_VOICE') || 'id-ID-Chirp3-HD-Vindemiatrix');
   var rate = Number(req.rate);
-  if (!(rate >= 0.7 && rate <= 1.6)) rate = 1.06;
+  if (!(rate >= 0.7 && rate <= 1.6)) rate = 1;
   var cache = CacheService.getScriptCache();
   var audioKey = 'tts_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, voice + '|' + rate + '|' + text, Utilities.Charset.UTF_8));
   var hit = cache.get(audioKey);

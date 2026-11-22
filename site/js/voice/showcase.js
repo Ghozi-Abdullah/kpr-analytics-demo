@@ -175,6 +175,35 @@ export function showcaseHtml(d) {
 
 const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
 
+export function toneOf(d) {
+  const p = d.now || {};
+  const osGood = ok(p.achOs) ? p.achOs >= 0.995 : null;
+  const nplGood = ok(p.nplPct) && ok(p.rkaNplPct) ? p.nplPct <= p.rkaNplPct : null;
+  if (osGood === null && nplGood === null) return 'mixed';
+  if (osGood !== false && nplGood !== false) return 'good';
+  if (osGood === false && nplGood === false) return 'bad';
+  if (osGood === false && ok(p.achOs) && p.achOs < 0.95) return 'bad';
+  return 'mixed';
+}
+
+export function regionMore(d) {
+  const p = d.now || {};
+  const out = [];
+  if (d.ro && d.rank) out.push(`${d.name} ada di peringkat ${d.rank} dari ${d.total} RO untuk capaian outstanding.`);
+  if (!d.ro && d.total) out.push(`${d.reached} dari ${d.total} RO sudah mencapai RKA outstanding.`);
+  if (d.ro && d.nplRank) out.push(`Untuk NPL, ${d.name} di urutan ${d.nplRank} tertinggi.`);
+  if (ok(p.nplPct) && ok(d.before?.nplPct)) {
+    const ch = p.nplPct - d.before.nplPct;
+    if (Math.abs(ch) >= 0.0005) out.push(`NPL ${ch > 0 ? 'naik' : 'turun'} ${fmt.num(Math.abs(ch) * 100, 2)} poin dibanding akhir bulan lalu.`);
+  }
+  if (ok(p.os) && ok(d.before?.os)) {
+    const g = p.os - d.before.os;
+    out.push(`Outstanding ${g >= 0 ? 'tumbuh' : 'turun'} ${tn(Math.abs(g))} sejak akhir bulan lalu.`);
+  }
+  if (ok(p.achDisb)) out.push(`Disburse bulan ini ${pct(p.achDisb, 0)} dari guidance.`);
+  return out;
+}
+
 export function regionTalk(d, lead = '') {
   const p = d.now;
   const n = d.name;

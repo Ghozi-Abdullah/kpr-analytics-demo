@@ -38,11 +38,11 @@
 .va-type input { flex: 1 1 auto; min-width: 0; height: 36px; border: 0; background: none; font: inherit; font-size: 16px; color: var(--ink); outline: 0; }
 .va-type button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--nusantara); color: #fff; cursor: pointer; }
 .va-next { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: min(760px, 94vw); }
-.va-next button, .va-help button, .va-more button {
+.va-next button, .va-cmds button, .va-more button {
   padding: 7px 14px; border: 1px solid rgb(8 87 195 / .16); border-radius: 999px; background: rgb(255 255 255 / .85);
   color: var(--nusantara); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s, translate .15s;
 }
-.va-next button:hover, .va-help button:hover, .va-more button:hover { background: #fff; border-color: var(--cakrawala); translate: 0 -1px; }
+.va-next button:hover, .va-cmds button:hover, .va-more button:hover { background: #fff; border-color: var(--cakrawala); translate: 0 -1px; }
 .va-next button { animation: va-word .35s calc(var(--n, 0) * 40ms + .2s) both; }
 .voice-assistant[data-stage="show"] .va-dock {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); grid-template-areas: "heard orb type" "status orb next";
@@ -374,10 +374,26 @@
 .va-facts dt { font-size: 12px; color: var(--muted); }
 .va-facts dd { margin: 2px 0 0; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .va-more { margin: 2px 0 0; }
-.va-help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
-.va-help-grid section { display: grid; gap: 6px; align-content: start; justify-items: start; }
-.va-help-grid h3 { margin: 0 0 2px; font-size: 13px; color: var(--muted); }
-.va-help .va-note { margin: 4px 0 0; }
+.va-help { width: min(920px, 100%); gap: 16px; }
+.va-help > .va-help-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 6px 24px; }
+.va-help-head > p { margin: 0 0 4px; font-size: 14px; color: var(--muted); }
+.va-help-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; min-height: 0; }
+.va-help-rail { display: grid; align-content: start; gap: 2px; padding-right: 16px; border-right: 1px solid var(--line-soft); }
+.va-help-rail button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; padding: 0 12px; border: 0; border-radius: 12px;
+  background: none; color: var(--ink-2); font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; transition: background .15s, color .15s;
+}
+.va-help-rail button small { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2, #EEF3FA); color: var(--muted); font-size: 11.5px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.va-help-rail button:hover { background: #F1F5FB; color: var(--ink); }
+.va-help-rail button[aria-selected="true"] { background: var(--nusantara); color: #fff; }
+.va-help-rail button[aria-selected="true"] small { background: rgb(255 255 255 / .2); color: #fff; }
+.va-help-rail button:focus-visible { outline: 2px solid var(--nusantara); outline-offset: 2px; }
+.va-cmds { display: grid; align-content: start; margin: 0; padding: 0; list-style: none; }
+.va-cmds li { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: center; gap: 16px; min-height: 48px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.va-cmds li:last-child { border-bottom: 0; }
+.va-cmds button { justify-self: start; max-width: 100%; text-align: left; }
+.va-cmds span { font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+.va-help > .va-note { margin: 0; padding-top: 12px; border-top: 1px solid var(--line-soft); font-size: 13px; color: var(--muted); }
 
 @media (max-height: 760px) and (min-width: 1000px) {
   .va-card { gap: 6px; padding: 14px 18px; }
@@ -437,6 +453,10 @@
   .voice-assistant[data-stage="show"] { --orb: 52px; }
   .va-pill span { display: none; }
   .va-pill { padding: 0 9px; }
+  .va-help-body { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .va-help-rail { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 6px; border-right: 0; border-bottom: 1px solid var(--line-soft); scrollbar-width: none; }
+  .va-help-rail button { flex: none; min-height: 34px; }
+  .va-cmds li { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; }
   .va-show { grid-template-columns: minmax(0, 1fr); grid-template-areas: "hero" "trend" "quality" "real"; }
   .va-compare { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .va-duel li { grid-template-columns: minmax(48px, auto) minmax(0, 1fr) minmax(76px, auto) minmax(0, 1fr) minmax(48px, auto); gap: 6px; padding: 5px 2px; }
