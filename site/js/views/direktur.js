@@ -187,13 +187,13 @@ function screenHtml(c) {
 }
 
 let latest = null;
-let pendingDetail = '';
+let pendingDetail = null;
 let assistant = null;
 
-function openFor(id, ro) {
+function openFor(id, ro, opts = {}) {
   if (!latest) return;
-  if (ro && ro !== latest.c.sel.ro) { pendingDetail = id; latest.set({ ro }); return; }
-  openScDetail(id, latest.c, latest.set);
+  if (ro && ro !== latest.c.sel.ro) { pendingDetail = { id, opts }; latest.set({ ro }); return; }
+  openScDetail(id, latest.c, latest.set, opts);
 }
 
 export default {
@@ -241,9 +241,9 @@ export default {
       openScDetail(el.dataset.detail, c, set);
     }));
     if (pendingDetail) {
-      const id = pendingDetail;
-      pendingDetail = '';
-      openScDetail(id, c, set);
+      const { id, opts } = pendingDetail;
+      pendingDetail = null;
+      openScDetail(id, c, set, opts);
     } else refreshScDetail(c, set);
     if (ask && !assistant) {
       assistant = createAssistant({

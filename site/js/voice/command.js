@@ -129,6 +129,22 @@ const TARGETS = [
 ];
 export const targetOf = (t) => TARGETS.find(([, re]) => re.test(t))?.[0] || '';
 
+const PERF = /\b(performance|performa|kinerja|riwayat|histori|history|perkembangan|data bulanan|rekap|rekapan|laporan bulanan|tren bulanan)\b/;
+const ANALYSIS = /\b(analisis|analisa|analisanya|analisisnya|insight|insightnya|temuan|apa yang perlu (saya |aku )?(tahu|ketahui)|poin penting|hal penting|highlight)\b/;
+
+export function spanFrom(t) {
+  if (/\b(tahun ini|ytd|year to date|sejak (awal tahun|januari)|awal tahun)\b/.test(t)) return 'ytd';
+  if (/\b(setahun|satu tahun|1 tahun|setahun terakhir)\b/.test(t)) return '12';
+  if (/\b(semester|setengah tahun)\b/.test(t)) return '6';
+  if (/\b(kuartal|triwulan|quarter)\b/.test(t) && !/\b(q[1-4]|kuartal [1-4]|triwulan [1-4])\b/.test(t)) return '3';
+  const m = /\b(\d{1,2}) bulan\b/.exec(t);
+  if (m && !/\bbulan (lalu|depan|kemarin)\b/.test(t)) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= 24) return String(n);
+  }
+  return '';
+}
+
 const PAGES = [
   ['ringkasan', /\b(ringkasan|summary)\b/], ['performance', /\b(performance|performa|kinerja)\b/], ['realisasi', /\brealisasi\b/],
   ['portofolio', /\b(portofolio|portfolio)\b/], ['sla', /\b(sla|berkas)\b/], ['direktur', /\b(direktur|utama|beranda|home|depan)\b/],
@@ -257,6 +273,12 @@ export function routeCommand(raw, { q = null, regions = [], showing = '' } = {})
   if (BRIEF.test(t) && !ro && !target && !specific && !time) return r('brief');
   if (!ro && !target && !specific && !time && (WORST.test(t) || BEST.test(t)) && (SHOW.test(t) || words <= 4)) return r('rankShow', { order: WORST.test(t) ? 'worst' : 'best' });
   if (OPEN.test(t) && !target && !ro && (showing || near) && !time && !asking) return r('detail', { id: 'os', ro: showing });
+  const span = spanFrom(t);
+  const perfWord = PERF.test(t);
+  if (span && !specific && ros.length < 2 && (perfWord || target === 'history' || target === 'real' || ANALYSIS.test(t) || (!target && (OPEN.test(t) || SHOW.test(t) || words <= 4))) && !(asking && !perfWord && target !== 'history')) {
+    return r('detail', { id: /\brealisasi\b/.test(t) && !perfWord ? 'real' : 'history', ro: ro || near, span });
+  }
+  if (ANALYSIS.test(t) && !specific && ros.length < 2) return r('analysis', { ro: ro || near || '' });
   if (target === 'history' && !asking && !specific) return r('detail', { id: target, ro: ro || near });
   if (target && !time && !specific && !asking && (OPEN.test(t) || target === 'watch')) return r('detail', { id: target, ro: ro || near });
   if (target && !time && !specific && !asking && SHOW.test(t) && words <= 9 && !(target === 'os' && ro && !/\b(os|outstanding)\b/.test(t))) return r('detail', { id: target, ro: ro || near });

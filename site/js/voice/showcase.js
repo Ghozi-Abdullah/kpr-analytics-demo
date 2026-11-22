@@ -204,7 +204,7 @@ export function regionMore(d) {
   return out;
 }
 
-export function regionTalk(d, lead = '') {
+export function regionTalk(d, lead = '', insight = '') {
   const p = d.now;
   const n = d.name;
   const parts = [lead || pickOne([`Ini kondisi ${n}.`, `Baik, ini gambaran ${n}.`, `Siap, ini ${n}.`])];
@@ -223,6 +223,7 @@ export function regionTalk(d, lead = '') {
     parts.push(`Realisasi bulan ini ${realRp(d.real.total)}${ok(ch) && Math.round(ch * 100) ? `, ${ch > 0 ? 'naik' : 'turun'} ${pct(Math.abs(ch), 0)} dari bulan lalu` : ''}.`);
   }
   if (d.sla?.late) parts.push(`Ada ${d.sla.late} berkas lewat SLA.`);
+  if (insight) parts.push(insight);
   if (!d.ro) {
     const offerN = { say: 'Mana yang perlu perhatian?', ask: 'Mau saya sebutkan RO yang perlu perhatian?' };
     parts.push(offerN.ask);
@@ -307,18 +308,63 @@ export function compareTalk(a, b, focus = '') {
   return lines.join(' ');
 }
 
+const MINI_ICON = {
+  chart: '<path d="M5 19V10M10 19V5M15 19v-7M20 19V8"/>',
+  line: '<path d="M3 17l5-6 4 3 6-8 3 3"/>',
+  ring: '<circle cx="12" cy="12" r="7"/><path d="M12 5a7 7 0 0 1 7 7"/>',
+  bars: '<path d="M4 7h10M4 12h16M4 17h7"/>',
+  user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-4 4-5.5 7-5.5s5.8 1.5 7 5.5"/>',
+  vs: '<path d="M4 6l4 12 4-12M20 7c-1.5-1.5-6-1.5-6 1.5S20 10 20 14s-5 3-6.5 1.5"/>',
+  chat: '<path d="M5 6h14v9H10l-4 3v-3H5z"/><path d="M9 10.5h6"/>',
+};
+const MINI_KIND = [['va-hero', 'chart', 'a'], ['va-trend', 'line', 'b'], ['va-quality', 'ring', 'c'], ['va-real', 'bars', 'd'], ['va-side', 'user', 'b'], ['va-vs', 'vs', 'c'], ['va-answer', 'chat', 'a']];
+const SPOTS = [[-0.3, -0.24], [0.27, -0.3], [-0.12, 0.08], [0.33, 0.12], [-0.36, 0.3], [0.1, 0.34], [0.02, -0.36]];
+const GHOSTS = [[-0.42, -0.04, 'd'], [0.42, -0.12, 'a'], [0.2, 0.42, 'c'], [-0.22, -0.4, 'b']];
+
+const miniHtml = (icon, tint) => `<span class="va-tile" aria-hidden="true"><span class="va-tile-ic t-${tint}"><svg viewBox="0 0 24 24">${MINI_ICON[icon]}</svg></span><span class="va-tile-tx"><b></b><b></b><b></b></span></span>`;
+
 export function flyIn(stage, from) {
   const cards = [...stage.querySelectorAll('.va-card')];
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!from || reduce) { cards.forEach((el) => el.classList.add('in')); return; }
+  if (!from || reduce || !cards.length) { cards.forEach((el) => el.classList.add('in')); return; }
   const o = from.getBoundingClientRect();
+  const sr = stage.getBoundingClientRect();
   const ox = o.left + o.width / 2;
   const oy = o.top + o.height / 2;
-  for (const el of cards) {
+  const cx = sr.left + sr.width / 2;
+  const cy = sr.top + sr.height / 2;
+  const single = cards.length === 1;
+  const jitter = () => (Math.random() - 0.5) * 24;
+  stage.classList.add('is-swarm');
+  cards.forEach((el, i) => {
     const r = el.getBoundingClientRect();
-    el.style.setProperty('--fx', `${(ox - (r.left + r.width / 2)).toFixed(1)}px`);
-    el.style.setProperty('--fy', `${(oy - (r.top + r.height / 2)).toFixed(1)}px`);
-  }
-  requestAnimationFrame(() => cards.forEach((el) => el.classList.add('in')));
+    const kind = MINI_KIND.find(([cls]) => el.classList.contains(cls)) || ['', 'chat', 'a'];
+    el.insertAdjacentHTML('afterbegin', miniHtml(kind[1], kind[2]));
+    const [fx, fy] = single ? [0, -0.06] : SPOTS[i % SPOTS.length];
+    const ex = r.left + r.width / 2;
+    const ey = r.top + r.height / 2;
+    const scale = Math.min(0.55, Math.max(0.1, (single ? 170 : 132) / Math.max(1, r.width)));
+    el.style.setProperty('--ox', `${(ox - ex).toFixed(1)}px`);
+    el.style.setProperty('--oy', `${(oy - ey).toFixed(1)}px`);
+    el.style.setProperty('--mx', `${(cx + fx * sr.width + jitter() - ex).toFixed(1)}px`);
+    el.style.setProperty('--my', `${(cy + fy * sr.height + jitter() - ey).toFixed(1)}px`);
+    el.style.setProperty('--ms', scale.toFixed(3));
+    el.style.setProperty('--mr', `${((Math.random() - 0.5) * 8).toFixed(1)}deg`);
+    if (single) el.style.setProperty('--i', '0');
+  });
+  const layer = document.createElement('div');
+  layer.className = 'va-ghosts';
+  layer.setAttribute('aria-hidden', 'true');
+  layer.innerHTML = GHOSTS.slice(0, single ? 3 : 4).map(([fx, fy, t], i) => `<span class="va-ghost" style="--gx:${(fx * sr.width).toFixed(0)}px;--gy:${(fy * sr.height).toFixed(0)}px;--gox:${(ox - cx - fx * sr.width).toFixed(0)}px;--goy:${(oy - cy - fy * sr.height).toFixed(0)}px;--i:${i}">${miniHtml(['bars', 'chat', 'ring', 'user'][i], t)}</span>`).join('');
+  stage.append(layer);
+  requestAnimationFrame(() => cards.forEach((el) => el.classList.add('in', 'swarm')));
+  const last = cards.at(-1);
+  const done = () => {
+    stage.classList.remove('is-swarm');
+    layer.remove();
+    cards.forEach((el) => el.querySelector(':scope > .va-tile')?.remove());
+  };
+  const timer = setTimeout(done, 2600);
+  last.addEventListener('animationend', (e) => { if (e.target === last && e.animationName === 'va-swarm') { clearTimeout(timer); done(); } });
 }
 

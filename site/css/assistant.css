@@ -1,7 +1,7 @@
 @property --p { syntax: "<number>"; inherits: true; initial-value: 0; }
 
 .voice-assistant {
-  --orb: 132px;
+  --orb: 160px;
   position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none;
   margin: 0; padding: 0; border: 0; background: transparent; color: var(--ink); overflow: hidden; overscroll-behavior: contain;
 }
@@ -10,7 +10,7 @@
   background: radial-gradient(110% 80% at 50% 105%, rgb(48 127 226 / .26), transparent 62%), rgb(232 239 250 / .7);
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
-.voice-assistant[data-stage="show"] { --orb: 64px; }
+.voice-assistant[data-stage="show"] { --orb: 84px; }
 .fx-lite .voice-assistant::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; background: radial-gradient(110% 80% at 50% 105%, rgb(48 127 226 / .2), transparent 62%), rgb(236 242 251 / .985); }
 
 .va-top { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 16px clamp(14px, 2.4vw, 32px) 8px; }
@@ -62,91 +62,47 @@
   opacity: .5; transform: scale(.82); transition: opacity .25s, transform .12s linear;
 }
 .blob {
-  position: absolute; inset: 0; overflow: hidden; border-radius: 47% 53% 50% 50% / 52% 48% 52% 48%;
-  background:
-    radial-gradient(circle at 26% 22%, #A9F4FF 0 9%, transparent 44%),
-    radial-gradient(circle at 82% 26%, #A98BFF 0 6%, transparent 40%),
-    radial-gradient(circle at 64% 90%, #46E2CB 0 5%, transparent 42%),
-    linear-gradient(155deg, #4CCBF2 0%, #307FE2 42%, #2F46D6 78%, #5B3FD9 100%);
-  box-shadow: inset -12px -16px 32px rgb(35 20 140 / .36), inset 10px 12px 26px rgb(255 255 255 / .36), 0 22px 46px -16px rgb(40 80 220 / .6);
-  animation: va-wobble 6s ease-in-out infinite; will-change: transform; transition: scale .12s linear;
+  position: absolute; inset: 0; overflow: hidden; border-radius: 50%;
+  background: #ECE8E7;
+  box-shadow: inset 0 -.6em 1.2em rgb(120 80 60 / .18), 0 1.4em 3em -1.4em rgb(80 50 40 / .45);
+  animation: va-bob 5.5s ease-in-out infinite; will-change: transform; transition: scale .12s linear, filter .3s;
 }
-.blob .swirl {
-  position: absolute; inset: -30%; will-change: transform;
-  background: conic-gradient(from 0deg, transparent 0 18%, rgb(255 255 255 / .3) 28%, transparent 44% 62%, rgb(130 225 255 / .36) 74%, transparent 90%);
-  animation: va-spin 9s linear infinite;
+.blob::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: 50%; pointer-events: none; background: radial-gradient(90% 55% at 32% 6%, rgb(255 255 255 / .3), transparent 50%); box-shadow: inset 0 0 0 .12em rgb(255 255 255 / .65); }
+
+.kira-pose {
+  position: absolute; inset: -2%; opacity: var(--on, 0); background: center / cover no-repeat;
+  transform: translate(calc(var(--lx, 0) * 1.8%), calc(var(--ly, 0) * 1.8%)); transition: opacity .3s ease, transform .22s ease-out;
 }
-.face {
-  --sw: 8.5; --smile: 1; --grin: 0; --frown: 0; --flat: 0; --talk: 0; --round: 0;
-  position: absolute; inset: 0; filter: drop-shadow(0 0 .3em rgb(255 255 255 / .85)); transform: translate(calc(var(--lx, 0) * 7%), calc(var(--ly, 0) * 6%)); transition: transform .18s ease-out, translate .3s, rotate .3s; }
-.face .eye { position: absolute; top: 31%; width: 13%; height: 26%; animation: va-blink 5.5s infinite; }
-.face .eye:first-child { left: 30%; }
-.face .eye:nth-child(2) { right: 30%; animation: va-wink 11s infinite; }
-.face i { position: absolute; display: block; transition: opacity .18s ease-out, transform .26s cubic-bezier(.3, .9, .3, 1.25); }
-.face .o { inset: 0; border-radius: 999px; background: #fff; }
-.face svg { position: absolute; display: block; overflow: visible; fill: none; stroke: #fff; stroke-width: var(--sw); stroke-linecap: round; stroke-linejoin: round; }
-.face .c { left: -27%; width: 154%; top: 30%; aspect-ratio: 2 / 1; opacity: 0; transform: translateY(25%) scaleY(.5); transition: opacity .18s ease-out, transform .26s cubic-bezier(.3, .9, .3, 1.25); }
-.face .mouth { position: absolute; left: 35%; width: 30%; top: 60%; aspect-ratio: 2 / 1; }
-.face .lip { inset: 0; width: 100%; height: 100%; }
-.face .lip path { --on: 0; opacity: var(--on); transform: scale(calc(.55 + var(--on) * .45)); transform-box: fill-box; transform-origin: 50% 50%; transition: opacity .16s ease-out, transform .28s cubic-bezier(.3, .9, .3, 1.3); }
-.face .lip .smile { --on: var(--smile); }
-.face .lip .grin { --on: var(--grin); }
-.face .lip .frown { --on: var(--frown); }
-.face .lip .flat { --on: var(--flat); }
-.face .h { left: -24%; right: -24%; top: 4%; bottom: 4%; opacity: 0; transform: scale(.3); }
-.face .h svg { display: block; width: 100%; height: 100%; fill: #fff; }
-.face .cheek { position: absolute; top: 56%; width: 17%; height: 10%; border-radius: 50%; background: radial-gradient(closest-side, rgb(255 140 196 / .95), rgb(255 140 196 / 0)); opacity: .28; transition: opacity .3s; }
-.face .cheek:nth-child(3) { left: 16%; }
-.face .cheek:nth-child(4) { right: 16%; }
-.face .round { left: 32%; width: 36%; top: 0; aspect-ratio: 4 / 5; border-radius: 50%; background: #fff; opacity: var(--round); transform: scale(calc(.4 + var(--round) * .6)); }
-.face .talk {
-  left: 27%; width: 46%; top: 6%; aspect-ratio: 1.3 / 1; border-radius: 42% 42% 50% 50% / 38% 38% 62% 62%; background: #fff;
-  opacity: var(--talk); transform: scaleY(.2); transform-origin: 50% 0;
-}
+.blob { --idle: 1; --think: 0; --pout: 0; --smart: 0; --joy: 0; }
+.kira-idle { --on: var(--idle); }
+.kira-think { --on: var(--think); }
+.kira-pout { --on: var(--pout); }
+.kira-smart { --on: var(--smart); }
+.kira-joy { --on: var(--joy); }
+.voice-assistant[data-state="think"] .va-orb .blob { --idle: 0; --think: 0; --pout: 0; --smart: 1; --joy: 0; }
+.voice-assistant[data-state="speak"] .va-orb .blob { --idle: 0; --think: 0; --pout: 0; --smart: 1; --joy: 0; }
+.voice-assistant:is([data-mood="happy"], [data-mood="love"]) .va-orb .blob { --idle: 0; --think: 0; --pout: 0; --smart: 0; --joy: 1; }
+.voice-assistant:is([data-mood="confused"], [data-mood="sleepy"]) .va-orb .blob { --idle: 0; --think: 1; --pout: 0; --smart: 0; --joy: 0; }
+.voice-assistant[data-mood="surprised"] .va-orb .blob { --idle: 1; --think: 0; --pout: 0; --smart: 0; --joy: 0; }
+.voice-assistant:is([data-mood="sad"], [data-state="error"]) .va-orb .blob { --idle: 0; --think: 0; --pout: 1; --smart: 0; --joy: 0; }
+.voice-assistant[data-state="speak"] .va-orb .blob { animation: va-bob 5.5s ease-in-out infinite, va-nod 1.6s ease-in-out infinite; }
+.va-launch:hover .blob { --idle: 0; --joy: 1; }
+@keyframes va-nod { 0%, 100% { translate: 0 0; } 50% { translate: 0 1.5%; } }
 
 .voice-assistant[data-state="listen"] .va-orb .halo { opacity: calc(.55 + var(--lvl) * .8); transform: scale(calc(.9 + var(--lvl) * .55)); }
 .voice-assistant[data-state="listen"] .va-orb .blob { scale: calc(1 + var(--lvl) * .12); }
-.voice-assistant[data-state="listen"] .va-orb .o { transform: scaleY(calc(1.06 + var(--lvl) * .4)); }
-.voice-assistant[data-state="think"] .va-orb .swirl { animation-duration: 1.6s; }
-.voice-assistant[data-state="think"] .va-orb .face { animation: va-look 1.5s ease-in-out infinite; }
-.voice-assistant[data-state="think"] .va-orb .face { --smile: 0; --grin: 0; --frown: 0; --flat: 1; --talk: 0; --round: 0; }
-.voice-assistant[data-mood="happy"] .va-orb .eye { animation: none; }
-.voice-assistant[data-mood="happy"] .va-orb .o { opacity: 0; transform: scaleY(.3); }
-.voice-assistant[data-mood="happy"] .va-orb .c { opacity: 1; transform: none; }
-.voice-assistant[data-mood="happy"] .va-orb .face { --smile: 0; --grin: 1; --frown: 0; --flat: 0; --talk: 0; --round: 0; }
-.voice-assistant[data-mood="sad"] .va-orb .o, .voice-assistant[data-state="error"] .va-orb .o { transform: translateY(18%) scaleY(.32); }
-.voice-assistant[data-state="error"] .va-orb .blob { filter: saturate(.35) brightness(1.05); }
-.voice-assistant[data-state="speak"] .va-orb .eye { animation: none; }
-.voice-assistant[data-state="speak"] .va-orb .o { opacity: 0; transform: scaleY(.3); }
-.voice-assistant[data-state="speak"] .va-orb .c { opacity: 1; transform: none; }
-.voice-assistant[data-state="speak"] .va-orb .talk { animation: va-talk 1.1s ease-in-out infinite; }
+.voice-assistant[data-state="error"] .va-orb .blob { filter: saturate(.45) brightness(1.04); }
 .voice-assistant[data-state="speak"] .va-orb .halo { opacity: .75; animation: va-glow 1.1s ease-in-out infinite; }
 .voice-assistant[data-stage="empty"] .va-orb { animation: va-rise .5s cubic-bezier(.2, .9, .25, 1.15) both; }
 .voice-assistant[data-stage="show"] .va-orb { animation: va-dock .45s cubic-bezier(.2, .9, .25, 1.1) both; }
 
-.voice-assistant[data-state="speak"] .va-orb .cheek, .voice-assistant[data-mood="happy"] .va-orb .cheek { opacity: .75; }
-.voice-assistant[data-mood="love"] .va-orb .cheek { opacity: 1; }
-.voice-assistant[data-mood="love"] .va-orb .eye, .voice-assistant[data-mood="sleepy"] .va-orb .eye, .voice-assistant[data-mood="surprised"] .va-orb .eye { animation: none; }
-.voice-assistant[data-mood="love"] .va-orb .o, .voice-assistant[data-mood="love"] .va-orb .c { opacity: 0; transform: scale(.3); }
-.voice-assistant[data-mood="love"] .va-orb .h { opacity: 1; transform: none; animation: va-beat .7s ease-in-out infinite; }
-.voice-assistant[data-mood="love"] .va-orb .face { --smile: 0; --grin: 1; --frown: 0; --flat: 0; --talk: 0; --round: 0; }
-.voice-assistant[data-mood="surprised"] .va-orb .o { transform: scale(1.18, 1.22); }
-.voice-assistant[data-mood="surprised"] .va-orb .face { --smile: 0; --grin: 0; --frown: 0; --flat: 0; --talk: 0; --round: 1; }
-.voice-assistant[data-mood="confused"] .va-orb .face { rotate: -11deg; }
-.voice-assistant[data-mood="confused"] .va-orb .eye:nth-child(2) .o { transform: scaleY(.55); }
-.voice-assistant[data-mood="confused"] .va-orb .face { --smile: 0; --grin: 0; --frown: 0; --flat: 1; --talk: 0; --round: 0; }
-.voice-assistant[data-mood="confused"] .va-orb .lip .flat { rotate: -14deg; translate: 8% 6%; }
-.voice-assistant[data-mood="sleepy"] .va-orb .o { transform: translateY(30%) scaleY(.3); }
-.voice-assistant[data-mood="sleepy"] .va-orb .face { --smile: 0; --grin: 0; --frown: 0; --flat: 1; --talk: 0; --round: 0; }
-.voice-assistant[data-mood="sad"] .va-orb .face, .voice-assistant[data-state="error"] .va-orb .face { --smile: 0; --grin: 0; --frown: 1; --flat: 0; --talk: 0; --round: 0; }
-.voice-assistant[data-state="speak"] .va-orb .face { --smile: 0; --grin: 0; --frown: 0; --flat: 0; --talk: 1; --round: 0; }
 .voice-assistant[data-mood="sleepy"] .va-orb .blob { animation-duration: 10s; }
 .voice-assistant[data-mood="sleepy"] .va-orb .halo { opacity: .25; }
-.voice-assistant[data-mood="happy"] .va-orb .blob, .voice-assistant[data-mood="love"] .va-orb .blob, .voice-assistant[data-mood="surprised"] .va-orb .blob { animation: va-wobble 6s ease-in-out infinite, va-hop .6s cubic-bezier(.3, .7, .4, 1.4) 1; }
+.voice-assistant[data-mood="happy"] .va-orb .blob, .voice-assistant[data-mood="love"] .va-orb .blob, .voice-assistant[data-mood="surprised"] .va-orb .blob { animation: va-bob 5.5s ease-in-out infinite, va-hop .6s cubic-bezier(.3, .7, .4, 1.4) 1; }
 
 .fx { position: absolute; inset: 0; pointer-events: none; }
 .fx > * { position: absolute; opacity: 0; }
-.fx .q { right: -16%; top: -22%; font-size: 3.4em; font-weight: 800; line-height: 1; color: #fff; text-shadow: 0 .1em .4em rgb(40 70 210 / .55); }
+.fx .q { right: -16%; top: -22%; font-size: 3.4em; font-weight: 800; line-height: 1; color: var(--nusantara); text-shadow: 0 .08em .3em rgb(255 255 255 / .9); }
 .fx .zz { font-size: 1.9em; font-weight: 800; line-height: 1; color: #5466D9; }
 .fx .zz:nth-child(2) { right: -6%; top: 0; }
 .fx .zz:nth-child(3) { right: -20%; top: -20%; font-size: 1.4em; }
@@ -159,7 +115,6 @@
 .fx .hrt svg { display: block; width: 100%; height: 100%; fill: #FF6FAE; }
 .fx .hrt:nth-child(8) { right: -10%; top: 10%; }
 .fx .hrt:nth-child(9) { left: -12%; top: 22%; width: 1.3em; height: 1.2em; }
-.fx .tear { left: 62%; top: 52%; width: .85em; height: 1.15em; border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%; background: #A5E6FF; box-shadow: 0 0 .3em rgb(255 255 255 / .8); }
 .fx .dots { left: 50%; top: -18%; display: flex; gap: .35em; translate: -50% 0; }
 .fx .dots b { width: .75em; height: .75em; border-radius: 50%; background: #fff; box-shadow: 0 0 .4em rgb(48 127 226 / .6); animation: va-dot 1s ease-in-out infinite; }
 .fx .dots b:nth-child(2) { animation-delay: .15s; }
@@ -173,44 +128,31 @@
 .voice-assistant[data-mood] .fx .sp:nth-child(7) { animation-delay: .36s; }
 .voice-assistant[data-mood="love"] .fx .hrt { animation: va-float 1.8s ease-out infinite; }
 .voice-assistant[data-mood="love"] .fx .hrt:nth-child(9) { animation-delay: .6s; }
-.voice-assistant[data-mood="sad"] .fx .tear { animation: va-tear 1.8s ease-in infinite; }
 .voice-assistant[data-state="think"] .fx .dots { opacity: 1; }
 
-@keyframes va-wobble { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg) translateY(-2%); } }
+@keyframes va-bob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-2.5%) rotate(1.5deg); } }
 @keyframes va-spin { to { transform: rotate(1turn); } }
-@keyframes va-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
-@keyframes va-look { 0%, 100% { translate: 0 0; } 30% { translate: -8% -2%; } 70% { translate: 8% -2%; } }
-@keyframes va-talk { 0%, 100% { transform: scaleY(.25); } 18% { transform: scaleY(.9); } 34% { transform: scaleY(.4); } 52% { transform: scaleY(1); } 68% { transform: scaleY(.3); } 84% { transform: scaleY(.75); } }
 @keyframes va-glow { 0%, 100% { transform: scale(.9); } 50% { transform: scale(1.02); } }
 @keyframes va-rise { from { opacity: 0; transform: translateY(40px) scale(.6); } }
 @keyframes va-dock { from { opacity: .4; transform: translateY(-24px) scale(1.8); } }
 @keyframes va-word { from { opacity: 0; transform: translateY(6px); } }
-@keyframes va-wink { 0%, 70%, 75%, 100% { transform: scaleY(1); } 72% { transform: scaleY(.08); } }
 @keyframes va-hop { 0% { translate: 0 0; scale: 1 1; } 35% { translate: 0 -16%; scale: .94 1.07; } 65% { translate: 0 0; scale: 1.08 .92; } 100% { translate: 0 0; scale: 1 1; } }
-@keyframes va-beat { 0%, 100% { scale: 1; } 50% { scale: 1.16; } }
 @keyframes va-q { 0%, 100% { transform: rotate(-8deg) translateY(0); } 50% { transform: rotate(10deg) translateY(-12%); } }
 @keyframes va-z { 0% { opacity: 0; transform: translate(0, 30%) scale(.6); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(60%, -120%) scale(1.2); } }
 @keyframes va-spark { 0% { opacity: 0; transform: scale(0) rotate(0); } 40% { opacity: 1; transform: scale(1.2) rotate(30deg); } 100% { opacity: 0; transform: scale(.6) rotate(70deg); } }
 @keyframes va-float { 0% { opacity: 0; transform: translateY(20%) scale(.5); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-160%) scale(1.1); } }
-@keyframes va-tear { 0% { opacity: 0; transform: translateY(0) scale(.6); } 20% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(260%) scale(.8); } }
 @keyframes va-dot { 0%, 100% { transform: translateY(0); opacity: .5; } 40% { transform: translateY(-70%); opacity: 1; } }
 
 .va-launch {
-  position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px 0 5px; border: 1px solid rgb(11 33 71 / .08); border-radius: 999px;
+  position: relative; display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px 0 4px; border: 1px solid rgb(11 33 71 / .08); border-radius: 999px;
   background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; white-space: nowrap; cursor: pointer;
   box-shadow: 0 1px 2px rgb(11 33 71 / .06);
 }
 .va-launch:hover { border-color: rgb(48 127 226 / .4); }
-.va-launch .blob { position: relative; inset: auto; flex: none; width: 26px; height: 26px; font-size: 2.6px; box-shadow: inset -3px -4px 8px rgb(35 20 140 / .35), inset 2px 3px 6px rgb(255 255 255 / .35); animation-duration: 8s; }
-.va-launch .face { filter: none; }
-.va-launch .cheek { opacity: .5; }
-.va-launch .round, .va-launch .h { display: none; }
-.va-launch:hover .eye:nth-child(2) .o { transform: scaleY(.12); }
-.va-launch:hover .face { --smile: 0; --grin: 1; }
-.va-launch:hover .cheek { opacity: 1; }
+.va-launch .blob { position: relative; inset: auto; flex: none; width: 34px; height: 34px; font-size: 3.4px; box-shadow: 0 2px 6px -2px rgb(11 33 71 / .4); animation-duration: 8s; }
 .va-launch .t small { margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
 .va-launch.is-wake { border-color: rgb(48 127 226 / .45); }
-.va-launch.is-wake::before { content: ""; position: absolute; left: 5px; top: 4px; width: 26px; height: 26px; border-radius: 50%; background: rgb(48 127 226 / .35); animation: va-ping 2.4s ease-out infinite; pointer-events: none; }
+.va-launch.is-wake::before { content: ""; position: absolute; left: 4px; top: 4px; width: 34px; height: 34px; border-radius: 50%; background: rgb(48 127 226 / .35); animation: va-ping 2.4s ease-out infinite; pointer-events: none; }
 @keyframes va-ping { from { transform: scale(1); opacity: .7; } 70%, 100% { transform: scale(1.75); opacity: 0; } }
 
 .va-card {
@@ -226,6 +168,49 @@
 .va-hero[data-va-open]::after { color: #fff; }
 .va-card[data-va-open]:hover::after { opacity: .85; }
 .va-w { display: inline-block; animation: va-word .4s calc(var(--w) * 28ms) cubic-bezier(.2, .8, .2, 1) both; }
+.va-stage.is-swarm { overflow: hidden; position: relative; }
+.va-card.in.swarm { animation: va-swarm 1.3s cubic-bezier(.22, .8, .24, 1) both; animation-delay: calc(var(--i, 0) * 80ms); will-change: transform, opacity; }
+.va-tile {
+  position: absolute; inset: 0; z-index: 3; container-type: size; display: flex; align-items: center; gap: 6%; padding: 0 8%;
+  border-radius: inherit; background: linear-gradient(155deg, rgb(255 255 255 / .98), rgb(240 245 252 / .96)); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .9);
+  pointer-events: none;
+}
+.va-card.swarm > .va-tile { animation: va-tile-out 1.3s ease both; animation-delay: calc(var(--i, 0) * 80ms); }
+.va-tile-ic { flex: none; display: grid; place-items: center; width: 34cqmin; height: 34cqmin; border-radius: 9cqmin; box-shadow: 0 2cqmin 5cqmin rgb(11 33 71 / .2), inset 0 1cqmin 0 rgb(255 255 255 / .35); }
+.va-tile-ic svg { width: 58%; height: 58%; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.va-tile-ic.t-a { background: linear-gradient(145deg, #3A8DF0, #0857C3); }
+.va-tile-ic.t-b { background: linear-gradient(145deg, #34D1A8, #0E9F7E); }
+.va-tile-ic.t-c { background: linear-gradient(145deg, #A88BFA, #6D4AE0); }
+.va-tile-ic.t-d { background: linear-gradient(145deg, #FF9478, #EB5A3C); }
+.va-tile-tx { flex: 1; display: grid; gap: 5cqmin; }
+.va-tile-tx b { display: block; height: 7cqmin; border-radius: 4cqmin; background: #D9E1EC; }
+.va-tile-tx b:nth-child(1) { width: 62%; background: #B9C6D8; }
+.va-tile-tx b:nth-child(2) { width: 92%; }
+.va-tile-tx b:nth-child(3) { width: 48%; }
+.va-ghosts { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.va-ghost {
+  position: absolute; left: calc(50% - 64px); top: calc(50% - 38px); width: 128px; height: 76px; border-radius: 20px;
+  box-shadow: 0 18px 32px -20px rgb(11 33 71 / .45); animation: va-ghost 1.25s cubic-bezier(.22, .8, .24, 1) both; animation-delay: calc(var(--i, 0) * 70ms + 40ms);
+}
+.va-ghost .va-tile { border-radius: 20px; }
+@keyframes va-swarm {
+  0% { opacity: 0; transform: translate(var(--ox), var(--oy)) scale(.04); }
+  26% { opacity: 1; transform: translate(var(--mx), var(--my)) scale(var(--ms)) rotate(var(--mr)); }
+  46% { opacity: 1; transform: translate(var(--mx), calc(var(--my) - 8px)) scale(var(--ms)) rotate(var(--mr)); }
+  100% { opacity: 1; transform: none; }
+}
+.va-card.swarm .va-wipe { animation-delay: calc(var(--i, 1) * 80ms + .95s); }
+.va-card.in.swarm .va-ring .dial { animation-delay: calc(var(--i, 2) * 80ms + 1s); }
+.va-card.swarm .va-meter i { animation-delay: 1s; }
+.va-card.swarm .va-hist li span { animation-delay: calc(1.05s + var(--j) * 60ms); }
+.va-card.swarm .va-bars .bar i { animation-delay: calc(var(--i, 3) * 80ms + 1s + var(--j) * 60ms); }
+@keyframes va-tile-out { 0%, 50% { opacity: 1; } 72%, 100% { opacity: 0; } }
+@keyframes va-ghost {
+  0% { opacity: 0; transform: translate(var(--gox), var(--goy)) scale(.1); }
+  30% { opacity: .95; transform: translate(var(--gx), var(--gy)) scale(.9); }
+  55% { opacity: .9; transform: translate(var(--gx), calc(var(--gy) - 8px)) scale(.9); }
+  80%, 100% { opacity: 0; transform: translate(var(--gx), calc(var(--gy) - 14px)) scale(.7); }
+}
 @keyframes va-fly {
   from { opacity: 0; transform: translate(var(--fx, 0px), var(--fy, 40px)) scale(.16); }
   55% { opacity: 1; }
@@ -369,6 +354,11 @@
 .va-answer { width: min(820px, 100%); gap: 12px; padding: clamp(20px, 2vw, 32px); }
 .va-answer h2 { margin: 0; font-size: clamp(20px, .8vw + 13px, 28px); font-weight: 700; line-height: 1.3; letter-spacing: -0.015em; }
 .va-answer > p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ink-2); }
+.va-tone { display: inline-block; width: 8px; height: 8px; margin-right: 10px; border-radius: 50%; background: var(--muted); vertical-align: 1px; }
+.va-tone.good { background: var(--good); }
+.va-tone.warn { background: var(--warn); }
+.va-tone.bad { background: var(--bad); }
+.va-answer > p small { display: block; margin: 2px 0 0 18px; font-size: 14px; color: var(--muted); }
 .va-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 4px 0 0; }
 .va-facts div { padding: 10px 12px; border-radius: 14px; background: #F2F6FC; }
 .va-facts dt { font-size: 12px; color: var(--muted); }
@@ -449,8 +439,8 @@
   .va-trend { min-height: 260px; }
 }
 @media (max-width: 700px) {
-  .voice-assistant { --orb: 112px; }
-  .voice-assistant[data-stage="show"] { --orb: 52px; }
+  .voice-assistant { --orb: 132px; }
+  .voice-assistant[data-stage="show"] { --orb: 64px; }
   .va-pill span { display: none; }
   .va-pill { padding: 0 9px; }
   .va-help-body { grid-template-columns: minmax(0, 1fr); gap: 10px; }
@@ -469,9 +459,10 @@
   .va-launch .t small { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .blob, .blob .swirl, .face .eye, .face, .face .talk, .face .h, .fx > *, .fx .dots b, .va-orb, .va-orb .halo, .va-launch.is-wake::before, .va-w, .va-next button, .va-wipe, .va-duel .bar i { animation: none !important; }
+  .blob, .kira-pose, .fx > *, .fx .dots b, .va-orb, .va-orb .halo, .va-launch.is-wake::before, .va-w, .va-next button, .va-wipe, .va-duel .bar i { animation: none !important; }
   .va-wipe { display: none; }
-  .va-card.in { animation: va-fade .2s both; }
+  .va-card.in, .va-card.in.swarm { animation: va-fade .2s both; }
+  .va-ghosts, .va-tile { display: none; }
   .va-meter i, .va-bars .bar i, .va-card.in .va-ring .dial, .va-dot, .va-end, .va-hist li span { animation: none; opacity: 1; }
 }
 @keyframes va-fade { from { opacity: 0; } to { opacity: 1; } }

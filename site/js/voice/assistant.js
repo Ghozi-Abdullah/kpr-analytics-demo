@@ -9,6 +9,8 @@ import { routeCommand, findWake, cleanSpoken, spoken, shortRo, WAKE_NAME, WAKE_P
 import { regionData, showcaseHtml, regionTalk, compareHtml, compareTalk, flyIn, toneOf, regionMore } from './showcase.js';
 import { createPersona, pickOne, salam, partOfDay, clockText, dateText, workdaysLeft, longDate, parseReminder, nameFrom } from './persona.js';
 import { pct } from '../views/direktur-format.js';
+import { buildInsights } from '../analytics/insights.js';
+import { periodRows, periodStory, storySpeech } from '../analytics/period.js';
 
 const PREF_KEY = 'kpr.assistant';
 const FOLLOW_MS = 9000;
@@ -106,7 +108,7 @@ const ERRORS = {
 
 const readPref = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch { return {}; } };
 const writePref = (p) => { try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch {} };
-const plain = (html) => String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+const plain = (html) => String(html || '').replace(/<(br|\/p|\/li|\/div|\/h\d)[^>]*>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
 const shorten = (text) => {
   const parts = String(text).split(/(?<=[.!?])\s+/).filter(Boolean);
   if (parts.length <= 2) return text;
@@ -131,15 +133,11 @@ const sameText = (a, b) => {
   return !!x && !!y && (x === y || y.startsWith(x) || x.startsWith(y));
 };
 
-const ARC = '<svg class="c" viewBox="0 0 20 10" aria-hidden="true"><path d="M3.5 8.5Q10 -.5 16.5 8.5"/></svg>';
-const LIP = `<svg class="lip" viewBox="0 0 30 15" aria-hidden="true"><path class="smile" d="M8.5 3.5Q15 12.5 21.5 3.5"/><path class="grin" d="M6 2.5Q15 17 24 2.5"/><path class="frown" d="M9.5 10.5Q15 3 20.5 10.5"/><path class="flat" d="M11 7.5H19"/></svg>`;
-export const orbHtml = () => `<span class="blob" aria-hidden="true"><span class="swirl"></span><span class="face">
-  <span class="eye"><i class="o"></i>${ARC}<i class="h">${HEART}</i></span><span class="eye"><i class="o"></i>${ARC}<i class="h">${HEART}</i></span>
-  <span class="cheek"></span><span class="cheek"></span>
-  <span class="mouth">${LIP}<i class="talk"></i><i class="round"></i></span></span></span>`;
+const POSES = ['idle', 'think', 'pout', 'smart', 'joy'];
+export const orbHtml = () => `<span class="blob" aria-hidden="true">${POSES.map((p) => `<i class="kira-pose kira-${p}"></i>`).join('')}</span>`;
 
 const FX = `<span class="fx" aria-hidden="true"><i class="q">?</i><i class="zz">z</i><i class="zz">z</i><i class="sp"></i><i class="sp"></i><i class="sp"></i><i class="sp"></i>
-  <i class="hrt">${HEART}</i><i class="hrt">${HEART}</i><i class="tear"></i><span class="dots"><b></b><b></b><b></b></span></span>`;
+  <i class="hrt">${HEART}</i><i class="hrt">${HEART}</i><span class="dots"><b></b><b></b><b></b></span></span>`;
 
 function revealWords(el) {
   if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -178,6 +176,22 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let lastKind = '';
   let greetOnOpen = false;
   const reminders = [];
+  const insightCache = new Map();
+
+  function insightsFor(ro) {
+    const c = getContext();
+    if (!c) return [];
+    const key = `${ro}|${c.now?.date}|${c.now?.os}|${c.sel?.sumber}`;
+    if (!insightCache.has(key)) {
+      let list = [];
+      try { list = buildInsights({ pm: c.pm, real: c.realModel, pf: c.pfModel }, { ro }, { sources: ['performance', 'realisasi'], limit: 5, perKind: 1 }); } catch {}
+      insightCache.set(key, list);
+      if (insightCache.size > 30) insightCache.delete(insightCache.keys().next().value);
+    }
+    return insightCache.get(key);
+  }
+  const insightLine = (it, full = true) => `${plain(it.headline)}${full && it.implication ? ` ${plain(it.implication)}` : ''}`;
+  const spanWords = (span) => (span === 'ytd' ? 'tahun ini' : `${span} bulan terakhir`);
   setCloudSpeaker(speakRemote);
   let dlg = null;
   let launcher = null;
@@ -592,13 +606,14 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     build();
     showing = '';
     const stage = $('va-stage');
-    stage.innerHTML = `<article class="va-card va-answer in">
+    stage.innerHTML = `<article class="va-card va-answer">
       ${title ? `<p class="va-code">${esc(title)}</p>` : ''}<h2>${html}</h2>
       ${lines.map((l) => `<p>${l}</p>`).join('')}
       ${chips.length ? `<dl class="va-facts">${chips.map((c) => `<div><dt>${esc(c.k)}</dt><dd>${esc(c.v)}</dd></div>`).join('')}</dl>` : ''}
     </article>`;
-    revealWords(stage.querySelector('.va-answer h2'));
     setStage('show');
+    flyIn(stage, $('va-orb'));
+    revealWords(stage.querySelector('.va-answer h2'));
     if (next) suggest(next);
     if (mood) setMood(mood);
     if (keep) remember({ kind: 'answer', args: [html, { title, chips, lines, next, mood }] });
@@ -674,7 +689,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     stage.innerHTML = showcaseHtml(d);
     setStage('show');
     flyIn(stage, $('va-orb'));
-    const talk = regionTalk(d, openerFor(d, lead));
+    const top = pref.short ? null : insightsFor(d.ro || '')[0];
+    const talk = regionTalk(d, openerFor(d, lead), top ? `${pickOne(['Catatan analisis saya:', 'Dari sisi analisis,', 'Yang perlu dicermati,'])} ${insightLine(top)}` : '');
     if (tail) talk.text = `${talk.text.replace(talk.offer.ask, '').trim()} ${tail}${tailOffer ? ` ${tailOffer.ask}` : ''}`;
     if (tailOffer) talk.offer = tailOffer;
     lastRegion = { key: d.ro || '', name: d.name, d };
@@ -775,9 +791,10 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (showing !== '' || (lastRegion && trail.at(-1)?.kind === 'region')) {
       const d = lastRegion?.d;
       const more = d ? regionMore(d) : [];
-      if (more.length) {
-        offer = { say: `Detail outstanding ${d.name}`, ask: 'Mau saya bukakan detailnya?' };
-        talkOnly(`${pickOne(['Maksudnya begini.', 'Jadi begini.', 'Saya jelaskan sedikit ya.'])} ${more.join(' ')} ${offer.ask}`, 'happy');
+      const extra = d ? insightsFor(d.ro || '').slice(1, 3).map((it) => insightLine(it)) : [];
+      if (more.length || extra.length) {
+        offer = { say: `Performance ${d.name} 3 bulan`, ask: 'Mau saya bukakan tren 3 bulannya?' };
+        talkOnly(`${pickOne(['Maksudnya begini.', 'Jadi begini.', 'Saya jelaskan sedikit ya.'])} ${[...more, ...extra].join(' ')} ${offer.ask}`, 'happy');
         return;
       }
     }
@@ -790,6 +807,25 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       return;
     }
     chat('Yang mana ya maksudnya? Coba sebut wilayah atau angkanya, misalnya "jelaskan NPL Bandung".', { mood: 'confused' });
+  }
+
+  function analysis(ro) {
+    const c = getContext();
+    if (!c) return;
+    const name = ro ? shortRo(ro) : 'Nasional';
+    const list = insightsFor(ro);
+    if (!list.length) { chat(`Belum ada temuan yang cukup kuat untuk ${name}.`, { mood: 'confused' }); return; }
+    const story = periodStory(periodRows(c.pm, ro, '3'), name);
+    const dot = { positive: 'good', negative: 'bad', risk: 'warn', neutral: '' };
+    const lines = list.slice(0, 4).map((it) => `<span class="va-tone ${dot[it.tone] || ''}"></span>${it.headline}${it.implication ? `<small>${it.implication}</small>` : ''}`);
+    if (story?.focus) lines.push(`<span class="va-tone"></span><b>Tiga bulan terakhir:</b> ${esc(story.focus)}`);
+    offer = { say: `Performance ${name} 3 bulan`, ask: `Mau saya bukakan performance ${name} tiga bulan terakhir?` };
+    const spoken = [insightLine(list[0]), list[1] ? plain(list[1].headline) : '', story?.focus ? `Kalau dilihat tiga bulan terakhir, ${story.focus.charAt(0).toLowerCase()}${story.focus.slice(1)}` : ''].filter(Boolean).join(' ');
+    reply(`Analisis ${esc(name)}, ${esc(longDate(c.now?.date) || 'posisi terakhir')}`, {
+      lines, mood: 'happy', next: [`Performance ${name} 3 bulan`, ro ? `Detail NPL ${name}` : 'Kabar buruknya apa?', 'Maksudnya?'],
+      speakText: `${pickOne(['Baik, ini analisis saya.', 'Oke, saya rangkum temuannya.', 'Ini poin pentingnya.'])} ${spoken} ${offer.ask}`,
+    });
+    lastAnswer = { text: [`Analisis ${name}`, ...list.map((it) => insightLine(it))].join(' '), lines: list.map((it) => insightLine(it)) };
   }
 
   function remind(text) {
@@ -1111,15 +1147,22 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       case 'refresh': document.getElementById('reload')?.click(); reply('Siap, data sedang saya perbarui.', { mood: 'happy', keep: false }); return;
       case 'status': close(); document.querySelector('[data-open-status]')?.click(); return;
       case 'detail': {
-        const name = DETAIL_NAME[cmd.id] || 'detail';
+        const name = cmd.span ? `${cmd.id === 'real' ? 'realisasi' : 'performance'} ${spanWords(cmd.span)}` : DETAIL_NAME[cmd.id] || 'detail';
         const ro = cmd.ro || showing;
         const where = ro ? ` ${shortRo(ro)}` : '';
         ding('done');
         close();
-        openDetail(cmd.id, ro);
-        say(line('detail', { what: `${name}${where}` }));
+        openDetail(cmd.id, ro, cmd.span ? { span: cmd.span } : {});
+        let more = '';
+        if (cmd.id === 'history' && c) {
+          const story = periodStory(periodRows(c.pm, ro, cmd.span || '3'), ro ? shortRo(ro) : 'Nasional');
+          more = storySpeech(story, { max: pref.short ? 1 : 3 });
+        }
+        lastAnswer = more ? { text: more, lines: [more] } : lastAnswer;
+        say(`${line('detail', { what: `${name}${where}` })} ${more}`);
         return;
       }
+      case 'analysis': analysis(cmd.ro || ''); return;
       case 'region': showRegion(cmd.ro); return;
       case 'compare': showCompare(cmd.ros[0], cmd.ros[1], cmd.metric); return;
       case 'brief': brief(); return;

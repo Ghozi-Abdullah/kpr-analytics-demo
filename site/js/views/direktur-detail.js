@@ -8,6 +8,8 @@ import { lineChart, barChart, bandCombo, destroyCharts, C } from '../charts/char
 import { NASIONAL, dayOf } from '../models/performance-model.js';
 import { ACTIVE_STAGES } from '../models/sla-model.js';
 import { perfPeriods, roPeriods, realByRo, realMonths, pfTrend, pfByRo, slaByRo, slaDays } from '../models/direktur-model.js';
+import { SPANS, spanOf, spanTitle, periodRows, periodStory, periodByRo } from '../analytics/period.js';
+import { buildInsights } from '../analytics/insights.js';
 import { tn, signedTn, realRp, pfRp, pct, points, short, roShort, tone, diff, trendTone } from './direktur-format.js';
 
 const PREFIX = 'scd-';
@@ -19,6 +21,10 @@ const NFI = C.prev;
 let openId = '';
 let openKey = '';
 let chartTimer = 0;
+let histSpan = '3';
+let realSpan = '6';
+let lastCtx = null;
+const REAL_SPANS = ['3', '6', '12'];
 
 const stat = (label, value, { sub = '', state = '' } = {}) => `<div class="scd-stat"><span>${esc(label)}</span>
   <b class="${state}">${esc(value)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
@@ -234,7 +240,7 @@ function realDetail(c) {
   const mode = c.sel.sumber;
   const cmp = c.real;
   const byRo = realByRo(c.realModel, mode, c.cur, c.pm.regions);
-  const mon = realMonths(c.realModel, c.sel.ro, mode, 6);
+  const mon = realMonths(c.realModel, c.sel.ro, mode, Number(realSpan));
   const pm = short(shiftMonth(cmp.month, -1));
   const top = cmp.rows[0];
   const grow = [...cmp.rows].filter((x) => ok(x.change) && x.prev).sort((a, b) => b.change - a.change)[0];
@@ -247,7 +253,7 @@ function realDetail(c) {
     stat('Tumbuh paling tinggi', grow ? tipeName(grow.tipe) : '–', { sub: grow ? fmt.signedPct(grow.change, 0) : '', state: '' }),
   ]);
   const modes = c.realModel.modes || ['7', '5'];
-  const tools = modes.length > 1 ? seg({ name: 'scd-sumber', label: 'Pembagian sumber realisasi', small: true, value: mode, options: modes.map((m) => ({ value: m, label: `${m} sumber` })) }) : '';
+  const tools = `${seg({ name: 'scd-rspan', label: 'Periode realisasi', small: true, value: realSpan, options: REAL_SPANS.map((m) => ({ value: m, label: `${m} bulan` })) })}${modes.length > 1 ? seg({ name: 'scd-sumber', label: 'Pembagian sumber realisasi', small: true, value: mode, options: modes.map((m) => ({ value: m, label: `${m} sumber` })) }) : ''}`;
   const last = mon.months.length - 1;
   const monthHead = mon.months.map((m, i) => (i === last && mon.partial ? `${short(m)} s.d. ${cmp.lastDay}` : short(m)));
   const totalCols = columns(mon.months.map((m, i) => ({ name: monthHead[i], label: realCell(mon.totals[i]), value: mon.totals[i], now: i === last, partial: i === last && mon.partial })));
@@ -267,10 +273,11 @@ function realDetail(c) {
   return {
     title: 'Realisasi',
     tools,
-    html: `${stats}${pair(card('Total realisasi per bulan', totalCols, { note: mon.partial ? `${short(mon.months[last])} baru sampai tanggal ${cmp.lastDay}` : '' }), card(`Per sumber, ${period}`, srcCard, { note: 'Batang kecil = 6 bulan terakhir' }))}
+    html: `${stats}${pair(card('Total realisasi per bulan', totalCols, { note: mon.partial ? `${short(mon.months[last])} baru sampai tanggal ${cmp.lastDay}` : '' }), card(`Per sumber, ${period}`, srcCard, { note: `Batang kecil = ${mon.months.length} bulan terakhir` }))}
       ${card('Per RO', roTable, { note: 'Urut total terbesar', cls: 'wide' })}`,
     bind(dlg, set) {
       onSeg(dlg, 'scd-sumber', (v) => set({ sumber: v === '7' ? '' : v }));
+      onSeg(dlg, 'scd-rspan', (v) => { realSpan = v; if (lastCtx) openScDetail('real', lastCtx, set, { span: v }); });
     },
   };
 }
@@ -353,28 +360,89 @@ function slaDetail(c) {
   };
 }
 
+const INSIGHT_TONE = { positive: 'good', negative: 'bad', risk: 'warn', neutral: '' };
+
+function insightsOf(c) {
+  try {
+    return buildInsights({ pm: c.pm, real: c.realModel, pf: c.pfModel }, { ro: c.sel.ro }, { sources: ['performance', 'realisasi'], limit: 3, perKind: 1 });
+  } catch {
+    return [];
+  }
+}
+
+function roPicker(c) {
+  const opts = [['', NASIONAL], ...c.pm.regions.map((r) => [r, roShort(r)])];
+  return `<label class="scd-select"><span>RO</span><select data-scd-pick aria-label="Pilih RO">${opts.map(([v, l]) => `<option value="${esc(v)}"${v === (c.sel.ro || '') ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+}
+
+function storyCard(story, insights) {
+  const items = story ? story.lines.map((l) => `<li data-tone="${l.tone}"><i aria-hidden="true"></i><span>${esc(l.text)}</span></li>`).join('') : '';
+  const focus = story?.focus ? `<p class="scd-focus"><b>Kesimpulan</b>${esc(story.focus)}</p>` : '';
+  const notes = story?.notes?.length ? `<p class="scd-aside">${esc(story.notes.join(' '))}</p>` : '';
+  const found = insights.length ? `<div class="scd-found"><h4>Temuan bulan berjalan</h4><ul>${insights.map((it) => `<li data-tone="${INSIGHT_TONE[it.tone] || ''}"><i aria-hidden="true"></i><span>${it.headline}${it.implication ? ` <em>${it.implication}</em>` : ''}</span></li>`).join('')}</ul></div>` : '';
+  return card('Analisis periode', `<div class="scd-analysis-body"><div><ul class="scd-story">${items}</ul>${focus}${notes}</div>${found}</div>`, { cls: 'scd-analysis wide' });
+}
+
 function historyDetail(c) {
-  const hist = longHistory(c);
-  const asc = [...hist].reverse();
+  const span = histSpan;
+  const asc = periodRows(c.pm, c.sel.ro, span);
+  const hist = [...asc].reverse();
+  const title = span !== 'ytd' && asc.length < Number(span) + 1 ? `${asc.length} bulan tersedia` : spanTitle(span, c.cur.slice(0, 4));
+  if (!hist.length) return { title, html: '<p class="scd-empty">Belum ada data bulanan</p>' };
+  const name = c.sel.ro ? roShort(c.sel.ro) : NASIONAL;
+  const story = periodStory(asc, name);
+  const f = story?.facts;
+  const since = asc[0] ? short(asc[0].month) : '';
+  const stats = f ? summary([
+    stat('OS akhir', tn(f.last.os), { sub: `${signedTn(f.dOs)} (${fmt.signedPct(f.rel, 1)}) sejak ${since}`, state: trendTone(f.dOs) }),
+    stat('Capaian RKA OS', ok(f.last.achOs) ? pct(f.last.achOs, 1) : '–', { sub: `${points(f.dAch)} sejak ${since}`, state: tone(f.last.achOs) }),
+    stat('%NPL', pct(f.last.nplPct), { sub: `${points(f.dNpl)} · RKA ${pct(f.last.rkaNplPct)}`, state: ok(f.last.rkaNplPct) && f.last.nplPct > f.last.rkaNplPct ? 'bad' : 'good' }),
+    stat('%SML', pct(f.last.smlPct), { sub: `${points(f.dSml)} · RKA ${pct(f.last.rkaSmlPct)}`, state: ok(f.last.rkaSmlPct) && f.last.smlPct > f.last.rkaSmlPct ? 'bad' : 'good' }),
+    stat('Debitur', fmt.num(f.last.deb), { sub: `${fmt.signed(f.dDeb)} sejak ${since}`, state: trendTone(f.dDeb) }),
+    stat('Disburse bulan penuh', tn(f.disbTotal), { sub: f.disbMonths ? `${pct(f.disbAch, 1)} dari guidance` : 'belum ada bulan penuh', state: f.disbMonths ? tone(f.disbAch) : '' }),
+  ]) : '';
   const rows = hist.map((h, i) => monthRow(monthLabel(h, i), `${td(tn(h.os))}${td(tn(h.rkaOs), 'm')}${achCell(h.achOs)}
     ${td(fmt.num(h.deb))}${achCell(h.achDeb)}${capCell(h.nplPct, h.rkaNplPct)}${td(pct(h.rkaNplPct), 'm')}${capCell(h.smlPct, h.rkaSmlPct)}${td(pct(h.rkaSmlPct), 'm')}
     ${td(tn(h.disb))}${td(tn(h.guidance), 'm')}${achCell(h.achDisb)}`, i === 0));
   const head = ['Bulan', 'OS', 'RKA OS', 'Capaian', 'Debitur', 'Capaian', '%NPL', 'RKA', '%SML', 'RKA', 'Disburse', 'Guidance', 'Capaian'];
+  const byRo = periodByRo(c.pm, span).sort((a, b) => (a.rel ?? 9) - (b.rel ?? 9));
+  const roHead = ['RO', 'OS akhir', 'Tumbuh', 'Tumbuh %', 'Capaian OS', '%NPL', 'Ubah NPL', '%SML', 'Ubah SML', 'Disburse penuh', 'vs Guidance'];
+  const roRows = byRo.map((x) => roRow(x.ro, c.sel.ro, `${td(tn(x.last.os))}${td(signedTn(x.dOs), trendTone(x.dOs))}${td(fmt.signedPct(x.rel, 1), trendTone(x.rel))}${achCell(x.last.achOs)}
+    ${capCell(x.last.nplPct, x.last.rkaNplPct)}${pointCell(x.dNpl, false)}${capCell(x.last.smlPct, x.last.rkaSmlPct)}${pointCell(x.dSml, false)}
+    ${td(x.disbMonths ? tn(x.disbTotal) : '–')}${achCell(x.disbMonths ? x.disbAch : null)}`));
   const legend = key([['ln', 'OS akhir bulan', C.accent], ['dash', 'RKA OS', C.muted]]);
-  const qKey = key([['ln', '%NPL', C.npl], ['ln', '%SML', C.sml]]);
+  const qKey = key([['ln', '%NPL', C.npl], ['dash', 'RKA %NPL', C.npl], ['ln', '%SML', C.sml]]);
+  const dKey = key([['bx', 'Disburse', C.accent], ['bx', 'Guidance', C.barPrev]]);
+  const tools = `${seg({ name: 'scd-span', label: 'Periode', small: true, value: span, options: SPANS })}${roPicker(c)}`;
   return {
-    title: `${hist.length} bulan terakhir`,
-    html: `${pair(card('OS per bulan', `${legend}${plot('hist-os', 'OS akhir bulan dibanding RKA')}`), card('%NPL dan %SML per bulan', `${qKey}${plot('hist-q', '%NPL dan %SML per bulan')}`))}
-      ${card('Per bulan', table(head, rows), { note: '%NPL dan %SML merah = di atas RKA', cls: 'wide' })}`,
+    title,
+    tools,
+    html: `${stats}${storyCard(story, insightsOf(c))}
+      <div class="scd-grid three">${card('OS per bulan', `${legend}${plot('hist-os', 'OS akhir bulan dibanding RKA')}`)}${card('%NPL dan %SML', `${qKey}${plot('hist-q', '%NPL dan %SML per bulan')}`)}${card('Disburse vs guidance', `${dKey}${plot('hist-d', 'Disburse dibanding guidance per bulan')}`)}</div>
+      ${card('Per bulan', table(head, rows), { note: '%NPL dan %SML merah = di atas RKA', cls: 'wide' })}
+      ${card(`Per RO, ${title.toLowerCase()}`, table(roHead, roRows), { note: 'Urut tumbuh OS terendah; klik nama untuk pindah RO', cls: 'wide' })}`,
+    bind(dlg, set) {
+      onSeg(dlg, 'scd-span', (v) => { histSpan = v; if (lastCtx) openScDetail('history', lastCtx, set, { span: v }); });
+      dlg.querySelector('[data-scd-pick]')?.addEventListener('change', (e) => set({ ro: e.target.value }));
+    },
     charts() {
-      const labels = asc.map((h) => fmt.month(h.month, true));
+      const labels = asc.map((h, i) => (i === asc.length - 1 && !h.full ? `${short(h.month)} s.d. ${dayOf(h.date)}` : fmt.month(h.month, true)));
+      const dots = asc.length <= 7 ? 4 : 3;
       lineChart(document.getElementById(`${PREFIX}hist-os`), {
         labels, yAxis: true, values: 'last', beginAtZero: false, tickFormat: tickTn, format: (v) => tn(v),
-        series: [{ label: 'OS', data: asc.map((h) => h.os), color: C.accent, fill: true, points: 3 }, { label: 'RKA OS', data: asc.map((h) => h.rkaOs), color: C.muted, dash: true, width: 1.5, lab: 'none' }],
+        series: [{ label: 'OS', data: asc.map((h) => h.os), color: C.accent, fill: true, points: dots }, { label: 'RKA OS', data: asc.map((h) => h.rkaOs), color: C.muted, dash: true, width: 1.5, lab: 'none' }],
       });
       lineChart(document.getElementById(`${PREFIX}hist-q`), {
         labels, yAxis: true, values: 'last', beginAtZero: false, tickFormat: (v) => pct(v, 1), format: (v) => pct(v),
-        series: [{ label: '%NPL', data: asc.map((h) => h.nplPct), color: C.npl, points: 3 }, { label: '%SML', data: asc.map((h) => h.smlPct), color: C.sml, points: 3 }],
+        series: [
+          { label: '%NPL', data: asc.map((h) => h.nplPct), color: C.npl, points: dots },
+          { label: 'RKA %NPL', data: asc.map((h) => h.rkaNplPct), color: C.npl, dash: true, width: 1.5, lab: 'none' },
+          { label: '%SML', data: asc.map((h) => h.smlPct), color: C.sml, points: dots },
+        ],
+      });
+      barChart(document.getElementById(`${PREFIX}hist-d`), {
+        labels, format: (v) => tn(v), tickFormat: tickTn, valueLabels: asc.length <= 7 ? 'auto' : false,
+        series: [{ label: 'Disburse', data: asc.map((h) => h.disb), color: C.accent }, { label: 'Guidance', data: asc.map((h) => h.guidance), color: C.barPrev }],
       });
     },
   };
@@ -412,14 +480,18 @@ const VIEWS = {
 };
 
 
-const keyOf = (id, c) => [id, c.sel.ro, c.sel.sumber, c.now.date, c.now.os, c.now.disb, c.real?.total, c.sla?.berkas, c.sla?.late, c.split?.os?.fi].join('|');
+const keyOf = (id, c) => [id, c.sel.ro, c.sel.sumber, id === 'history' ? histSpan : id === 'real' ? realSpan : '', c.now.date, c.now.os, c.now.disb, c.real?.total, c.sla?.berkas, c.sla?.late, c.split?.os?.fi].join('|');
 
-export function openScDetail(id, c, set) {
-  const d = VIEWS[id]?.(c);
-  if (!d) return;
+export function openScDetail(id, c, set, opts = {}) {
   const dlg0 = document.getElementById('detail-dialog');
   const reopen = !!(openId && dlg0?.open && dlg0.dataset.tone === 'full');
-  const sameView = reopen && openId === id && openKey.split('|').slice(0, 3).join('|') === keyOf(id, c).split('|').slice(0, 3).join('|');
+  const keep = reopen && openId === id;
+  if (id === 'history') histSpan = opts.span ? spanOf(opts.span) : keep ? histSpan : '3';
+  if (id === 'real') realSpan = REAL_SPANS.includes(String(opts.span)) ? String(opts.span) : keep ? realSpan : '6';
+  lastCtx = c;
+  const d = VIEWS[id]?.(c);
+  if (!d) return;
+  const sameView = keep && openKey.split('|').slice(0, 4).join('|') === keyOf(id, c).split('|').slice(0, 4).join('|');
   const scroll = sameView ? dlg0.querySelector('.detail-body')?.scrollTop || 0 : 0;
   openId = id;
   openKey = keyOf(id, c);
