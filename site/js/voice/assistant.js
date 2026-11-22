@@ -133,7 +133,9 @@ const sameText = (a, b) => {
   return !!x && !!y && (x === y || y.startsWith(x) || x.startsWith(y));
 };
 
-const POSES = ['idle', 'think', 'pout', 'smart', 'joy'];
+const POSES = ['idle', 'blink', 'smile', 'grin', 'laugh', 'love', 'think', 'hmm', 'wow', 'sad', 'sleepy', 'talk'];
+const MOOD_POSE = { love: 'love', laugh: 'laugh', surprised: 'wow', sad: 'sad', confused: 'hmm', sleepy: 'sleepy' };
+const poseOf = (state, mood) => (state === 'error' ? 'sad' : MOOD_POSE[mood] || (state === 'speak' ? 'talk' : mood === 'happy' ? 'grin' : state === 'think' ? 'think' : state === 'listen' ? 'smile' : 'idle'));
 export const orbHtml = () => `<span class="blob" aria-hidden="true">${POSES.map((p) => `<i class="kira-pose kira-${p}"></i>`).join('')}</span>`;
 
 const FX = `<span class="fx" aria-hidden="true"><i class="q">?</i><i class="zz">z</i><i class="zz">z</i><i class="sp"></i><i class="sp"></i><i class="sp"></i><i class="sp"></i>
@@ -329,6 +331,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     phase = next;
     if (!dlg) return;
     dlg.dataset.state = next;
+    syncPose();
     if (next === 'listen' && dlg.open && voiceSupport.level) level.start();
     const idleText = !voiceSupport.listen ? ERRORS.unsupported
       : pref.wake ? `Ucapkan "${WAKE_PHRASE}" atau klik bola untuk bicara` : 'Klik bola atau tekan Ctrl+Spasi untuk bicara';
@@ -341,11 +344,17 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (next === 'idle') snooze();
   }
 
+  function syncPose() {
+    const orb = $('va-orb');
+    if (orb && dlg) orb.dataset.pose = poseOf(dlg.dataset.state, dlg.dataset.mood);
+  }
+
   function setMood(mood, ms = MOOD_MS) {
     if (!dlg) return;
     clearTimeout(moodTimer);
     dlg.dataset.mood = mood;
-    if (mood && ms) moodTimer = setTimeout(() => { if (dlg && dlg.dataset.mood === mood) dlg.dataset.mood = ''; }, ms);
+    syncPose();
+    if (mood && ms) moodTimer = setTimeout(() => { if (dlg && dlg.dataset.mood === mood) { dlg.dataset.mood = ''; syncPose(); } }, ms);
   }
 
   function snooze() {
@@ -864,7 +873,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   }
 
   function personal(type) {
-    const moods = { joke: 'happy', sing: 'happy', isAi: 'happy', whoMade: 'love', age: 'happy', love: 'love', like: 'happy', eat: 'happy', weather: 'confused', english: 'confused', sad: 'love', tired: 'love', motivate: 'happy', congrats: 'love' };
+    const moods = { joke: 'laugh', sing: 'happy', isAi: 'happy', whoMade: 'love', age: 'happy', love: 'love', like: 'happy', eat: 'happy', weather: 'confused', english: 'confused', sad: 'love', tired: 'love', motivate: 'happy', congrats: 'laugh' };
     const offers = {
       tired: { say: 'Briefing hari ini', ask: 'Mau saya ringkas sekarang?' },
       sad: { say: 'Kabar baiknya apa?', ask: '' },
