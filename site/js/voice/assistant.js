@@ -347,10 +347,10 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (sayBtn) { handle(sayBtn.dataset.say, { typed: true }); return; }
     const f = e.target.closest('[data-va-filter]');
     if (f) { set({ ro: f.dataset.vaFilter }); close(); return; }
-    const ro = e.target.closest('[data-va-ro]');
-    if (ro) { showRegion(ro.dataset.vaRo); return; }
     const mon = e.target.closest('[data-va-month]');
     if (mon) { showMonth(mon.dataset.vaRo || '', mon.dataset.vaMonth); return; }
+    const ro = e.target.closest('[data-va-ro]');
+    if (ro) { showRegion(ro.dataset.vaRo); return; }
     const pick = e.target.closest('[data-va-pick]');
     if (pick && pick.dataset.vaPick) { showRegion(pick.dataset.vaPick); return; }
     const card = e.target.closest('[data-va-open]');
@@ -933,8 +933,11 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const c = getContext();
     if (!c) return;
     const ym = monthOf(spec, c);
-    const d = monthData(c, ro, ym);
+    if (ym === c.cur) { showRegion(ro, { quiet }); return; }
+    const d = regionData(c, ro, ym);
     if (!d.now?.end) { noMonth(ym, c); return; }
+    d.place = d.name;
+    d.when = fmt.month(ym);
     focusRo = ro || '';
     const p = d.now;
     const b = d.before?.end ? d.before : null;
@@ -948,10 +951,6 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       ok(p.disb) ? `Disburse ${p.full ? 'sebulan' : `sampai ${fmt.date(p.date)}`} ${tn(p.disb)}${ok(p.achDisb) ? `, ${pct(p.achDisb, 1)} dari guidance ${tn(p.guidance)}` : ''}.` : '',
       ok(d.real?.total) ? `Realisasi ${realRp(d.real.total)}${ok(d.real.change) ? ` (${fmt.signedPct(d.real.change, 1)} dari bulan sebelumnya)` : ''}.` : '',
     ].filter(Boolean);
-    const chips = [
-      { k: 'Outstanding', v: tn(p.os) }, { k: 'Capaian RKA OS', v: pct(p.achOs, 1) }, { k: 'Debitur', v: ok(p.deb) ? fmt.num(p.deb) : '' },
-      { k: '%NPL', v: pct(p.nplPct) }, { k: '%SML', v: pct(p.smlPct) }, { k: 'Disburse', v: tn(p.disb) },
-    ].filter((x) => x.v && x.v !== '–');
     const now = fmt.month(c.cur);
     const where = ro ? `${d.place} ` : '';
     offer = ym === c.cur
@@ -963,11 +962,16 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     lastRegion = null;
     viewCtx = { kind: 'month', ro, months: [ym], at: Date.now() };
     remember({ kind: 'month', args: [ro, ym] });
-    reply(esc(head), {
-      title: `Posisi ${fmt.date(p.date)}`, lines: lines.map(esc), chips, next, keep: false,
-      mood: nplOver || (ok(p.achOs) && p.achOs < 0.95) ? '' : 'happy',
-      speakText: quiet ? `Kembali ke ${d.when}.` : `${pickOne(['Oke, ini', 'Siap, ini posisi', 'Baik, ini'])} ${head} ${lines.slice(0, 3).join(' ')} ${offer.ask}`,
-    });
+    build();
+    showing = ro || '';
+    const stage = $('va-stage');
+    stage.innerHTML = showcaseHtml(d);
+    setStage('show');
+    flyIn(stage, $('va-orb'));
+    suggest(next);
+    setMood(nplOver || (ok(p.achOs) && p.achOs < 0.95) ? '' : 'happy');
+    ding('done');
+    say(quiet ? `Kembali ke ${d.when}.` : `${pickOne(['Oke, ini', 'Siap, ini posisi', 'Baik, ini'])} ${head} ${lines.slice(0, 3).join(' ')} ${offer.ask}`);
   }
 
   function targetGap(ro, focus) {

@@ -5,19 +5,20 @@ import { dayOf } from '../models/performance-model.js';
 import { perfPeriods, realCompare, slaNow, pfSplit, roStanding } from '../models/direktur-model.js';
 import { tn, signedTn, realRp, pct, points, short, roShort, tone, diff, trendTone } from '../views/direktur-format.js';
 
-export function regionData(c, ro) {
-  const [before, now] = perfPeriods(c.pm, ro, [shiftMonth(c.cur, -1), c.cur]);
-  const history = perfPeriods(c.pm, ro, c.pm.months.slice(-7)).filter((x) => x.end && ok(x.os));
-  const standing = roStanding(c.pm).filter((x) => ok(x.achOs));
+export function regionData(c, ro, ym = c.cur) {
+  const past = ym !== c.cur;
+  const [before, now] = perfPeriods(c.pm, ro, [shiftMonth(ym, -1), ym]);
+  const history = perfPeriods(c.pm, ro, c.pm.months.filter((m) => m <= ym).slice(-7)).filter((x) => x.end && ok(x.os));
+  const standing = roStanding(c.pm, past ? ym : '').filter((x) => ok(x.achOs));
   const byOs = [...standing].sort((a, b) => b.achOs - a.achOs);
   const byNpl = [...standing].sort((a, b) => (b.nplPct ?? -1) - (a.nplPct ?? -1));
   return {
-    ro, name: ro ? roShort(ro) : 'Nasional', code: ro ? /^(Region\s*\d+)/i.exec(ro)?.[1] || '' : `${standing.length} RO`, c, now, before, history,
+    ro, ym, past, name: ro ? roShort(ro) : 'Nasional', code: ro ? /^(Region\s*\d+)/i.exec(ro)?.[1] || '' : `${standing.length} RO`, c, now, before, history,
     reached: standing.filter((x) => x.achOs >= 1).length,
     rank: byOs.findIndex((x) => x.ro === ro) + 1, nplRank: byNpl.findIndex((x) => x.ro === ro) + 1, total: standing.length,
-    real: c.realModel?.rows.length ? realCompare(c.realModel, ro, c.sel.sumber, c.cur) : null,
-    sla: c.slaModel ? slaNow(c.slaModel, ro, [c.cur]) : null,
-    split: c.pfModel ? pfSplit(c.pfModel, ro) : null,
+    real: c.realModel?.rows.length && (!past || c.realModel.rows.some((r) => r.bulan === ym)) ? realCompare(c.realModel, ro, c.sel.sumber, ym) : null,
+    sla: c.slaModel && !past ? slaNow(c.slaModel, ro, [ym]) : null,
+    split: c.pfModel ? pfSplit(c.pfModel, ro, past ? ym : '') : null,
   };
 }
 
@@ -32,6 +33,8 @@ export function monthData(c, ro, ym, { label = 'month' } = {}) {
     sla: null,
   };
 }
+
+const opens = (d, id) => (d.past ? '' : ` data-va-open="${id}"`);
 
 const status = (state, html) => `<p class="va-t ${state}"><i aria-hidden="true"></i>${html}</p>`;
 
@@ -55,7 +58,7 @@ function heroCard(d) {
   const p = d.now;
   const prevMonth = short(d.before?.month);
   const grow = diff(p.os, d.before?.os);
-  return `<article class="va-card va-hero" style="--i:0" data-va-open="os" aria-label="Ringkasan ${esc(d.name)}">
+  return `<article class="va-card va-hero" style="--i:0"${opens(d, 'os')} aria-label="Ringkasan ${esc(d.name)}">
     <header><p class="va-code">${esc(d.code || 'Regional')}</p><h2>${esc(d.name)}</h2><p class="va-date">Posisi ${esc(fmt.date(p.date))}</p></header>
     <div class="va-big"><span>Outstanding</span><b>${esc(tn(p.os).replace(/\s?T$/, ''))}<small>T</small></b></div>
     ${meter(p.os, p.rkaOs, tone(p.achOs))}
@@ -64,7 +67,7 @@ function heroCard(d) {
     ${osBars(d.history)}
     <dl class="va-mini">
       <div><dt>Debitur</dt><dd>${esc(fmt.num(p.deb))}</dd></div>
-      <div><dt>Disburse bulan ini</dt><dd>${esc(tn(p.disb))}</dd></div>
+      <div><dt>Disburse ${esc(d.past ? fmt.month(d.ym, true) : 'bulan ini')}</dt><dd>${esc(tn(p.disb))}</dd></div>
       ${d.ro ? `<div><dt>Peringkat capaian OS</dt><dd>${d.rank ? `${esc(d.rank)}<small> dari ${esc(d.total)}</small>` : '–'}</dd></div>`
         : `<div><dt>RO capai RKA OS</dt><dd>${esc(d.reached)}<small> dari ${esc(d.total)}</small></dd></div>`}
     </dl>
@@ -90,7 +93,7 @@ function smoothPath(pts) {
 function trendCard(d) {
   const p = d.now;
   const b = d.before;
-  const n = Math.max(daysInMonth(d.c.cur), b?.month ? daysInMonth(b.month) : 0);
+  const n = Math.max(daysInMonth(d.ym), b?.month ? daysInMonth(b.month) : 0);
   const pick = (rows, field) => (rows || []).map((r) => [dayOf(r.tanggal), r[field]]).filter(([, v]) => ok(v));
   const cur = pick(p.days, 'os');
   const prev = pick(b?.days, 'os');
@@ -112,9 +115,9 @@ function trendCard(d) {
   const prevLast = prev.length ? prev.at(-1) : null;
   const xDays = [1, Math.round(n / 3), Math.round((2 * n) / 3), n];
   const gid = `va-g-${Math.random().toString(36).slice(2, 8)}`;
-  return `<article class="va-card va-trend" style="--i:1" data-va-open="os" aria-label="Outstanding harian ${esc(d.name)}">
+  return `<article class="va-card va-trend" style="--i:1"${opens(d, 'os')} aria-label="Outstanding harian ${esc(d.name)}">
     <header><h3>Outstanding harian</h3>
-      <p class="va-key"><span><i class="ln cur"></i>${esc(fmt.month(d.c.cur, true))}</span>${prev.length ? `<span><i class="ln prev"></i>${esc(fmt.month(b.month, true))}</span>` : ''}${rka.length ? '<span><i class="dash"></i>RKA</span>' : ''}</p></header>
+      <p class="va-key"><span><i class="ln cur"></i>${esc(fmt.month(d.ym, true))}</span>${prev.length ? `<span><i class="ln prev"></i>${esc(fmt.month(b.month, true))}</span>` : ''}${rka.length ? '<span><i class="dash"></i>RKA</span>' : ''}</p></header>
     <div class="va-plot">
       ${ticks.map((v) => `<span class="va-y" style="--y:${(Y(v) / 100).toFixed(4)}">${esc(fmt.rupiah(v * 1e9, y1 - y0 < 150 ? 2 : 1))}</span>`).join('')}
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -151,7 +154,7 @@ function qualityCard(d) {
   const b = d.before || {};
   const s = d.split;
   const fi = (key) => (s && (ok(s[key].fi) || ok(s[key].nfi)) ? `<p class="va-fi"><span>FI ${esc(pct(s[key].fi))}</span><span>NFI ${esc(pct(s[key].nfi))}</span></p>` : '');
-  return `<article class="va-card va-quality" style="--i:2" data-va-open="npl" aria-label="Kualitas kredit ${esc(d.name)}">
+  return `<article class="va-card va-quality" style="--i:2"${opens(d, 'npl')} aria-label="Kualitas kredit ${esc(d.name)}">
     <header><h3>Kualitas kredit</h3><p class="va-note">Lingkaran = terpakai dari batas RKA</p></header>
     <div class="va-rings">
       ${ring('NPL', p.nplPct, p.rkaNplPct, p.npl, diff(p.nplPct, b.nplPct), fi('nplPct'))}
@@ -175,14 +178,15 @@ function realCard(d) {
       <span><small>Berjalan</small><b>${esc(fmt.num(s.berkas))}</b></span>
       <span class="${s.late ? 'bad' : ''}"><small>Lewat SLA</small><b>${esc(fmt.num(s.late))}</b></span>
       <span class="${tone(s.onTime)}"><small>Tepat SLA</small><b>${esc(pct(s.onTime, 0))}</b></span></div>` : '';
-  return `<article class="va-card va-real" style="--i:3" data-va-open="real" aria-label="Realisasi dan berkas ${esc(d.name)}">
-    <header><h3>Realisasi dan berkas</h3>${r ? `<p class="va-note">${esc(r.rows.length)} sumber</p>` : ''}</header>
-    ${head}${bars}${sla}
+  const title = d.past ? 'Realisasi' : 'Realisasi dan berkas';
+  return `<article class="va-card va-real" style="--i:3"${opens(d, 'real')} aria-label="${esc(title)} ${esc(d.name)}">
+    <header><h3>${esc(title)}</h3>${r ? `<p class="va-note">${esc(r.rows.length)} sumber</p>` : ''}</header>
+    ${head}${bars}${sla}${d.past ? '<p class="va-foot">Posisi berkas SLA hanya tersedia untuk bulan berjalan.</p>' : ''}
   </article>`;
 }
 
 export function showcaseHtml(d) {
-  return `<div class="va-show" data-ro="${esc(d.ro)}">${heroCard(d)}${trendCard(d)}${qualityCard(d)}${realCard(d)}</div>`;
+  return `<div class="va-show" data-ro="${esc(d.ro)}"${d.past ? ` data-month="${esc(d.ym)}"` : ''}>${heroCard(d)}${trendCard(d)}${qualityCard(d)}${realCard(d)}</div>`;
 }
 
 const pickOne = (list) => list[Math.floor(Math.random() * list.length)];

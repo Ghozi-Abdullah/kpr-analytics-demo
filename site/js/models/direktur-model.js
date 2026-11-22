@@ -60,8 +60,8 @@ function pfTotals(pf, ro, keep) {
 
 const pfMonths = (pf) => [...new Set((pf?.trend || []).map((r) => r.bulan))].sort();
 
-export function pfSplit(pf, ro) {
-  const month = pfMonths(pf).at(-1) || '';
+export function pfSplit(pf, ro, at = '') {
+  const month = at || pfMonths(pf).at(-1) || '';
   return splitOf(pfTotals(pf, ro, (r) => r.bulan === month).get(month) || new Map(), month);
 }
 
@@ -202,9 +202,10 @@ export function roPeriods(pm, month) {
   }).filter(Boolean);
 }
 
-export function roStanding(pm) {
+export function roStanding(pm, month = '') {
   return pm.regions.map((ro) => {
-    const end = (pm.byRo.get(ro) || []).at(-1);
+    const rows = pm.byRo.get(ro) || [];
+    const end = month ? rows.findLast((r) => r.tanggal.startsWith(month)) : rows.at(-1);
     if (!end) return null;
     return {
       ro, achOs: ratio(end.os, end.rka_os), nplPct: ratio(end.npl, end.os), rkaNplPct: ratio(end.rka_npl, end.rka_os),
