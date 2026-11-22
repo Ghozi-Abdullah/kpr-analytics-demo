@@ -3,6 +3,7 @@ import { ok, ratio } from '../core/values.js';
 import { seg, onSeg } from '../core/controls.js';
 import { shiftMonth, daysInMonth } from '../core/dates.js';
 import { openDetail } from '../core/ui.js';
+import { checkSmooth } from '../core/smooth.js';
 import { lineChart, barChart, bandCombo, destroyCharts, C } from '../charts/charts.js';
 import { NASIONAL, dayOf } from '../models/performance-model.js';
 import { ACTIVE_STAGES } from '../models/sla-model.js';
@@ -436,6 +437,7 @@ export function openScDetail(id, c, set) {
   d.bind?.(dlg, set);
   if (scroll) dlg.querySelector('.detail-body').scrollTop = scroll;
   if (d.charts) chartTimer = setTimeout(() => { if (dlg.open && openId === id) d.charts(); }, reopen ? 0 : 220);
+  if (!reopen) checkSmooth();
 }
 
 export function refreshScDetail(c, set) {

@@ -1,9 +1,9 @@
 import { normalizeText } from '../ask/parser.js';
 
-export const WAKE_NAME = 'Atlas';
+export const WAKE_NAME = 'Kirana';
 export const WAKE_PHRASE = `Hai ${WAKE_NAME}`;
 
-const WAKE_RE = /(?:^|\s)(?:(?:h[ae]i|hey|hei|halo|hallo|helo|oke|ok|eh|yo)\s+)?(?:atlas|atlast|atlass|adlas|at las|etlas|atlaz|atles)(?=\s|$|[,.!?])/i;
+const WAKE_RE = /(?:^|\s)(?:(?:h[ae]i|hey|hei|halo|hallo|helo|oke|ok|eh|yo|kak|mbak|neng|dik)\s*)?(?:kirana|kirena|qirana|kiranna|kiraana|kiranah|khirana|kirani)(?=\s|$|[,.!?])/i;
 
 export function findWake(text) {
   const m = WAKE_RE.exec(` ${text}`);
@@ -22,7 +22,7 @@ const numberOf = (w) => {
 };
 const NUM_WORD = '(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|(?:dua|tiga|empat|lima|enam|tujuh|delapan|sembilan) belas|dua puluh)';
 const PLACE_NUM = new RegExp(`\\b(jakarta|jkt|region|regional|ro|kanwil|wilayah)\\s+${NUM_WORD}\\b`, 'g');
-const FILLER = /\b(tolong|coba|dong|deh|yuk|sih|nih|mohon|please|kak|bro|sayang|atlas)\b/g;
+const FILLER = /\b(tolong|coba|dong|deh|yuk|sih|nih|mohon|please|kak|bro|sayang|kirana|kirena)\b/g;
 
 export const shortRo = (ro) => String(ro || '').replace(/^.*\/\s*/, '');
 
@@ -76,12 +76,14 @@ export function routeCommand(raw, { q = null, regions = [] } = {}) {
   const words = t.split(' ').length;
   if (CLOSE.test(t) || (/\btutup\b/.test(t) && words <= 5)) return { type: 'close', text: t };
   if (/\b(terima ?kasih|makasih|maksih|thanks|thank you|tengkyu|suwun)\b/.test(t) && words <= 6) return { type: 'thanks', text: t };
+  if (/^(iya|ya|yap|yup|yoi|boleh|oke|ok|okay|mau|lanjut|gas|silakan|tentu|betul|benar|setuju|sip|siap)( (dong|deh|aja|saja|ya|kak|boleh|mau|lanjut|silakan|banget))*$/.test(t)) return { type: 'yes', text: t };
+  if (/^(tidak|nggak|enggak|gak|ga|engga|ndak|jangan|nanti|no)( (usah|dulu|saja|aja|deh|ya|perlu|lain kali|makasih|terima kasih))*$/.test(t)) return { type: 'no', text: t };
   if (/\b(matikan|nonaktifkan|berhenti|stop|jangan)\b.*\b(mode dengar|dengar|mendengar|mendengarkan|mic|mikrofon)\b/.test(t)) return { type: 'wakeOff', text: t };
   if (/\b(nyalakan|aktifkan|hidupkan)\b.*\b(mode dengar|dengar|mendengar|mendengarkan)\b/.test(t)) return { type: 'wakeOn', text: t };
   if (/\b(diam|jangan (bicara|ngomong|bersuara)|tanpa suara|mute|bisukan|matikan suara)\b/.test(t)) return { type: 'mute', text: t };
   if (/\b(nyalakan suara|bersuara lagi|unmute|bicara lagi|pakai suara)\b/.test(t)) return { type: 'unmute', text: t };
   if (/\b(bisa apa|bantuan|help|apa saja yang bisa|perintah apa|cara pakai|contoh perintah)\b/.test(t)) return { type: 'help', text: t };
-  if (/^(halo|hai|hei|hey|hallo|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam))( (atlas|semua))?$/.test(t)) return { type: 'greet', text: t };
+  if (/^(halo|hai|hei|hey|hallo|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam))( (kirana|semua))?$/.test(t)) return { type: 'greet', text: t };
   const sumber = /\b(7|6|5|tujuh|enam|lima) sumber\b/.exec(t);
   if (sumber && words <= 6) return { type: 'sumber', mode: String({ tujuh: 7, enam: 6, lima: 5 }[sumber[1]] || sumber[1]), text: t };
   const asking = ASKING.test(t);
@@ -98,16 +100,23 @@ export function routeCommand(raw, { q = null, regions = [] } = {}) {
   return { type: 'ask', ro, text: t };
 }
 
-const UNIT = [
+const MONTH = { Jan: 'Januari', Feb: 'Februari', Mar: 'Maret', Apr: 'April', Jun: 'Juni', Jul: 'Juli', Agu: 'Agustus', Sep: 'September', Okt: 'Oktober', Nov: 'November', Des: 'Desember' };
+const LETTERS = { RKA: 'er ka a', NPL: 'en pe el', SML: 'es em el', SLA: 'es el a', OS: 'o es', RO: 'er o', NFI: 'en ef i', FI: 'ef i', KPR: 'ka pe er', RM: 'er em', KC: 'ka ce', DPK: 'de pe ka' };
+const SAY = [
+  [/[“”"«»]/g, ''], [/%(?=[A-Z])/g, ''], [/\bRp\.?\s?/g, ''], [/▲\s?/g, 'naik '], [/▼\s?/g, 'turun '],
+  [/(\d)\.(\d{3})(?!\d)/g, '$1$2'], [/(\d)\.(\d{3})(?!\d)/g, '$1$2'],
+  [/(\d+),(\d+)/g, (m, a, b) => `${a} koma ${b.split('').join(' ')}`],
   [/(\d)\s?T\b/g, '$1 triliun'], [/(\d)\s?M\b/g, '$1 miliar'], [/(\d)\s?Jt\b/gi, '$1 juta'], [/(\d)\s?Rb\b/gi, '$1 ribu'],
-  [/(\d)\s?%/g, '$1 persen'], [/[−–]\s?(?=\d)/g, 'minus '], [/\+(?=\d)/g, 'plus '], [/\bs\.d\.?/gi, 'sampai'], [/\bvs\.?\b/gi, 'dibanding'],
-  [/\bRKA\b/g, 'R K A'], [/\bNPL\b/g, 'N P L'], [/\bSML\b/g, 'S M L'], [/\bSLA\b/g, 'S L A'], [/\bOS\b/g, 'O S'], [/\bRO\b/g, 'R O'],
-  [/\bNFI\b/g, 'N F I'], [/\bFI\b/g, 'F I'], [/\bKPR\b/g, 'K P R'], [/\bRM\b/g, 'R M'], [/(\d)\.(\d{3})/g, '$1$2'],
+  [/(\d)\s?%/g, '$1 persen'], [/\bbps\b/gi, 'basis poin'], [/[−–]\s?(?=\d)/g, 'minus '], [/\+(?=\d)/g, 'plus '],
+  [/\bs\.d\.?\s?/gi, 'sampai '], [/\bvs\.?\b/gi, 'dibanding'], [/\btgl\b/gi, 'tanggal'],
+  [/\b(RKA|NPL|SML|SLA|OS|RO|NFI|FI|KPR|RM|KC|DPK)\b/g, (m) => LETTERS[m]],
+  [/\b(Jan|Feb|Mar|Apr|Jun|Jul|Agu|Sep|Okt|Nov|Des)\b/g, (m) => MONTH[m]],
+  [/\b(naik|turun) (plus|minus) /g, '$1 '], [/\bRegion 0?(\d+)\s*\/\s*/g, ''], [/\s*\/\s*/g, ' '], [/\s[–-]\s/g, ', '],
 ];
 
 export function spoken(html) {
   const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
   let t = (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
-  for (const [re, to] of UNIT) t = t.replace(re, to);
-  return t;
+  for (const [re, to] of SAY) t = t.replace(re, to);
+  return t.replace(/\s+/g, ' ').trim();
 }

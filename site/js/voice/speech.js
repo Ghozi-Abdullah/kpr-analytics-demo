@@ -54,35 +54,104 @@ export function createRecognizer({ lang = 'id-ID', onResult, onEnd, onError, onS
   return { start, abort, get active() { return !!rec; } };
 }
 
+const MALE = /andika|ardi|\bmale\b|pria|laki/i;
 let voice = null;
 const pickVoice = () => {
   const list = globalThis.speechSynthesis?.getVoices() || [];
-  const id = list.filter((v) => /^id([-_]|$)/i.test(v.lang));
-  return id.find((v) => /google/i.test(v.name)) || id.find((v) => /natural|online/i.test(v.name)) || id[0] || null;
+  const id = list.filter((v) => /^id([-_]|$)/i.test(v.lang) || /indonesia/i.test(v.name));
+  const female = id.filter((v) => !MALE.test(v.name));
+  return female.find((v) => /gadis/i.test(v.name) && /natural|online/i.test(v.name))
+    || female.find((v) => /gadis/i.test(v.name))
+    || female.find((v) => /google/i.test(v.name))
+    || female.find((v) => /damayanti/i.test(v.name))
+    || female[0] || id[0] || null;
+};
+const tempoOf = (v) => {
+  if (!v) return { rate: 1.1, pitch: 1.04 };
+  if (/microsoft/i.test(v.name) && /natural|online/i.test(v.name)) return { rate: 1.08, pitch: 1 };
+  if (/google/i.test(v.name)) return { rate: 1.16, pitch: 1.05 };
+  return { rate: 1.07, pitch: 1.02 };
 };
 if (voiceSupport.speak) {
   voice = pickVoice();
   speechSynthesis.addEventListener?.('voiceschanged', () => { voice = pickVoice(); });
 }
 
-export function speak(text, { onStart, onEnd } = {}) {
-  if (!voiceSupport.speak || !text) { onEnd?.(); return; }
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'id-ID';
-  if (voice) u.voice = voice;
-  u.rate = 1.04;
-  u.pitch = 1;
-  let done = false;
-  const finish = () => { if (!done) { done = true; onEnd?.(); } };
-  u.onstart = () => onStart?.();
-  u.onend = finish;
-  u.onerror = finish;
-  speechSynthesis.speak(u);
-  setTimeout(() => { if (!speechSynthesis.speaking && !speechSynthesis.pending) finish(); }, Math.max(4000, text.length * 120));
+
+function sentences(text) {
+  const out = [];
+  for (const part of String(text).split(/(?<=[.!?])\s+/)) {
+    let rest = part.trim();
+    while (rest.length > 180) {
+      const cut = Math.max(rest.lastIndexOf(', ', 180), rest.lastIndexOf(' ', 180));
+      out.push(rest.slice(0, cut > 40 ? cut : 180));
+      rest = rest.slice(cut > 40 ? cut + 1 : 180).trim();
+    }
+    if (rest) out.push(rest);
+  }
+  return out;
 }
 
-export const hush = () => { if (voiceSupport.speak) speechSynthesis.cancel(); };
+let speakGen = 0;
+
+export function speak(text, { onStart, onEnd } = {}) {
+  const mine = ++speakGen;
+  if (!voiceSupport.speak || !text) { onEnd?.(); return; }
+  speechSynthesis.cancel();
+  const parts = sentences(text);
+  const { rate, pitch } = tempoOf(voice);
+  let i = 0;
+  let started = false;
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(guard);
+    if (mine === speakGen) onEnd?.();
+  };
+  const next = () => {
+    if (mine !== speakGen) { finish(); return; }
+    if (i >= parts.length) { finish(); return; }
+    const u = new SpeechSynthesisUtterance(parts[i]);
+    i += 1;
+    u.lang = 'id-ID';
+    if (voice) u.voice = voice;
+    u.rate = rate;
+    u.pitch = pitch;
+    u.onstart = () => { if (!started) { started = true; onStart?.(); } };
+    u.onend = next;
+    u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') finish(); else next(); };
+    speechSynthesis.speak(u);
+  };
+  const guard = setTimeout(finish, Math.max(5000, String(text).length * 95));
+  next();
+}
+
+export const hush = () => { speakGen += 1; if (voiceSupport.speak) speechSynthesis.cancel(); };
+
+let chimeCtx = null;
+export function chime(kind = 'on') {
+  try {
+    const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!AC) return;
+    chimeCtx ||= new AC();
+    if (chimeCtx.state === 'suspended') chimeCtx.resume();
+    const t = chimeCtx.currentTime + 0.01;
+    const notes = { on: [[784, 0], [1175, 0.085]], off: [[988, 0], [659, 0.08]], done: [[1047, 0], [1319, 0.07], [1568, 0.14]] }[kind] || [[880, 0]];
+    for (const [f, dt] of notes) {
+      const o = chimeCtx.createOscillator();
+      const g = chimeCtx.createGain();
+      o.type = 'sine';
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + dt);
+      g.gain.exponentialRampToValueAtTime(0.07, t + dt + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.16);
+      o.connect(g).connect(chimeCtx.destination);
+      o.start(t + dt);
+      o.stop(t + dt + 0.18);
+    }
+  } catch {}
+}
 
 export function createLevel(onLevel) {
   let stream = null;

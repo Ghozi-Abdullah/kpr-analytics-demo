@@ -11,7 +11,8 @@ import { sumberMode } from '../models/realisasi-sumber.js';
 import { periodsOf, perfPeriods, realCompare, pfSplit, slaNow, roStanding } from '../models/direktur-model.js';
 import { tn, realRp, pfRp, pct, short, roShort, tone, diff } from './direktur-format.js';
 import { openScDetail, refreshScDetail, closeScDetail } from './direktur-detail.js';
-import { createAtlas } from '../voice/atlas.js';
+import { createAssistant, orbHtml } from '../voice/assistant.js';
+import { WAKE_NAME } from '../voice/command.js';
 
 const soft = (p) => p.catch((err) => { console.warn(err); return null; });
 
@@ -177,7 +178,7 @@ function screenHtml(c) {
     <header class="sc-head">
       <h1>Dashboard KPR</h1>
       <button class="sc-pos" type="button" data-open-status><span class="dot" id="exec-status-dot"></span><span>${esc(where)}</span><span>${esc(fmt.date(c.now.date))}</span></button>
-      <div class="sc-tools"><button class="atl-launch" id="atl-launch" type="button" aria-label="Atlas, asisten suara (Ctrl+Spasi)"><span class="blob" aria-hidden="true"><span class="swirl"></span><span class="eyes"><i></i><i></i></span></span><span class="t">Atlas<small>Ctrl+Spasi</small></span></button>${roPick}</div>
+      <div class="sc-tools"><button class="va-launch" id="va-launch" type="button" aria-label="${esc(WAKE_NAME)}, asisten suara (Ctrl+Spasi)">${orbHtml()}<span class="t">${esc(WAKE_NAME)}<small>Ctrl+Spasi</small></span></button>${roPick}</div>
     </header>
     <div class="sc-kpis">${kpis(c)}</div>
     <div class="sc-row sc-row-a">${realBlock(c)}${splitBlock(c)}${slaBlock(c)}</div>
@@ -187,7 +188,7 @@ function screenHtml(c) {
 
 let latest = null;
 let pendingDetail = '';
-let atlas = null;
+let assistant = null;
 
 function openFor(id, ro) {
   if (!latest) return;
@@ -244,18 +245,18 @@ export default {
       pendingDetail = '';
       openScDetail(id, c, set);
     } else refreshScDetail(c, set);
-    if (ask && !atlas) {
-      atlas = createAtlas({
+    if (ask && !assistant) {
+      assistant = createAssistant({
         engine: ask, getContext: () => latest?.c, set: (p) => latest?.set(p), openDetail: openFor, closeDetail: closeScDetail,
       });
     }
-    atlas?.attach(root.querySelector('#atl-launch'));
+    assistant?.attach(root.querySelector('#va-launch'));
   },
   assistant() {
-    atlas?.openTyped();
+    assistant?.openTyped();
   },
   leave() {
-    atlas?.detach();
+    assistant?.detach();
     closeScDetail();
   },
 };
