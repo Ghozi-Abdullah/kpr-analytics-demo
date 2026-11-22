@@ -69,7 +69,7 @@
 
 .kira-pose {
   position: absolute; inset: -6% -4% 0; opacity: 0; background: center bottom / contain no-repeat;
-  transform: translate(calc(var(--lx, 0) * 1.8%), calc(var(--ly, 0) * 1.8%)); transition: opacity .22s ease, transform .22s ease-out;
+  transform: translate(calc(var(--lx, 0) * 1.8%), calc(var(--ly, 0) * 1.8%)); transition: opacity .38s cubic-bezier(.45, 0, .25, 1), transform .4s cubic-bezier(.2, .8, .3, 1);
 }
 .kira-idle { opacity: 1; }
 .va-orb[data-pose]:not([data-pose="idle"]) .kira-idle { opacity: 0; }
@@ -77,15 +77,15 @@
 .va-orb[data-pose="think"] .kira-think, .va-orb[data-pose="hmm"] .kira-hmm, .va-orb[data-pose="wow"] .kira-wow, .va-orb[data-pose="sad"] .kira-sad,
 .va-orb[data-pose="sleepy"] .kira-sleepy { opacity: 1; }
 .va-orb[data-pose="talk"] .kira-smile { opacity: 1; transition: none; }
-.va-orb[data-pose="talk"] .kira-talk { transition: none; animation: va-lips .9s steps(1, end) infinite; }
+.va-orb[data-pose="talk"] .kira-talk { transition: none; animation: va-lips 1.1s ease-in-out infinite; }
 .kira-blink { transition: none; }
-.va-orb:is(:not([data-pose]), [data-pose="idle"]) .kira-blink, .va-launch .kira-blink { animation: va-blinkpose 6.5s steps(1, end) infinite; }
+.va-orb:is(:not([data-pose]), [data-pose="idle"]) .kira-blink, .va-launch .kira-blink { animation: va-blinkpose 6.5s linear infinite; }
 .va-launch:hover .kira-idle { opacity: 0; }
-.va-launch:hover .kira-blink { opacity: 1; animation: none; }
+.va-launch:hover .kira-blink { opacity: 1; animation: none; transition: opacity .25s ease; }
 .voice-assistant[data-state="speak"] .va-orb .blob { animation: va-bob 5.5s ease-in-out infinite, va-nod 1.6s ease-in-out infinite; }
 @keyframes va-nod { 0%, 100% { translate: 0 0; } 50% { translate: 0 1.5%; } }
-@keyframes va-lips { 0% { opacity: 1; } 22% { opacity: 0; } 38% { opacity: 1; } 56% { opacity: 0; } 70% { opacity: 1; } 88% { opacity: 0; } }
-@keyframes va-blinkpose { 0%, 93% { opacity: 0; } 94%, 97% { opacity: 1; } 98%, 100% { opacity: 0; } }
+@keyframes va-lips { 0%, 100% { opacity: .15; } 18% { opacity: 1; } 34% { opacity: .2; } 52% { opacity: .95; } 66% { opacity: .1; } 82% { opacity: .85; } }
+@keyframes va-blinkpose { 0%, 92.5% { opacity: 0; } 94%, 96% { opacity: 1; } 98.5%, 100% { opacity: 0; } }
 
 .voice-assistant[data-state="listen"] .va-orb .halo { opacity: calc(.55 + var(--lvl) * .8); transform: scale(calc(.9 + var(--lvl) * .55)); }
 .voice-assistant[data-state="listen"] .va-orb .blob { scale: calc(1 + var(--lvl) * .12); }
@@ -95,8 +95,11 @@
 .voice-assistant[data-stage="show"] .va-orb { animation: va-dock .45s cubic-bezier(.2, .9, .25, 1.1) both; }
 
 .voice-assistant[data-mood="sleepy"] .va-orb .blob { animation-duration: 10s; }
+.kira-3d { position: absolute; left: 50%; bottom: 0; height: calc(106% * 1.08); aspect-ratio: 1.12 / 1.08; translate: -50% 0; pointer-events: none; }
+.va-orb.is-3d .kira-pose { display: none; }
 .voice-assistant[data-mood="sleepy"] .va-orb .halo { opacity: .25; }
 .voice-assistant:is([data-mood="happy"], [data-mood="love"], [data-mood="laugh"], [data-mood="surprised"]) .va-orb .blob { animation: va-bob 5.5s ease-in-out infinite, va-hop .6s cubic-bezier(.3, .7, .4, 1.4) 1; }
+.voice-assistant .va-orb.is-3d .blob { animation: none; scale: none; }
 
 .fx { position: absolute; inset: 0; pointer-events: none; }
 .fx > * { position: absolute; opacity: 0; }

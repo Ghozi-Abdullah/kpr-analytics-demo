@@ -185,6 +185,47 @@ function cloudAudio(text, voice) {
 
 let speakGen = 0;
 let playing = null;
+let meter = null;
+let meterData = null;
+let cue = null;
+let saidBefore = '';
+const PAUSE = { ' ': 0.6, ',': 4, ';': 4, ':': 4, '.': 6, '!': 6, '?': 6 };
+const MS_PER_UNIT = 62;
+
+function makeCue(text, { dur = 0, rate = 1 } = {}) {
+  const cum = [];
+  let total = 0;
+  for (const ch of String(text)) { total += PAUSE[ch] ?? 1; cum.push(total); }
+  return { text: String(text), cum, total, t0: performance.now(), dur, unit: MS_PER_UNIT / Math.max(0.5, rate), anchor: null };
+}
+
+function beginCue(text, opts) {
+  if (cue) saidBefore = `${saidBefore} ${cue.text}`.slice(-400);
+  cue = makeCue(text, opts);
+}
+
+export function voiceCue() {
+  if (!cue) return null;
+  const now = performance.now();
+  let units;
+  if (cue.anchor) units = (cue.cum[cue.anchor.i - 1] || 0) + (now - cue.anchor.at) / cue.unit;
+  else if (cue.dur) units = ((now - cue.t0) / cue.dur) * cue.total;
+  else units = (now - cue.t0) / cue.unit;
+  if (units >= cue.total) return { text: cue.text, index: cue.text.length, before: saidBefore };
+  let lo = 0;
+  let hi = cue.cum.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (cue.cum[mid] < units) lo = mid + 1; else hi = mid; }
+  return { text: cue.text, index: lo, before: saidBefore };
+}
+
+export function voiceLevel() {
+  if (!playing || !meter) return -1;
+  meterData ||= new Uint8Array(meter.fftSize);
+  meter.getByteTimeDomainData(meterData);
+  let sum = 0;
+  for (let i = 0; i < meterData.length; i += 1) { const x = (meterData[i] - 128) / 128; sum += x * x; }
+  return Math.sqrt(sum / meterData.length) / Math.max(0.3, volume);
+}
 
 function speakBrowser(parts, mine, { onStart, finish }) {
   if (!voiceSupport.speak) { finish(); return; }
@@ -201,7 +242,9 @@ function speakBrowser(parts, mine, { onStart, finish }) {
     u.rate = Math.min(1.6, rate * rateMul);
     u.pitch = Math.min(2, pitch * pitchMul);
     u.volume = volume;
-    u.onstart = onStart;
+    const said = parts[i - 1];
+    u.onstart = () => { beginCue(said, { rate: u.rate }); onStart(); };
+    u.onboundary = (e) => { if (cue && cue.text === said && Number.isFinite(e.charIndex)) cue.anchor = { i: e.charIndex, at: performance.now() }; };
     u.onend = next;
     u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') finish(); else next(); };
     speechSynthesis.speak(u);
@@ -221,17 +264,22 @@ async function speakCloud(parts, mine, hooks) {
     src.buffer = buf;
     const gain = ac.createGain();
     gain.gain.value = volume;
-    src.connect(gain).connect(ac.destination);
+    meter ||= Object.assign(ac.createAnalyser(), { fftSize: 512 });
+    src.connect(gain).connect(meter);
+    meter.connect(ac.destination);
     playing = src;
     hooks.onStart();
+    beginCue(groups[i], { dur: buf.duration * 1000 });
     await new Promise((resolve) => { src.onended = resolve; src.start(); });
-    if (playing === src) playing = null;
+    if (playing === src) { playing = null; cue = null; }
   }
   hooks.finish();
 }
 
 export function speak(text, { onStart, onEnd } = {}) {
   const mine = ++speakGen;
+  cue = null;
+  saidBefore = '';
   if (!text || (!voiceSupport.speak && !usingCloud())) { onEnd?.(); return; }
   const parts = sentences(text);
   let started = false;
@@ -241,6 +289,7 @@ export function speak(text, { onStart, onEnd } = {}) {
     if (done) return;
     done = true;
     clearTimeout(guard);
+    if (mine === speakGen) cue = null;
     if (mine === speakGen) onEnd?.();
   }
   const hooks = { onStart: () => { if (!started) { started = true; onStart?.(); } }, finish };
@@ -250,6 +299,8 @@ export function speak(text, { onStart, onEnd } = {}) {
 
 export function hush() {
   speakGen += 1;
+  cue = null;
+  saidBefore = '';
   if (voiceSupport.speak) speechSynthesis.cancel();
   if (playing) { try { playing.stop(); } catch {} playing = null; }
 }

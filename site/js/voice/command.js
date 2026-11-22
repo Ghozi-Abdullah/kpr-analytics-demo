@@ -161,14 +161,19 @@ const BACK = /^(kembali|balik|mundur|back|sebelumnya|yang tadi|tadi)(\s+(lagi|do
 const NEXT = /^((ro|region|wilayah|yang)\s+)?(berikutnya|selanjutnya|next|lainnya|lain)(\s+(dong|ya|lagi))*$/;
 const PREV = /^(ro|region|wilayah)\s+sebelumnya$/;
 const BRIEF = /\b(briefing|brief|laporan (pagi|harian|hari ini|singkat|terbaru)|rangkum(an)?( hari ini| semua| nasional)?|ringkasan( hari ini| nasional| semua)?|update hari ini|(gimana|bagaimana|kondisi|keadaan|kabar) (hari ini|nasional|semua|kpr)|nasional (gimana|bagaimana)|lihat nasional|tampilkan nasional|kondisi kpr|kabar kpr|situasi (hari ini|terkini|nasional))\b/;
+const OPINION = /\b(menurut (kamu|kirana|mu|anda)|gimana menurut(mu| kamu)|pendapat(mu| kamu)|penilaian(mu| kamu)|(bagus|aman|sehat|oke|parah|bahaya|gawat|jelek|baik) (nggak|gak|ga|tidak|enggak|ngga|apa (nggak|gak|ga|enggak|tidak))|apakah (bagus|aman|sehat|baik))\b|^(apakah|apa) .*\b(aman|sehat|bagus|parah|gawat|bahaya)$/;
+const ADVICE = /\b(saran(nya|mu| kamu)?|rekomendasi(nya|mu| kamu)?|masukan(nya|mu| kamu)?|apa yang (harus|perlu|bisa) (saya |aku |kita )?(lakukan|kerjakan|dilakukan|diperbaiki|dikejar)|harus ngapain|perlu ngapain|(gimana|bagaimana) (caranya|cara) (naik|menaikkan|naikin|turunin|menurunkan|ngejar|mengejar|kejar|memperbaiki|perbaiki|benahi)|langkah(nya)? (apa|selanjutnya)|tindak lanjut(nya)?|fokus(nya)? (ke )?apa|prioritas(nya)?( apa)?)\b/;
 const WORST = /\b(terburuk|terjelek|terparah|terlemah|terbawah|paling (jelek|buruk|parah|lemah|rendah|bawah|tertinggal))\b/;
 const BEST = /\b(terbaik|terbagus|terkuat|teratas|juara|paling (bagus|baik|kuat|oke|top|atas))\b/;
 
-export function routeCommand(raw, { q = null, regions = [], showing = '' } = {}) {
+export function routeCommand(raw, { q = null, regions = [], showing = '', focus = '' } = {}) {
   const t = cleanSpoken(raw, regions);
   if (!t) return { type: 'none', text: t };
   const words = t.split(' ').length;
   const r = (type, extra = {}) => ({ type, text: t, ...extra });
+  const fix = t.match(/^(?:eh |oh )?(?:bukan|salah)(?: bukan)?(?: itu| yang itu)? (?:maksud(?:nya|ku| saya| aku)|tapi|yang saya mau|yang aku mau|saya mau|aku mau|maunya)\s+(.+)$/);
+  if (fix) return { ...routeCommand(fix[1], { q, regions, showing, focus }), corrected: true };
+  if (/^(?:eh |oh )?(bukan|keliru|salah dengar|salah tangkap)( (itu|yang itu|yang ini|begitu|gitu|maksudnya|maksud saya|maksud aku))*$/.test(t)) return r('notThat');
   if (HUSH.test(t)) return r('hush');
   if (CLOSE.test(t) || (/\btutup\b/.test(t) && words <= 5)) return r('close');
   if (/^(iya|ya|yap|yup|yoi|boleh|oke|ok|okay|mau|lanjut|gas|gaskeun|silakan|tentu|betul|benar|setuju|sip|siap|ayo|yuk)(\s+(dong|deh|aja|saja|ya|kak|boleh|mau|lanjut|silakan|banget|gas))*$/.test(t)) return r('yes');
@@ -200,6 +205,7 @@ export function routeCommand(raw, { q = null, regions = [], showing = '' } = {})
   if (/\b(aku|saya|gue) (lagi |sedang )?(sedih|galau|bete|kesal|kesel|bad mood|badmood|down)\b/.test(low)) return r('sad');
   if (/\b(capek|cape|lelah|pusing|penat|stres|stress|suntuk|ngantuk)\b/.test(low) && !targetOf(t)) return r('tired');
   if (/\b(semangatin|semangati|kasih semangat|beri semangat|motivasi(in)?|kata kata (motivasi|mutiara|bijak)|butuh semangat|semangat dong)\b/.test(low)) return r('motivate');
+  if (/\b(gajian|gaji (masuk|turun|cair)|tanggal muda)\b/.test(low) && !targetOf(t)) return r('payday');
   if (/^(hore+|horee+|yeay+|yey+|asik+|asyik+|mantap jiwa|alhamdulillah)(\s|$)/.test(bare) || /\b(target (sudah |udah )?tercapai|kita berhasil|selamat ya|selamat kirana)\b/.test(low)) return r('congrats');
   if (/\b(data (per|terakhir|terbaru|tanggal)|(update|diperbarui|diupdate|diupdet) (kapan|terakhir|tanggal berapa)|kapan (data|terakhir (diperbarui|diupdate|update))|datanya (per )?(kapan|tanggal berapa)|posisi data|data (sampai|hingga) (kapan|tanggal))\b/.test(t) || (/\bdata(nya)?\b/.test(t) && /\b(update|diperbarui|diupdate|masuk|terakhir)\b/.test(t) && /\b(kapan|jam berapa|tanggal berapa)\b/.test(t) && !targetOf(t))) return r('dataDate');
   if (/\b(jam berapa|pukul berapa|sekarang jam)\b/.test(t)) return r('time');
@@ -220,6 +226,25 @@ export function routeCommand(raw, { q = null, regions = [], showing = '' } = {})
   if (/\b(lagi di (halaman|mana)|sekarang di (halaman )?(mana|apa)|ini halaman apa|(ini|lagi|sedang|sekarang) (lagi )?lihat apa|filter(nya)? apa)\b/.test(t)) return r('whereAmI');
   if (/\b(kabar (baik|gembira|bagus)(nya)?|berita (baik|bagus)|good news|yang bagus (apa|siapa)|apa yang bagus|ada yang bagus)\b/.test(t)) return r('goodNews');
   if (/\b(kabar (buruk|jelek)(nya)?|berita (buruk|jelek)|bad news|yang (jelek|buruk) (apa|siapa)|apa yang (jelek|buruk)|yang perlu diwaspadai|ada yang (jelek|buruk|bahaya))\b/.test(t)) return r('badNews');
+  if (/^(assalamu ?alaikum|asalamu ?alaikum)\b/.test(bare) && words <= 5) return r('salam');
+  if (/^(ha(ha)+h?|he(he)+|hi(hi)+|wk(wk)+\w*|xixi\w*|lol|ngakak)( (ha|he|hi|wk)\w*)*( (lucu|kocak|banget|bgt))*$/.test(bare)) return r('laugh');
+  if (/^((wah+|wow+|wih+|weh+|widih|anjay|gokil|gila)( (keren|mantap|gokil|lumayan|seru))?|keren juga|mantap juga|lumayan|lumayan juga|not bad)( (ya|banget|sih|juga|nih|deh|dong))*$/.test(bare)) return r('wow');
+  if (/^(serius|seriusan|beneran|masa|masak|masa sih|yang bener|yang benar|yakin|sungguh|emang iya|benarkah|apa iya|really)( (sih|nih|kirana|ya|kamu|itu|angkanya|datanya))*$/.test(bare)) return r('really');
+  if (/\b(angka(nya)?|data(nya)?|hitungan(nya)?) (kok )?(salah|aneh|keliru|nggak (bener|benar|valid|masuk akal)|gak (bener|benar|valid|masuk akal)|ga (bener|benar|valid|masuk akal))\b|\b(kayaknya|sepertinya) (salah|keliru)\b|\bkok aneh\b|\b(nggak|gak|ga|tidak) masuk akal\b/.test(low)) return r('doubt');
+  if (/^(jadi |terus |trus |oke )?(intinya|kesimpulannya|singkatnya|ringkasnya|garis besarnya|jadi gimana|jadi bagaimana|kesimpulan(nya)? apa|intinya apa|jadi intinya)( (apa|gimana|dong|ya|nih|aja|saja))*$/.test(bare)) return r('gist');
+  if (/\b(lagi apa|lagi ngapain|sedang apa|ngapain aja|kamu ngapain)\b/.test(low) && words <= 5) return r('whatDoing');
+  if (/\b(makan siang|mau makan|makan dulu|lapar|laper|ishoma|maksi|istirahat makan)\b/.test(low) && words <= 7 && !targetOf(t)) return r('lunch');
+  if (/\b(sholat|shalat|solat|salat|jumatan|ke masjid|ibadah dulu)\b/.test(low) && words <= 7) return r('pray');
+  if (/\b(ngopi|minum kopi|ngeteh|minum teh|coffee break|rehat kopi)\b/.test(low) && words <= 7) return r('coffee');
+  if (/\b((mau|ada|akan|siap siap|persiapan|habis ini|abis ini|sebentar lagi|bentar lagi) (rapat|meeting|presentasi)|(rapat|meeting) (sebentar|bentar) lagi)\b/.test(low) && !targetOf(t)) return r('meeting');
+  if (/\b(mau pulang|pulang dulu|(aku|saya|gue) pulang|cabut dulu|otw pulang|(sudah|udah) jam pulang|waktunya pulang)\b/.test(low)) return r('goHome');
+  if (/^(ayo |yuk |mari |oke )?(mulai|kita mulai|mulai kerja|ayo kerja|kerja yuk|siap kerja|gas kerja|mulai hari ini|let s go|lets go)( (yuk|ya|dong|kirana|sekarang|deh))*$/.test(bare)) return r('workStart');
+  if (/\b(bosan|bosen|gabut|jenuh|boring)\b/.test(low) && !targetOf(t)) return r('bored');
+  if (/\b(akhir pekan|weekend|wiken|besok libur|libur panjang|long weekend|malam minggu|hari libur)\b/.test(low) && !targetOf(t) && words <= 7) return r('weekend');
+  if (/\b((aku|saya|gue) (lagi )?(ulang tahun|ultah)|hari ini (aku |saya )?(ulang tahun|ultah)|ultah (aku|saya)|ulang tahun (aku|saya))\b/.test(low)) return r('birthday');
+  if (/\b(kangen|rindu)\b/.test(low) && (/\b(kamu|kirana)\b/.test(low) || words <= 3)) return r('miss');
+  if (/^(hmm+ |em+ )?(gimana ya|bagaimana ya|apa ya|bingung|bingung nih|aku bingung|saya bingung|mulai dari mana ya|enaknya apa ya)$/.test(bare)) return r('ponder');
+  if (/\b(fakta (menarik|unik|lucu)|fun fact|hal (menarik|unik)|info menarik|ada yang menarik|cerita(in)? (sesuatu|dong)|kasih tahu sesuatu)\b/.test(low)) return r('funFact');
   if (/^(maksudnya|artinya|jelasin|jelaskan|terangkan|gimana maksudnya|maksudnya gimana|maksudnya apa|artinya apa|lebih detail|lebih jelas|jelaskan lebih (lanjut|detail|jelas)|jelasin lagi|detailnya|penjelasannya)( (lagi|lebih lanjut|lebih detail|gimana|apa))*$/.test(t)) return r('explain');
   if (/^(kenapa|mengapa|kok gitu|kok begitu|kok bisa|why|apa sebabnya|apa penyebabnya|penyebabnya apa|sebabnya apa)( (bisa|begitu|gitu|ya|sih))*$/.test(t)) return r('why');
   if (/^(terus|trus|lalu|selanjutnya apa|terus gimana|trus gimana|lalu gimana|habis itu|abis itu|lanjutkan|lanjutin|teruskan|terus apa lagi|apa lagi|ada lagi)$/.test(bare)) return r('continue');
@@ -227,7 +252,7 @@ export function routeCommand(raw, { q = null, regions = [], showing = '' } = {})
   if (/^(wah |waduh |aduh |hmm |wih )?(parah|jelek (banget)?|gawat|bahaya|anjlok|ngeri|kacau|waduh|aduh|turun terus|kok turun|merah semua)( (ya|banget|nih|juga|sekali))*$/.test(bare)) return r('reactBad');
   if (/^(oh+|oh gitu|oh begitu|o gitu|gitu ya|begitu ya|i see|noted|paham|ngerti|mengerti|oke paham|sip paham|hmm+|mm+|oh oke|oh ok|ooh|okelah|baiklah)( (ya|deh|kirana))*$/.test(bare)) return r('ack');
   if (/\b(siapa (kamu|namamu|nama kamu|anda|dirimu)|kamu siapa|nama kamu siapa|perkenalkan( diri)?|kenalan)\b/.test(t)) return r('intro');
-  if (/\b(apa kabar|gimana kabar|kabarmu|kabar kamu|lagi apa|sehat)\b/.test(t) && !regions.some((x) => t.includes(shortRo(x).toLowerCase()))) return r('smalltalk');
+  if (/\b(apa kabar|gimana kabar|kabarmu|kabar kamu|lagi apa|sehat)\b/.test(t) && !OPINION.test(t) && !regions.some((x) => t.includes(shortRo(x).toLowerCase()))) return r('smalltalk');
   if (/\b(bisa apa|bantuan|help|apa saja yang bisa|perintah apa|cara pakai|contoh perintah|bisa ngapain|daftar perintah|list perintah|list command|daftar command|menu perintah|semua perintah|perintah (suara|ngobrol|asisten|santai|wilayah|detail))\b/.test(t)) return r('help');
   if (/^(halo|hai|hei|hey|hallo|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam))(\s+(kirana|semua|juga))?$/.test(t)) return r('greet');
   if (/\b(matikan|nonaktifkan|berhenti|stop|jangan)\b.*\b(mode dengar|dengar|mendengar|mendengarkan|mic|mikrofon)\b/.test(t)) return r('wakeOff');
@@ -268,6 +293,9 @@ export function routeCommand(raw, { q = null, regions = [], showing = '' } = {})
   const ro = ros.length === 1 ? ros[0] : '';
   const target = targetOf(t);
   const near = showing && /\b(sini|situ|ini|itu|tersebut|tadi|nya)\b/.test(t) ? showing : '';
+  const subject = /\bnasional\b/.test(t) ? '' : ro || showing || focus || '';
+  if (OPINION.test(t) && ros.length < 2 && !specific && !time) return r('opinion', { ro: subject, target });
+  if (ADVICE.test(t) && ros.length < 2 && !specific) return r('advice', { ro: subject, target });
   if (/\b(kembali ke nasional|ke nasional|reset( filter)?|hapus filter|tanpa filter|semua wilayah|nasional saja|nasional aja|lepas filter)\b/.test(t) && !ro && !asking) return r('nasional');
   if (ros.length >= 2 && !time && !specific) return r('compare', { ros: ros.slice(0, 2), metric: target });
   if (BRIEF.test(t) && !ro && !target && !specific && !time) return r('brief');
