@@ -12,7 +12,8 @@ export function regionData(c, ro) {
   const byOs = [...standing].sort((a, b) => b.achOs - a.achOs);
   const byNpl = [...standing].sort((a, b) => (b.nplPct ?? -1) - (a.nplPct ?? -1));
   return {
-    ro, name: roShort(ro), code: /^(Region\s*\d+)/i.exec(ro)?.[1] || '', c, now, before, history,
+    ro, name: ro ? roShort(ro) : 'Nasional', code: ro ? /^(Region\s*\d+)/i.exec(ro)?.[1] || '' : `${standing.length} RO`, c, now, before, history,
+    reached: standing.filter((x) => x.achOs >= 1).length,
     rank: byOs.findIndex((x) => x.ro === ro) + 1, nplRank: byNpl.findIndex((x) => x.ro === ro) + 1, total: standing.length,
     real: c.realModel?.rows.length ? realCompare(c.realModel, ro, c.sel.sumber, c.cur) : null,
     sla: c.slaModel ? slaNow(c.slaModel, ro, [c.cur]) : null,
@@ -52,9 +53,10 @@ function heroCard(d) {
     <dl class="va-mini">
       <div><dt>Debitur</dt><dd>${esc(fmt.num(p.deb))}</dd></div>
       <div><dt>Disburse bulan ini</dt><dd>${esc(tn(p.disb))}</dd></div>
-      <div><dt>Peringkat capaian OS</dt><dd>${d.rank ? `${esc(d.rank)}<small> dari ${esc(d.total)}</small>` : '–'}</dd></div>
+      ${d.ro ? `<div><dt>Peringkat capaian OS</dt><dd>${d.rank ? `${esc(d.rank)}<small> dari ${esc(d.total)}</small>` : '–'}</dd></div>`
+        : `<div><dt>RO capai RKA OS</dt><dd>${esc(d.reached)}<small> dari ${esc(d.total)}</small></dd></div>`}
     </dl>
-    <button class="btn" type="button" data-va-filter="${esc(d.ro)}">Fokuskan dashboard ke ${esc(d.name)}</button>
+    ${d.ro ? `<button class="btn" type="button" data-va-filter="${esc(d.ro)}">Fokuskan dashboard ke ${esc(d.name)}</button>` : ''}
   </article>`;
 }
 
@@ -143,7 +145,7 @@ function qualityCard(d) {
       ${ring('NPL', p.nplPct, p.rkaNplPct, p.npl, diff(p.nplPct, b.nplPct), fi('nplPct'))}
       ${ring('SML', p.smlPct, p.rkaSmlPct, p.sml, diff(p.smlPct, b.smlPct), fi('smlPct'))}
     </div>
-    ${d.nplRank ? `<p class="va-foot">%NPL urutan ${esc(d.nplRank)} tertinggi dari ${esc(d.total)} RO</p>` : ''}
+    ${d.ro && d.nplRank ? `<p class="va-foot">%NPL urutan ${esc(d.nplRank)} tertinggi dari ${esc(d.total)} RO</p>` : ''}
   </article>`;
 }
 
@@ -173,10 +175,10 @@ export function showcaseHtml(d) {
 
 const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
 
-export function regionTalk(d) {
+export function regionTalk(d, lead = '') {
   const p = d.now;
   const n = d.name;
-  const parts = [pickOne([`Ini kondisi ${n}.`, `Baik, ini gambaran ${n}.`, `Siap, ini ${n}.`])];
+  const parts = [lead || pickOne([`Ini kondisi ${n}.`, `Baik, ini gambaran ${n}.`, `Siap, ini ${n}.`])];
   if (ok(p.os)) {
     parts.push(ok(p.achOs) && p.achOs >= 1
       ? `Outstanding ${tn(p.os)}, sudah melewati RKA.`
@@ -192,6 +194,11 @@ export function regionTalk(d) {
     parts.push(`Realisasi bulan ini ${realRp(d.real.total)}${ok(ch) && Math.round(ch * 100) ? `, ${ch > 0 ? 'naik' : 'turun'} ${pct(Math.abs(ch), 0)} dari bulan lalu` : ''}.`);
   }
   if (d.sla?.late) parts.push(`Ada ${d.sla.late} berkas lewat SLA.`);
+  if (!d.ro) {
+    const offerN = { say: 'Mana yang perlu perhatian?', ask: 'Mau saya sebutkan RO yang perlu perhatian?' };
+    parts.push(offerN.ask);
+    return { text: parts.join(' '), offer: offerN, next: ['Mana yang perlu perhatian?', 'Tampilkan RO terburuk', 'Buka realisasi'] };
+  }
   const offer = nplOver ? { say: `Detail NPL ${n}`, ask: `Mau saya bukakan detail NPL ${n}?` }
     : ok(p.achOs) && p.achOs < 0.995 ? { say: `Detail outstanding ${n}`, ask: 'Mau lihat detail outstanding-nya?' }
     : d.sla?.late ? { say: `Detail SLA ${n}`, ask: 'Mau lihat berkas yang lewat SLA?' }
@@ -200,6 +207,75 @@ export function regionTalk(d) {
   const rose = ok(p.nplPct) && ok(d.before?.nplPct) && p.nplPct > d.before.nplPct;
   const next = [...new Set([offer.say, rose ? `Kenapa NPL ${n} naik?` : `NPL ${n} berapa?`, `Realisasi ${n} per sumber`, `Fokus ke ${n}`])].slice(0, 3);
   return { text: parts.join(' '), offer, next };
+}
+
+const COMPARE = [
+  { key: 'os', label: 'Outstanding', get: (d) => d.now.os, show: (v) => tn(v), good: 'high' },
+  { key: 'os', label: 'Capaian RKA OS', get: (d) => d.now.achOs, show: (v) => pct(v, 1), good: 'high' },
+  { key: 'deb', label: 'Debitur', get: (d) => d.now.deb, show: (v) => fmt.num(v), good: 'high' },
+  { key: 'npl', label: '%NPL', get: (d) => d.now.nplPct, show: (v) => pct(v), good: 'low' },
+  { key: 'sml', label: '%SML', get: (d) => d.now.smlPct, show: (v) => pct(v), good: 'low' },
+  { key: 'disb', label: 'Disburse bulan ini', get: (d) => d.now.disb, show: (v) => tn(v), good: 'high' },
+  { key: 'disb', label: 'Capaian guidance', get: (d) => d.now.achDisb, show: (v) => pct(v, 1), good: 'high' },
+  { key: 'real', label: 'Realisasi bulan ini', get: (d) => d.real?.total, show: (v) => realRp(v), good: 'high' },
+  { key: 'sla', label: 'Berkas lewat SLA', get: (d) => d.sla?.late, show: (v) => fmt.num(v), good: 'low' },
+];
+
+function winnerOf(row, a, b) {
+  const x = row.get(a);
+  const y = row.get(b);
+  if (!ok(x) || !ok(y) || x === y) return 0;
+  return (row.good === 'high' ? x > y : x < y) ? -1 : 1;
+}
+
+export function compareHtml(a, b, focus = '') {
+  const rows = COMPARE.map((row) => {
+    const x = row.get(a);
+    const y = row.get(b);
+    const max = Math.max(Math.abs(x || 0), Math.abs(y || 0)) || 1;
+    const w = winnerOf(row, a, b);
+    return `<li class="${focus && row.key === focus ? 'focus' : ''}">
+      <b class="${w < 0 ? 'win' : ''}">${esc(ok(x) ? row.show(x) : '–')}</b>
+      <span class="bar a"><i style="--w:${ok(x) ? (Math.abs(x) / max).toFixed(4) : 0}"></i></span>
+      <span class="lbl">${esc(row.label)}${row.good === 'low' ? '<small>makin kecil makin baik</small>' : ''}</span>
+      <span class="bar b"><i style="--w:${ok(y) ? (Math.abs(y) / max).toFixed(4) : 0}"></i></span>
+      <b class="${w > 0 ? 'win' : ''}">${esc(ok(y) ? row.show(y) : '–')}</b></li>`;
+  }).join('');
+  const wins = COMPARE.reduce((acc, row) => { const w = winnerOf(row, a, b); if (w < 0) acc[0] += 1; if (w > 0) acc[1] += 1; return acc; }, [0, 0]);
+  const better = (sign) => COMPARE.filter((row) => winnerOf(row, a, b) === sign).map((row) => row.label);
+  const side = (d, cls, i, n, list) => `<article class="va-card va-side ${cls}" style="--i:${i}" data-va-pick="${esc(d.ro)}">
+    <p class="va-code">${esc(d.code || 'Regional')}</p><h2>${esc(d.name)}</h2>
+    <p class="va-wins"><b>${esc(n)}</b> dari ${esc(COMPARE.length)} ukuran lebih baik</p>
+    <div class="va-big small"><span>Outstanding</span><b>${esc(tn(d.now.os))}</b></div>
+    ${status(tone(d.now.achOs), `<b>${esc(pct(d.now.achOs, 1))}</b> dari RKA`)}
+    ${list.length ? `<div class="va-winlist"><span>Lebih baik di</span><ul>${list.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+  </article>`;
+  return `<div class="va-compare">${side(a, 'a', 0, wins[0], better(-1))}
+    <article class="va-card va-vs" style="--i:1" aria-label="Perbandingan ${esc(a.name)} dan ${esc(b.name)}">
+      <header><h3><span class="ka">${esc(a.name)}</span> vs <span class="kb">${esc(b.name)}</span></h3><p class="va-note">Tebal = lebih baik</p></header>
+      <ol class="va-duel">${rows}</ol>
+    </article>${side(b, 'b', 2, wins[1], better(1))}</div>`;
+}
+
+export function compareTalk(a, b, focus = '') {
+  const lines = [];
+  const rowsFor = focus ? COMPARE.filter((r) => r.key === focus) : [];
+  if (rowsFor.length) {
+    const row = rowsFor[0];
+    const x = row.get(a);
+    const y = row.get(b);
+    const w = winnerOf(row, a, b);
+    lines.push(`${row.label} ${a.name} ${ok(x) ? row.show(x) : 'belum ada'}, ${b.name} ${ok(y) ? row.show(y) : 'belum ada'}.`);
+    if (w) lines.push(`${w < 0 ? a.name : b.name} lebih baik.`);
+  } else {
+    const winA = COMPARE.filter((r) => winnerOf(r, a, b) < 0).map((r) => r.label);
+    const winB = COMPARE.filter((r) => winnerOf(r, a, b) > 0).map((r) => r.label);
+    const lead = winA.length === winB.length ? `${a.name} dan ${b.name} seimbang.` : `${winA.length > winB.length ? a.name : b.name} unggul di ${Math.max(winA.length, winB.length)} dari ${COMPARE.length} ukuran.`;
+    lines.push(lead);
+    const other = winA.length > winB.length ? [b.name, winB] : [a.name, winA];
+    if (other[1].length) lines.push(`${other[0]} lebih baik di ${other[1].slice(0, 3).join(', ')}.`);
+  }
+  return lines.join(' ');
 }
 
 export function flyIn(stage, from) {

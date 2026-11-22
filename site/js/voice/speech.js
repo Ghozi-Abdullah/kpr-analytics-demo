@@ -55,17 +55,16 @@ export function createRecognizer({ lang = 'id-ID', onResult, onEnd, onError, onS
 }
 
 const MALE = /andika|ardi|\bmale\b|pria|laki/i;
-let voice = null;
-const pickVoice = () => {
+let browserVoices = [];
+let browserPick = 0;
+const listVoices = () => {
   const list = globalThis.speechSynthesis?.getVoices() || [];
   const id = list.filter((v) => /^id([-_]|$)/i.test(v.lang) || /indonesia/i.test(v.name));
   const female = id.filter((v) => !MALE.test(v.name));
-  return female.find((v) => /gadis/i.test(v.name) && /natural|online/i.test(v.name))
-    || female.find((v) => /gadis/i.test(v.name))
-    || female.find((v) => /google/i.test(v.name))
-    || female.find((v) => /damayanti/i.test(v.name))
-    || female[0] || id[0] || null;
+  const rank = (v) => (/gadis/i.test(v.name) && /natural|online/i.test(v.name) ? 0 : /gadis/i.test(v.name) ? 1 : /google/i.test(v.name) ? 2 : /damayanti/i.test(v.name) ? 3 : 4);
+  return [...female].sort((a, b) => rank(a) - rank(b)).concat(female.length ? [] : id);
 };
+const browserVoice = () => browserVoices[browserPick % Math.max(1, browserVoices.length)] || null;
 const tempoOf = (v) => {
   if (!v) return { rate: 1.1, pitch: 1.04 };
   if (/microsoft/i.test(v.name) && /natural|online/i.test(v.name)) return { rate: 1.08, pitch: 1 };
@@ -73,10 +72,31 @@ const tempoOf = (v) => {
   return { rate: 1.07, pitch: 1.02 };
 };
 if (voiceSupport.speak) {
-  voice = pickVoice();
-  speechSynthesis.addEventListener?.('voiceschanged', () => { voice = pickVoice(); });
+  browserVoices = listVoices();
+  speechSynthesis.addEventListener?.('voiceschanged', () => { browserVoices = listVoices(); });
 }
 
+export const CLOUD_VOICES = [
+  ['id-ID-Chirp3-HD-Despina', 'Despina'], ['id-ID-Chirp3-HD-Sulafat', 'Sulafat'], ['id-ID-Chirp3-HD-Aoede', 'Aoede'],
+  ['id-ID-Chirp3-HD-Leda', 'Leda'], ['id-ID-Chirp3-HD-Erinome', 'Erinome'], ['id-ID-Chirp3-HD-Kore', 'Kore'],
+];
+const CLOUD_RATE = 1.06;
+const CLOUD_WAIT_MS = 7000;
+let cloud = null;
+let cloudOff = false;
+let cloudPick = 0;
+let rateMul = 1;
+const audioCache = new Map();
+
+export function setCloudSpeaker(fn) { cloud = typeof fn === 'function' ? fn : null; }
+export function setVoiceChoice(i) { cloudPick = Math.max(0, Number(i) || 0) % CLOUD_VOICES.length; browserPick = Math.max(0, Number(i) || 0); }
+export function setRate(mul) { rateMul = Math.min(1.35, Math.max(0.8, Number(mul) || 1)); }
+export const usingCloud = () => !!cloud && !cloudOff;
+export function nextVoice() {
+  if (usingCloud()) { cloudPick = (cloudPick + 1) % CLOUD_VOICES.length; return { index: cloudPick, name: CLOUD_VOICES[cloudPick][1] }; }
+  browserPick = (browserPick + 1) % Math.max(1, browserVoices.length);
+  return { index: browserPick, name: (browserVoice()?.name || 'bawaan').replace(/^(Microsoft|Google)\s*/i, '').replace(/\s*-.*$/, '') };
+}
 
 function sentences(text) {
   const out = [];
@@ -92,61 +112,125 @@ function sentences(text) {
   return out;
 }
 
-let speakGen = 0;
+let audioCtx = null;
+function ctx() {
+  const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AC) return null;
+  audioCtx ||= new AC();
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => null);
+  return audioCtx;
+}
 
-export function speak(text, { onStart, onEnd } = {}) {
-  const mine = ++speakGen;
-  if (!voiceSupport.speak || !text) { onEnd?.(); return; }
+function cloudAudio(text) {
+  const voiceId = CLOUD_VOICES[cloudPick][0];
+  const rate = Math.round(CLOUD_RATE * rateMul * 100) / 100;
+  const key = `${voiceId}|${rate}|${text}`;
+  if (audioCache.has(key)) return audioCache.get(key);
+  const job = Promise.race([
+    cloud(text, voiceId, rate),
+    new Promise((resolve) => { setTimeout(() => resolve({ slow: true }), CLOUD_WAIT_MS); }),
+  ]).then(async (res) => {
+    if (!res || res.slow) return null;
+    if (res.off) { cloudOff = true; return null; }
+    const ac = ctx();
+    if (!ac || !res.audio) return null;
+    const bin = atob(res.audio);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    return ac.decodeAudioData(bytes.buffer);
+  }).catch(() => null);
+  audioCache.set(key, job);
+  job.then((buf) => { if (!buf) audioCache.delete(key); });
+  if (audioCache.size > 40) audioCache.delete(audioCache.keys().next().value);
+  return job;
+}
+
+let speakGen = 0;
+let playing = null;
+
+function speakBrowser(parts, mine, { onStart, finish }) {
+  if (!voiceSupport.speak) { finish(); return; }
   speechSynthesis.cancel();
-  const parts = sentences(text);
-  const { rate, pitch } = tempoOf(voice);
+  const v = browserVoice();
+  const { rate, pitch } = tempoOf(v);
   let i = 0;
-  let started = false;
-  let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    clearTimeout(guard);
-    if (mine === speakGen) onEnd?.();
-  };
   const next = () => {
-    if (mine !== speakGen) { finish(); return; }
-    if (i >= parts.length) { finish(); return; }
+    if (mine !== speakGen || i >= parts.length) { finish(); return; }
     const u = new SpeechSynthesisUtterance(parts[i]);
     i += 1;
     u.lang = 'id-ID';
-    if (voice) u.voice = voice;
-    u.rate = rate;
+    if (v) u.voice = v;
+    u.rate = Math.min(1.6, rate * rateMul);
     u.pitch = pitch;
-    u.onstart = () => { if (!started) { started = true; onStart?.(); } };
+    u.onstart = onStart;
     u.onend = next;
     u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') finish(); else next(); };
     speechSynthesis.speak(u);
   };
-  const guard = setTimeout(finish, Math.max(5000, String(text).length * 95));
   next();
 }
 
-export const hush = () => { speakGen += 1; if (voiceSupport.speak) speechSynthesis.cancel(); };
+async function speakCloud(parts, mine, hooks) {
+  const groups = parts.length > 1 ? [parts[0], parts.slice(1).join(' ')] : parts;
+  const jobs = groups.map((g) => cloudAudio(g));
+  for (let i = 0; i < groups.length; i += 1) {
+    const buf = await jobs[i];
+    if (mine !== speakGen) { hooks.finish(); return; }
+    if (!buf) { speakBrowser(sentences(groups.slice(i).join(' ')), mine, hooks); return; }
+    const ac = ctx();
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    src.connect(ac.destination);
+    playing = src;
+    hooks.onStart();
+    await new Promise((resolve) => { src.onended = resolve; src.start(); });
+    if (playing === src) playing = null;
+  }
+  hooks.finish();
+}
 
-let chimeCtx = null;
+export function speak(text, { onStart, onEnd } = {}) {
+  const mine = ++speakGen;
+  if (!text || (!voiceSupport.speak && !usingCloud())) { onEnd?.(); return; }
+  const parts = sentences(text);
+  let started = false;
+  let done = false;
+  const guard = setTimeout(() => finish(), Math.max(9000, String(text).length * 110 + CLOUD_WAIT_MS));
+  function finish() {
+    if (done) return;
+    done = true;
+    clearTimeout(guard);
+    if (mine === speakGen) onEnd?.();
+  }
+  const hooks = { onStart: () => { if (!started) { started = true; onStart?.(); } }, finish };
+  if (usingCloud()) speakCloud(parts, mine, hooks);
+  else speakBrowser(parts, mine, hooks);
+}
+
+export function hush() {
+  speakGen += 1;
+  if (voiceSupport.speak) speechSynthesis.cancel();
+  if (playing) { try { playing.stop(); } catch {} playing = null; }
+}
+
 export function chime(kind = 'on') {
   try {
-    const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-    if (!AC) return;
-    chimeCtx ||= new AC();
-    if (chimeCtx.state === 'suspended') chimeCtx.resume();
-    const t = chimeCtx.currentTime + 0.01;
-    const notes = { on: [[784, 0], [1175, 0.085]], off: [[988, 0], [659, 0.08]], done: [[1047, 0], [1319, 0.07], [1568, 0.14]] }[kind] || [[880, 0]];
+    const ac = ctx();
+    if (!ac) return;
+    const t = ac.currentTime + 0.01;
+    const notes = {
+      on: [[784, 0], [1175, 0.085]], off: [[988, 0], [659, 0.08]], done: [[1047, 0], [1319, 0.07], [1568, 0.14]],
+      love: [[1319, 0], [1568, 0.08], [2093, 0.16]], oops: [[523, 0], [494, 0.1]],
+    }[kind] || [[880, 0]];
     for (const [f, dt] of notes) {
-      const o = chimeCtx.createOscillator();
-      const g = chimeCtx.createGain();
+      const o = ac.createOscillator();
+      const g = ac.createGain();
       o.type = 'sine';
       o.frequency.value = f;
       g.gain.setValueAtTime(0.0001, t + dt);
       g.gain.exponentialRampToValueAtTime(0.07, t + dt + 0.012);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.16);
-      o.connect(g).connect(chimeCtx.destination);
+      o.connect(g).connect(ac.destination);
       o.start(t + dt);
       o.stop(t + dt + 0.18);
     }

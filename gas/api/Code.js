@@ -1,5 +1,7 @@
 var VIEWS = ['ringkasan', 'performance', 'portofolio', 'realisasi', 'sla'];
-var ACTIONS = ['boot', 'bundle', 'saveLayout', 'version', 'requestAccess', 'adminList', 'adminSave', 'adminRemove', 'adminDecide'];
+var ACTIONS = ['boot', 'bundle', 'saveLayout', 'version', 'speak', 'requestAccess', 'adminList', 'adminSave', 'adminRemove', 'adminDecide'];
+var VOICE_RE = /^id-ID-(Chirp3-HD|Neural2|Wavenet|Standard)-[A-Za-z]{1,20}$/;
+var TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize';
 var ADMIN_ACTIONS = ['adminList', 'adminSave', 'adminRemove', 'adminDecide'];
 var ROLES = ['viewer', 'admin'];
 var STATUSES = ['active', 'off'];
@@ -23,6 +25,9 @@ var GUARD = {
   requests: 30,
   logRows: 60,
   dataCacheSec: 21600,
+  speakChars: 600,
+  speakDayChars: 40000,
+  speakCacheChars: 95000,
 };
 var REJECTED_TOKEN = '!';
 
@@ -290,6 +295,7 @@ function handle_(req, email, role) {
     return readData_(paths);
   }
   if (req.action === 'saveLayout') return saveLayout_(email, req.view, req.text);
+  if (req.action === 'speak') return speak_(email, req);
   return version_();
 }
 
@@ -462,4 +468,33 @@ function saveLayout_(email, view, text) {
   if (!clean) throw AuthFail_('BAD');
   p.setProperty(layoutKey_(email, view), clean);
   return true;
+}
+
+function speak_(email, req) {
+  var text = typeof req.text === 'string' ? req.text.replace(/\s+/g, ' ').trim() : '';
+  if (!text || text.length > GUARD.speakChars) throw AuthFail_('BAD');
+  var key = props_().getProperty('TTS_KEY');
+  if (!key) return { off: true };
+  var voice = typeof req.voice === 'string' && VOICE_RE.test(req.voice) ? req.voice : (props_().getProperty('TTS_VOICE') || 'id-ID-Chirp3-HD-Despina');
+  var rate = Number(req.rate);
+  if (!(rate >= 0.7 && rate <= 1.6)) rate = 1.06;
+  var cache = CacheService.getScriptCache();
+  var audioKey = 'tts_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, voice + '|' + rate + '|' + text, Utilities.Charset.UTF_8));
+  var hit = cache.get(audioKey);
+  if (hit) return { audio: hit };
+  var dayKey = 'ttsday_' + email + '_' + Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyyMMdd');
+  var used = Number(cache.get(dayKey)) || 0;
+  if (used + text.length > GUARD.speakDayChars) return { off: true };
+  var res = UrlFetchApp.fetch(TTS_URL, {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'X-Goog-Api-Key': key },
+    payload: JSON.stringify({ input: { text: text }, voice: { languageCode: 'id-ID', name: voice }, audioConfig: { audioEncoding: 'MP3', speakingRate: rate } }),
+  });
+  if (res.getResponseCode() !== 200) {
+    console.warn('TTS ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
+    return { off: res.getResponseCode() === 403 || res.getResponseCode() === 400 };
+  }
+  var audio = JSON.parse(res.getContentText()).audioContent || '';
+  cache.put(dayKey, String(used + text.length), 86400);
+  if (audio && audio.length < GUARD.speakCacheChars) cache.put(audioKey, audio, 21600);
+  return { audio: audio };
 }

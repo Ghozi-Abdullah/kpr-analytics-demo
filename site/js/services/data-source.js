@@ -104,6 +104,7 @@ async function apiCall(action, payload = {}) {
 }
 
 export const requestAccess = () => apiCall('requestAccess');
+export const speakRemote = (text, voice, rate) => (MODE === 'api' ? apiCall('speak', { text, voice, rate }) : Promise.resolve({ off: true }));
 export const accessApi = {
   list: () => apiCall('adminList'),
   save: (user) => apiCall('adminSave', user),
