@@ -121,7 +121,7 @@ const TARGETS = [
   ['split', /\b(nfi|fix income|non fix|fixed income|fi dan nfi|fi nfi)\b|\bfi\b/],
   ['sla', /\b(sla|berkas|proses berkas)\b/],
   ['real', /\brealisasi\b/],
-  ['disb', /\b(disburse|disbursement|pencairan|penyaluran)\b/],
+  ['disb', /\b(disburse|disbursement|pencairan|penyaluran|guidance|prognosa)\b/],
   ['npl', /\b(npl|kredit macet|non performing)\b/],
   ['sml', /\b(sml|dpk|special mention|perhatian khusus)\b/],
   ['deb', /\b(debitur|nasabah)\b/],
@@ -150,7 +150,7 @@ const PAGES = [
   ['portofolio', /\b(portofolio|portfolio)\b/], ['sla', /\b(sla|berkas)\b/], ['direktur', /\b(direktur|utama|beranda|home|depan)\b/],
 ];
 
-const OPEN = /\b(buka|bukain|bukakan|detail|detil|detailnya|rincian|rinciannya|rinci|perbesar|zoom|lengkapnya|selengkapnya|lebih lengkap)\b/;
+const OPEN = /\b(buka|bukain|bukakan|detail|detil|detailnya|rincian|rinciannya|rinci|perbesar|zoom|lengkapnya|selengkapnya|lebih lengkap|grafik|grafiknya|chart|diagram)\b/;
 const SHOW = /\b(lihat|liat|lihatin|tampilkan|tampilin|tunjukkan|tunjukin|cek|check|buka|bukain|gimana|bagaimana|gmn|kondisi|keadaan|ringkasan|rangkum|rangkuman|overview|performa|kinerja|profil|laporan|apa kabar|kabar|mau lihat|pengen lihat)\b/;
 const ASKING = /\b(berapa|brp|kenapa|knp|mengapa|apakah|bandingkan|dibanding|dibandingkan|banding|vs|versus|tren|trend|naik|turun|tertinggi|terendah|terbesar|terkecil|paling|ranking|peringkat|siapa|mana|kapan|harus|perlu|butuh|target|proyeksi|prediksi|kalau|jika|rata|porsi|kontribusi|selisih|beda|apa)\b/;
 const TIME = /\b(kemarin|kemaren|tadi|minggu (lalu|kemarin)|pekan lalu|bulan (lalu|kemarin|depan|sebelumnya)|tahun (lalu|depan|ini)|januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|q[1-4]|kuartal|triwulan|semester|tanggal|tgl|\d+ (hari|minggu|bulan|tahun)|sejak|ytd|awal tahun|akhir (bulan|tahun)|20\d\d)\b/;
@@ -163,6 +163,28 @@ const PREV = /^(ro|region|wilayah)\s+sebelumnya$/;
 const BRIEF = /\b(briefing|brief|laporan (pagi|harian|hari ini|singkat|terbaru)|rangkum(an)?( hari ini| semua| nasional)?|ringkasan( hari ini| nasional| semua)?|update hari ini|(gimana|bagaimana|kondisi|keadaan|kabar) (hari ini|nasional|semua|kpr)|nasional (gimana|bagaimana)|lihat nasional|tampilkan nasional|kondisi kpr|kabar kpr|situasi (hari ini|terkini|nasional))\b/;
 const OPINION = /\b(menurut (kamu|kirana|mu|anda)|gimana menurut(mu| kamu)|pendapat(mu| kamu)|penilaian(mu| kamu)|(bagus|aman|sehat|oke|parah|bahaya|gawat|jelek|baik) (nggak|gak|ga|tidak|enggak|ngga|apa (nggak|gak|ga|enggak|tidak))|apakah (bagus|aman|sehat|baik))\b|^(apakah|apa) .*\b(aman|sehat|bagus|parah|gawat|bahaya)$/;
 const ADVICE = /\b(saran(nya|mu| kamu)?|rekomendasi(nya|mu| kamu)?|masukan(nya|mu| kamu)?|apa yang (harus|perlu|bisa) (saya |aku |kita )?(lakukan|kerjakan|dilakukan|diperbaiki|dikejar)|harus ngapain|perlu ngapain|(gimana|bagaimana) (caranya|cara) (naik|menaikkan|naikin|turunin|menurunkan|ngejar|mengejar|kejar|memperbaiki|perbaiki|benahi)|langkah(nya)? (apa|selanjutnya)|tindak lanjut(nya)?|fokus(nya)? (ke )?apa|prioritas(nya)?( apa)?)\b/;
+const QUARTER = /\b(?:q|kuartal|triwulan|tw)\s?([1-4])\b|\bsemester\s?(1|2|satu|dua)\b/;
+const YEAR_END = /\b(akhir tahun|akhir desember|desember|tutup tahun|year end)\b/;
+const PROJECTION = /\b(proyeksi|perkiraan|prediksi|estimasi|forecast|tercapai|capai|kecapai|kekejar|terkejar|target|tembus)\b/;
+const GAP = /\b(capaian|pencapaian|achievement|sisa|kurang|kekurangan|gap|jarak|selisih)\b/;
+const GAP_REF = /\b(rka|guidance|target|prognosa)\b/;
+const RANKY = /\b(tertinggi|terendah|terbaik|terburuk|paling|peringkat|ranking|ro mana|mana yang|per ro|per kanca|semua ro|daftar|siapa)\b/;
+const SLA_WORDS = /\b(berkas|sla|tahap|tertahan|prakarsa|putusan|pemutus|antrian|antre)\b/;
+const MONTH_RE = /\b(januari|jan|februari|pebruari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|agt|ags|september|sept|sep|oktober|okt|november|nov|nop|desember|des)\b(?:\s+(?:tahun\s+)?(20\d\d))?/g;
+const MONTH_NO = { januari: 1, jan: 1, februari: 2, pebruari: 2, feb: 2, maret: 3, mar: 3, april: 4, apr: 4, mei: 5, juni: 6, jun: 6, juli: 7, jul: 7, agustus: 8, agu: 8, agt: 8, ags: 8, september: 9, sept: 9, sep: 9, oktober: 10, okt: 10, november: 11, nov: 11, nop: 11, desember: 12, des: 12 };
+const MONTH_CMP = /\b(bandingkan|bandingin|banding|dibanding(kan)?|perbandingan|vs|versus|beda(nya)?|selisih(nya)?|compare)\b/;
+const MONTH_JOIN = /\b(dan|sama|dengan|ke|sampai|hingga|vs)\b/;
+const MONTH_SHOW = /\b(lihat|liat|tampilkan|tunjukkan|tunjukin|buka|cek|data|kinerja|performa|performance|posisi|kondisi|rekap|ringkasan|gimana|bagaimana|seperti apa|kayak apa)\b/;
+
+export function monthsIn(t) {
+  const lastYear = /\btahun (lalu|kemarin)\b/.test(t);
+  const out = [];
+  for (const m of t.matchAll(MONTH_RE)) out.push({ m: MONTH_NO[m[1]], y: m[2] ? Number(m[2]) : null, lastYear, at: m.index });
+  for (const m of t.matchAll(/\bbulan (lalu|kemarin|sebelumnya)\b/g)) out.push({ rel: -1, at: m.index });
+  for (const m of t.matchAll(/\b(bulan ini|sekarang|saat ini)\b/g)) out.push({ rel: 0, at: m.index });
+  return out.sort((a, b) => a.at - b.at).map(({ at, ...x }) => x);
+}
+
 const WORST = /\b(terburuk|terjelek|terparah|terlemah|terbawah|paling (jelek|buruk|parah|lemah|rendah|bawah|tertinggal))\b/;
 const BEST = /\b(terbaik|terbagus|terkuat|teratas|juara|paling (bagus|baik|kuat|oke|top|atas))\b/;
 
@@ -226,6 +248,8 @@ export function routeCommand(raw, { q = null, regions = [], showing = '', focus 
   if (/\b(lagi di (halaman|mana)|sekarang di (halaman )?(mana|apa)|ini halaman apa|(ini|lagi|sedang|sekarang) (lagi )?lihat apa|filter(nya)? apa)\b/.test(t)) return r('whereAmI');
   if (/\b(kabar (baik|gembira|bagus)(nya)?|berita (baik|bagus)|good news|yang bagus (apa|siapa)|apa yang bagus|ada yang bagus)\b/.test(t)) return r('goodNews');
   if (/\b(kabar (buruk|jelek)(nya)?|berita (buruk|jelek)|bad news|yang (jelek|buruk) (apa|siapa)|apa yang (jelek|buruk)|yang perlu diwaspadai|ada yang (jelek|buruk|bahaya))\b/.test(t)) return r('badNews');
+  if (/\b(hapus|bersihkan|kosongkan|reset) (catatan|daftar) (belajar|pertanyaan)\b/.test(low)) return r('missClear');
+  if (/\b(pertanyaan|perintah) (yang )?(belum|gak|nggak|ga|tidak) (bisa )?(kamu )?(dijawab|terjawab|dipahami|dimengerti)\b|\b(catatan|daftar) (belajar|pertanyaan gagal)\b|\bapa (saja|aja) yang (belum|gak|nggak|ga) (bisa )?(kamu )?jawab\b/.test(low)) return r('missList');
   if (/^(assalamu ?alaikum|asalamu ?alaikum)\b/.test(bare) && words <= 5) return r('salam');
   if (/^(ha(ha)+h?|he(he)+|hi(hi)+|wk(wk)+\w*|xixi\w*|lol|ngakak)( (ha|he|hi|wk)\w*)*( (lucu|kocak|banget|bgt))*$/.test(bare)) return r('laugh');
   if (/^((wah+|wow+|wih+|weh+|widih|anjay|gokil|gila)( (keren|mantap|gokil|lumayan|seru))?|keren juga|mantap juga|lumayan|lumayan juga|not bad)( (ya|banget|sih|juga|nih|deh|dong))*$/.test(bare)) return r('wow');
@@ -289,13 +313,47 @@ export function routeCommand(raw, { q = null, regions = [], showing = '', focus 
   const target0 = targetOf(t);
   const specific = !!(ent.kanca?.length || ent.rm?.length || ent.tipe?.length || ent.node?.length || ent.prov?.length || (ent.fi && target0 !== 'split')) || /\b(kanca|kc|kcp|cabang|unit|rm|pemutus|provinsi|kota|kabupaten)\b/.test(t);
   const qRos = ent.ro || [];
-  const ros = qRos.length ? qRos.filter((x) => regions.includes(x)) : matchRegion(t, regions);
+  const ros0 = qRos.length ? qRos.filter((x) => regions.includes(x)) : matchRegion(t, regions);
+  const area = /\b(jakarta|jkt|jabodetabek|jabotabek)\b(?! ?\d)/.test(t) && ros0.length >= 2 && !/\b(jakarta|jkt) ?\d\b/.test(t);
+  if (area || ros0.length >= 3) return r('ask', { ro: '', text: engineText(t, { q, target: targetOf(t), ros: ros0 }) });
+  const ros = ros0;
   const ro = ros.length === 1 ? ros[0] : '';
   const target = targetOf(t);
-  const near = showing && /\b(sini|situ|ini|itu|tersebut|tadi|nya)\b/.test(t) ? showing : '';
+  const near = showing && /\b(sini|situ|ini|itu|tersebut|tadi|nya)\b/.test(t.replace(/\b(bulan|hari|minggu|tahun|saat|pekan|sampai) (ini|itu)\b/g, '')) ? showing : '';
   const subject = /\bnasional\b/.test(t) ? '' : ro || showing || focus || '';
+  const why0 = /^(kenapa|mengapa|knp|kok bisa)\b/.test(t);
+  if (YEAR_END.test(t) && PROJECTION.test(t) && !/\b(tahun depan|202[7-9])\b/.test(t) && ros.length < 2 && !specific && !why0) return r('yearEnd', { ro: ro || near });
+  const qm = t.match(QUARTER);
+  if (qm && ros.length < 2 && !specific && !why0) {
+    const part = qm[1] ? { kind: 'q', n: Number(qm[1]) } : { kind: 's', n: /^(1|satu)$/.test(qm[2]) ? 1 : 2 };
+    return r('quarter', { ro: ro || near, part: { ...part, y: Number(/\b(20\d\d)\b/.exec(t)?.[1]) || null, lastYear: /\btahun (lalu|kemarin)\b/.test(t) }, focus: target });
+  }
+  const defineQ = /\b(apa (itu|arti|artinya|maksud|maksudnya)|artinya apa|maksudnya apa|itu apa|definisi)\b/.test(t);
+  const planWord = /\b(bulan depan|tahun depan|harus|butuh|dibutuhkan|simulasi|kalau|jika|bila|agar|supaya)\b/.test(t);
+  if (((GAP.test(t) && (GAP_REF.test(t) || /\b(capaian|pencapaian)\b/.test(t))) || (GAP_REF.test(t) && /\b(vs|versus|dibanding|banding|terhadap)\b/.test(t)) || /^rka (os|outstanding|npl|sml|debitur)\b|\brka (os|outstanding|npl|sml|debitur)\b/.test(t)) && !planWord && !defineQ && !RANKY.test(t) && ros.length < 2 && !specific && !why0 && !monthsIn(t).some((x) => x.m)) {
+    const focusOn = /\b(guidance|prognosa|disburse|penyaluran|pencairan)\b/.test(t) ? 'disb' : ['deb', 'npl', 'sml'].includes(target) ? target : 'os';
+    return r('target', { ro: ro || near, focus: focusOn });
+  }
+  if (/\b(rata rata|rata2|rerata|per hari|sehari|harian)\b/.test(t) && /\b(disburse|penyaluran|pencairan)\b/.test(t) && !RANKY.test(t) && !defineQ && ros.length < 2 && !specific && !why0) return r('target', { ro: ro || near, focus: /\b(harus|perlu|butuh|sisa|kejar|kurang)\b/.test(t) ? 'disb' : 'pace' });
+  if (target === 'sml' && /\b(proyeksi|prediksi|perkiraan|estimasi|bulan depan)\b/.test(t) && ros.length < 2 && !specific && !why0) return r('ratioForecast', { ro: ro || near, focus: 'sml' });
+  if (target === 'split' && !q?.metric && ros.length < 2 && !why0 && !/\b(berapa|brp|bandingkan|banding|vs)\b/.test(t)) return r('detail', { id: 'split', ro: ro || near });
   if (OPINION.test(t) && ros.length < 2 && !specific && !time) return r('opinion', { ro: subject, target });
   if (ADVICE.test(t) && ros.length < 2 && !specific) return r('advice', { ro: subject, target });
+  const months = monthsIn(t);
+  const named = months.filter((x) => x.m).length;
+  const span0 = spanFrom(t);
+  const why = /^(kenapa|mengapa|knp|kok bisa)\b/.test(t);
+  const rangeOnly = (/\b(sampai|hingga|s d)\b/.test(t) && !MONTH_CMP.test(t) && ['real', 'disb'].includes(target)) || (['real', 'disb'].includes(target) && months.some((x) => x.rel === 0));
+  if ((named || MONTH_CMP.test(t)) && months.length >= 2 && ros.length < 2 && !specific && !why && !span0 && !rangeOnly && (MONTH_CMP.test(t) || MONTH_JOIN.test(t))) {
+    return r('monthCompare', { ro: ro || near, months: months.slice(0, 2), focus: target });
+  }
+  if (named === 1 && ros.length >= 2 && !specific && !why) return r('compare', { ros: ros.slice(0, 2), metric: target, month: months.find((x) => x.m) });
+  const since = months.length === 1 && named && /\b(dari|sejak|semenjak) (bulan )?(januari|jan|februari|pebruari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|agt|ags|september|sept|sep|oktober|okt|november|nov|nop|desember|des)\b/.test(t);
+  if (since && ros.length < 2 && !specific && !why && !['real', 'disb'].includes(target)) return r('monthCompare', { ro: ro || near, months: [months[0], { rel: 0 }], focus: target });
+  if (months.length === 1 && ros.length < 2 && !specific && !why && !span0 && (!target || PERF.test(t))
+    && (MONTH_SHOW.test(t) || (named && words <= 3)) && (named || MONTH_SHOW.test(t.replace(/\bbulan (lalu|kemarin|sebelumnya|ini)\b/, '')))) {
+    return r('month', { ro: ro || near, month: months[0] });
+  }
   if (/\b(kembali ke nasional|ke nasional|reset( filter)?|hapus filter|tanpa filter|semua wilayah|nasional saja|nasional aja|lepas filter)\b/.test(t) && !ro && !asking) return r('nasional');
   if (ros.length >= 2 && !time && !specific) return r('compare', { ros: ros.slice(0, 2), metric: target });
   if (BRIEF.test(t) && !ro && !target && !specific && !time) return r('brief');
@@ -303,19 +361,48 @@ export function routeCommand(raw, { q = null, regions = [], showing = '', focus 
   if (OPEN.test(t) && !target && !ro && (showing || near) && !time && !asking) return r('detail', { id: 'os', ro: showing });
   const span = spanFrom(t);
   const perfWord = PERF.test(t);
-  if (span && !specific && ros.length < 2 && (perfWord || target === 'history' || target === 'real' || ANALYSIS.test(t) || (!target && (OPEN.test(t) || SHOW.test(t) || words <= 4))) && !(asking && !perfWord && target !== 'history')) {
+  if (span && !specific && ros.length < 2 && (perfWord || target === 'history' || target === 'real' || (ANALYSIS.test(t) && !SLA_WORDS.test(t)) || (!target && (OPEN.test(t) || SHOW.test(t) || words <= 4))) && !(asking && !perfWord && target !== 'history')) {
     return r('detail', { id: /\brealisasi\b/.test(t) && !perfWord ? 'real' : 'history', ro: ro || near, span });
   }
-  if (ANALYSIS.test(t) && !specific && ros.length < 2) return r('analysis', { ro: ro || near || '' });
+  if (ANALYSIS.test(t) && !SLA_WORDS.test(t) && !specific && ros.length < 2) return r('analysis', { ro: ro || near || '' });
   if (target === 'history' && !asking && !specific) return r('detail', { id: target, ro: ro || near });
   if (target && !time && !specific && !asking && (OPEN.test(t) || target === 'watch')) return r('detail', { id: target, ro: ro || near });
   if (target && !time && !specific && !asking && SHOW.test(t) && words <= 9 && !(target === 'os' && ro && !/\b(os|outstanding)\b/.test(t))) return r('detail', { id: target, ro: ro || near });
   if (FILTER.test(t) && !asking && (ro || near)) return r('filter', { ro: ro || near });
   if (ro && !asking && !target && !time && !specific) return r('region', { ro });
   if (ro && SHOW.test(t) && !asking && !time && !specific && (!target || target === 'os')) return r('region', { ro });
+  const note = /\bprovinsi\b/.test(t) && RANKY.test(t) ? 'Data kinerja tercatat per RO, jadi saya urutkan per RO.' : '';
+  return r('ask', { ro, text: engineText(t, { q, target, ros }), note });
+}
+
+function engineText(t, { q, target, ros }) {
   let text = t;
-  if (/\b(bandingkan|banding|dibanding|vs)\b/.test(t) && !target && !q?.metric && !ros.length) text = `${t} os`;
-  return r('ask', { ro, text });
+  const metric = q?.metric || '';
+  const ent = q?.entities || {};
+  if (/\b(risiko|resiko|bahaya|waspada|diwaspadai|lampu merah|warning|red flag)\b/.test(text) && !metric) return 'ro mana yang perlu perhatian';
+  if (/\b(rumah|unit) (terjual|laku|tersalur)\b|\bterjual\b/.test(text)) return `jumlah akad ${text.replace(/\b(berapa|rumah|unit|terjual|laku|tersalur)\b/g, '').trim()}`.trim();
+  if (/\bberkas\b.*\b(paling lama|terlama|paling tua)\b/.test(text)) return 'umur berkas terlama';
+  text = text.replace(/\brencana\b/g, 'strategi');
+  if (/\b(kalau|kalo|jika|bila|seandainya|misal|misalnya|andai)\b/.test(text) && /\d+\s*(persen|%)/.test(text) && !/\bsimulasi\b/.test(text)) text = `simulasi ${text}`;
+  if (/\b(proyeksi|prediksi|perkiraan|estimasi)\b/.test(text) && metric === 'npl' && !/\b(bulan depan|akhir|desember|tahun)\b/.test(text)) text = `${text.replace(/\b(proyeksi|prediksi|perkiraan|estimasi)\b/, '').trim()} bulan depan`;
+  if (/\brm\b/.test(text) && !metric && !ent.rm?.length && ros.length === 1 && !/\b(per rm|terbaik|terburuk|tertinggi|terendah|paling|belum)\b/.test(text)) text = text.replace(/\brm\b/, 'realisasi per rm');
+  if (/\bprovinsi\b/.test(text) && /\b(tertinggi|terendah|terbaik|terburuk|paling|peringkat|per provinsi)\b/.test(text)) text = text.replace(/\bprovinsi\b/g, 'ro');
+  if (ros.length >= 3 && !metric && !/\bos\b/.test(text)) text = `${text} os`;
+  const defined = /^(.+?) (itu apa|itu apaan|artinya apa|maksudnya apa|apa artinya|apa maksudnya|tuh apa)$/.exec(text);
+  if (defined) return `apa itu ${defined[1]}`;
+  const explain = /^(jelaskan|jelasin|terangkan|terangin)( apa itu)? (.+)$/.exec(text);
+  if (explain && !ros.length && !TIME.test(text) && explain[3].split(' ').length <= 3) return `apa itu ${explain[3]}`;
+  if (/\bro\b.*\b(paling besar|terbesar|paling kecil|terkecil)\b|\b(paling besar|terbesar|paling kecil|terkecil)\b.*\bro\b/.test(text) && !metric) text = `${text} os`;
+  if ((ent.node?.length || /\b(subsidi|komersial)\b/.test(text)) && !metric && !/\b(bandingkan|vs|dan|banding)\b/.test(text)) text = `os ${text}`;
+  if (ent.tipe?.length && !metric) text = `realisasi ${text}`;
+  if (/\b(tipe|jenis|sumber)\b/.test(text) && /\brealisasi\b/.test(text) && !/\bper\b/.test(text) && !ent.tipe?.length) text = `realisasi per tipe ${text.replace(/\b(realisasi|tipe|jenis|sumber|developer)\b/g, '').trim()}`.trim();
+  if (/\bkanca\b/.test(text) && !ent.kanca?.length && ros.length === 1 && !/\b(per kanca|tertinggi|terendah|terbaik|terburuk|paling|belum|tanpa|nol)\b/.test(text)) text = text.replace(/\bkanca\b/, 'per kanca');
+  if (/\bberapa persen\b/.test(text) && ['os', 'debitur', 'realisasi', 'disburse'].includes(metric) && (ros.length || ent.prov?.length)) text = text.replace(/\bberapa persen\b/, 'porsi');
+  if (/\b(puncak|rekor)\b/.test(text) && metric) text = `${text.replace(/\b(puncak|rekor)\b/, '').trim()} tertinggi kapan`;
+  if ((/\b(naik|turun|tumbuh|bertambah|berkurang) (berapa|ga|gak|nggak|ngga|enggak|tidak|atau turun|apa turun|atau naik|apa naik)\b/.test(text) || /^perubahan\b/.test(text)) && metric && !/\b(bulan depan|tahun depan|target|harus|butuh|perlu|agar|supaya|rka)\b/.test(text)) {
+    text = `${text.replace(/\b(naik|turun|tumbuh|bertambah|berkurang) (berapa|ga|gak|nggak|ngga|enggak|tidak|atau turun|apa turun|atau naik|apa naik)\b|^perubahan\b|\bbulan ini\b/g, '').replace(/\s+/g, ' ').trim()} bulan ini dibanding bulan lalu`;
+  }
+  return text;
 }
 
 const MONTH = { Jan: 'Januari', Feb: 'Februari', Mar: 'Maret', Apr: 'April', Jun: 'Juni', Jul: 'Juli', Agu: 'Agustus', Sep: 'September', Okt: 'Oktober', Nov: 'November', Des: 'Desember' };

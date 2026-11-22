@@ -1,22 +1,26 @@
 import { esc, fmt } from '../core/format.js';
 import { icon } from '../core/icons.js';
 import { ok } from '../core/values.js';
+import { shiftMonth } from '../core/dates.js';
 import { checkSmooth } from '../core/smooth.js';
 import { speakRemote } from '../services/data-source.js';
 import { roStanding } from '../models/direktur-model.js';
 import { voiceSupport, createRecognizer, speak, hush, createLevel, chime, setCloudSpeaker, setVoice, setRate, setPitch, setVolume, nextVoice, usingCloud, voiceList, findVoice, voiceLevel, voiceCue } from './speech.js';
 import { mountAvatar3d } from './avatar3d.js';
-import { routeCommand, findWake, cleanSpoken, spoken, shortRo, WAKE_NAME, WAKE_PHRASE } from './command.js';
-import { regionData, showcaseHtml, regionTalk, compareHtml, compareTalk, flyIn, toneOf, regionMore } from './showcase.js';
-import { createPersona, pickOne, salam, partOfDay, clockText, dateText, workdaysLeft, longDate, parseReminder, nameFrom } from './persona.js';
-import { pct, tn } from '../views/direktur-format.js';
+import { routeCommand, findWake, cleanSpoken, spoken, shortRo, targetOf, WAKE_NAME, WAKE_PHRASE } from './command.js';
+import { regionData, monthData, MONTH_ROWS, monthTalk, showcaseHtml, regionTalk, compareHtml, compareTalk, flyIn, toneOf, regionMore } from './showcase.js';
+import { createPersona, pickOne, salam, partOfDay, clockText, dateText, workdaysLeft, workdaysIn, longDate, parseReminder, nameFrom } from './persona.js';
+import { outlook } from '../analytics/outlook.js';
+import { pct, tn, realRp } from '../views/direktur-format.js';
 import { buildInsights } from '../analytics/insights.js';
 import { periodRows, periodStory, storySpeech } from '../analytics/period.js';
 
 const PREF_KEY = 'kpr.assistant';
 const FOLLOW_MS = 9000;
 const FOLLOW_ASK_MS = 13000;
-const ECHO_MS = 450;
+const ASK_MEMORY_MS = 180000;
+const KEEP_CHAIN = new Set(['ack', 'thanks', 'praise', 'wait', 'present', 'laugh', 'wow', 'really', 'yes', 'no', 'hush', 'sorry', 'repeat']);
+const COMPARE_KEYS = new Set(['os', 'deb', 'npl', 'sml', 'disb', 'real']);const ECHO_MS = 450;
 const ECHO_TAIL_MS = 1200;
 const EARLY_MS = 650;
 const MOOD_MS = 2400;
@@ -85,6 +89,7 @@ const HELP = [
     ['Sisa hari kerja bulan ini', 'Hari kerja tersisa, libur sudah dihitung'],
     ['Data per tanggal berapa?', 'Posisi data terakhir'],
     ['Salin jawabannya', 'Salin ke clipboard, juga "bagikan"'],
+    ['Pertanyaan yang belum bisa dijawab', 'Catatan belajar Kirana, untuk dikirim ke tim'],
   ] },
   { name: 'Suara', key: /suara|voice|volume/, items: [
     ['Stop', 'Kirana berhenti bicara. Bisa juga langsung bicara perintah baru'],
@@ -119,6 +124,10 @@ const ERRORS = {
   start: 'Mikrofon sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.',
 };
 
+const MISS_KEY = 'kpr.kirana.belajar';
+const MISS_MAX = 40;
+const readMiss = () => { try { const v = JSON.parse(localStorage.getItem(MISS_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+const writeMiss = (list) => { try { localStorage.setItem(MISS_KEY, JSON.stringify(list.slice(-MISS_MAX))); } catch {} };
 const readPref = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch { return {}; } };
 const writePref = (p) => { try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch {} };
 const plain = (html) => String(html || '').replace(/<(br|\/p|\/li|\/div|\/h\d)[^>]*>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
@@ -206,6 +215,9 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let prefix = '';
   let lastFact = -1;
   let focusRo = '';
+  let askChain = false;
+  let viewCtx = null;
+  let askAt = 0;
   let wakeAckTimer = 0;
   let speakingNow = false;
   let selfWords = new Set();
@@ -337,6 +349,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (f) { set({ ro: f.dataset.vaFilter }); close(); return; }
     const ro = e.target.closest('[data-va-ro]');
     if (ro) { showRegion(ro.dataset.vaRo); return; }
+    const mon = e.target.closest('[data-va-month]');
+    if (mon) { showMonth(mon.dataset.vaRo || '', mon.dataset.vaMonth); return; }
     const pick = e.target.closest('[data-va-pick]');
     if (pick && pick.dataset.vaPick) { showRegion(pick.dataset.vaPick); return; }
     const card = e.target.closest('[data-va-open]');
@@ -868,25 +882,269 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     return talk;
   }
 
-  function showCompare(roA, roB, focus = '', { quiet = false } = {}) {
+  function showCompare(roA, roB, focus = '', { quiet = false, month = null } = {}) {
     const c = getContext();
     if (!c) return;
-    const a = regionData(c, roA);
-    const b = regionData(c, roB);
+    const ym = month ? (typeof month === 'string' ? month : monthOf(month, c)) : '';
+    const a = ym ? monthData(c, roA, ym, { label: 'place' }) : regionData(c, roA);
+    const b = ym ? monthData(c, roB, ym, { label: 'place' }) : regionData(c, roB);
+    if (ym && (!a.now?.end || !b.now?.end)) { noMonth(ym, c); return; }
     if (!a.now?.end || !b.now?.end) { reply('Data salah satu RO belum ada.', { mood: 'confused' }); return; }
+    const key = COMPARE_KEYS.has(focus) ? focus : '';
     build();
     showing = '';
     const stage = $('va-stage');
-    stage.innerHTML = compareHtml(a, b, focus);
+    stage.innerHTML = ym ? compareHtml(a, b, key, { list: MONTH_ROWS, pick: (d) => `data-va-month="${esc(ym)}" data-va-ro="${esc(d.ro)}"` }) : compareHtml(a, b, focus);
     setStage('show');
     flyIn(stage, $('va-orb'));
     offer = { say: `Lihat ${a.name}`, ask: '' };
     suggest([`Lihat ${a.name}`, `Lihat ${b.name}`, `Fokus ke ${a.name}`]);
     setMood('happy');
     ding('done');
-    remember({ kind: 'compare', args: [roA, roB, focus] });
+    remember({ kind: 'compare', args: [roA, roB, focus, ym] });
     lastRegion = null;
-    say(quiet ? `Kembali ke perbandingan ${a.name} dan ${b.name}.` : `${line('compare', { a: a.name, b: b.name })} ${compareTalk(a, b, focus)} Mau saya buka salah satunya?`);
+    const when = ym ? ` Posisi akhir ${a.when}.` : '';
+    say(quiet ? `Kembali ke perbandingan ${a.name} dan ${b.name}.` : `${line('compare', { a: a.name, b: b.name })}${when} ${ym ? compareTalk(a, b, key, { list: MONTH_ROWS }) : compareTalk(a, b, focus)} Mau saya buka salah satunya?`);
+  }
+
+  function monthOf(spec, c) {
+    if (typeof spec === 'string') return spec;
+    const cur = c.cur;
+    if (spec.rel != null) return shiftMonth(cur, spec.rel);
+    const cy = Number(cur.slice(0, 4));
+    const y = spec.y ?? (spec.lastYear ? cy - 1 : cy);
+    const mm = String(spec.m).padStart(2, '0');
+    const ym = `${y}-${mm}`;
+    return spec.y == null && !spec.lastYear && ym > cur ? `${y - 1}-${mm}` : ym;
+  }
+
+  function noMonth(ym, c) {
+    const first = c.pm.months.find((m) => perfPeriods1(c, m));
+    chat(`Data ${fmt.month(ym)} belum ada. Yang tersedia ${first ? fmt.month(first) : 'awal data'} sampai ${fmt.month(c.cur)}.`, {
+      mood: 'confused', next: [`Lihat ${fmt.month(c.cur)}`, `Lihat ${fmt.month(shiftMonth(c.cur, -1))}`, 'Performance 6 bulan'],
+    });
+  }
+
+  function perfPeriods1(c, ym) {
+    return !!monthData(c, '', ym).now?.end;
+  }
+
+  function showMonth(ro, spec, { quiet = false } = {}) {
+    const c = getContext();
+    if (!c) return;
+    const ym = monthOf(spec, c);
+    const d = monthData(c, ro, ym);
+    if (!d.now?.end) { noMonth(ym, c); return; }
+    focusRo = ro || '';
+    const p = d.now;
+    const b = d.before?.end ? d.before : null;
+    const grow = b && ok(p.os) && ok(b.os) ? p.os - b.os : null;
+    const nplOver = ok(p.nplPct) && ok(p.rkaNplPct) && p.nplPct > p.rkaNplPct;
+    const head = `${d.when}, ${d.place}: outstanding ${tn(p.os)}${ok(p.achOs) ? `, ${pct(p.achOs, 1)} dari RKA` : ''}.`;
+    const debTxt = ok(p.deb) ? `debitur ${fmt.num(p.deb)}${b && ok(b.deb) ? ` (${p.deb - b.deb >= 0 ? '+' : '−'}${fmt.num(Math.abs(p.deb - b.deb))})` : ''}` : '';
+    const lines = [
+      ok(grow) ? `${grow >= 0 ? 'Tumbuh' : 'Turun'} ${tn(Math.abs(grow))} dari akhir ${fmt.month(b.month)}${debTxt ? `; ${debTxt}` : ''}.` : debTxt ? `${debTxt.charAt(0).toUpperCase()}${debTxt.slice(1)}.` : '',
+      ok(p.nplPct) ? `%NPL ${pct(p.nplPct)}${ok(p.rkaNplPct) ? `, ${nplOver ? 'di atas' : 'di bawah'} RKA ${pct(p.rkaNplPct)}` : ''}${ok(p.smlPct) ? `; %SML ${pct(p.smlPct)}${ok(p.rkaSmlPct) ? `, ${p.smlPct > p.rkaSmlPct ? 'di atas' : 'di bawah'} RKA ${pct(p.rkaSmlPct)}` : ''}` : ''}.` : '',
+      ok(p.disb) ? `Disburse ${p.full ? 'sebulan' : `sampai ${fmt.date(p.date)}`} ${tn(p.disb)}${ok(p.achDisb) ? `, ${pct(p.achDisb, 1)} dari guidance ${tn(p.guidance)}` : ''}.` : '',
+      ok(d.real?.total) ? `Realisasi ${realRp(d.real.total)}${ok(d.real.change) ? ` (${fmt.signedPct(d.real.change, 1)} dari bulan sebelumnya)` : ''}.` : '',
+    ].filter(Boolean);
+    const chips = [
+      { k: 'Outstanding', v: tn(p.os) }, { k: 'Capaian RKA OS', v: pct(p.achOs, 1) }, { k: 'Debitur', v: ok(p.deb) ? fmt.num(p.deb) : '' },
+      { k: '%NPL', v: pct(p.nplPct) }, { k: '%SML', v: pct(p.smlPct) }, { k: 'Disburse', v: tn(p.disb) },
+    ].filter((x) => x.v && x.v !== '–');
+    const now = fmt.month(c.cur);
+    const where = ro ? `${d.place} ` : '';
+    offer = ym === c.cur
+      ? { say: `Performance ${d.place} 3 bulan`, ask: 'Mau lihat tren tiga bulannya?' }
+      : { say: `Bandingkan ${where}${d.when} dan ${now}`, ask: `Mau saya bandingkan dengan ${now}?` };
+    const next = [offer.say, `Lihat ${where}${fmt.month(shiftMonth(ym, -1))}`];
+    if (ym < c.cur) next.push(`Lihat ${where}${fmt.month(shiftMonth(ym, 1))}`);
+    lastAnswer = { text: [head, ...lines].join(' '), lines, fact: head };
+    lastRegion = null;
+    viewCtx = { kind: 'month', ro, months: [ym], at: Date.now() };
+    remember({ kind: 'month', args: [ro, ym] });
+    reply(esc(head), {
+      title: `Posisi ${fmt.date(p.date)}`, lines: lines.map(esc), chips, next, keep: false,
+      mood: nplOver || (ok(p.achOs) && p.achOs < 0.95) ? '' : 'happy',
+      speakText: quiet ? `Kembali ke ${d.when}.` : `${pickOne(['Oke, ini', 'Siap, ini posisi', 'Baik, ini'])} ${head} ${lines.slice(0, 3).join(' ')} ${offer.ask}`,
+    });
+  }
+
+  function targetGap(ro, focus) {
+    const c = getContext();
+    if (!c) return;
+    const d = regionData(c, ro);
+    const p = d.now || {};
+    if (!p.end) { chat(`Data ${shortRo(ro) || 'Nasional'} belum ada.`, { mood: 'confused' }); return; }
+    focusRo = ro || '';
+    const day = Number(String(p.date).slice(8, 10));
+    const done = workdaysIn(p.month, 1, day);
+    const left = p.full ? 0 : workdaysIn(p.month, day + 1);
+    const month = fmt.month(p.month);
+    let head = '';
+    const lines = [];
+    let chips = [];
+    let mood = 'happy';
+    if (focus === 'disb' || focus === 'pace') {
+      const rem = ok(p.guidance) && ok(p.disb) ? p.guidance - p.disb : null;
+      const perDay = done ? p.disb / done : null;
+      head = focus === 'pace'
+        ? `Rata-rata disburse ${d.name} ${month} ${tn(perDay)} per hari kerja, dari total ${tn(p.disb)} dalam ${done} hari kerja.`
+        : `Disburse ${d.name} ${month} ${tn(p.disb)}, ${pct(p.achDisb, 1)} dari guidance ${tn(p.guidance)}.`;
+      if (ok(rem)) {
+        if (p.full) lines.push(rem > 0 ? `Bulan sudah selesai, kurang ${tn(rem)} dari guidance.` : `Bulan sudah selesai, guidance terlampaui ${tn(-rem)}.`);
+        else if (rem > 0 && left) lines.push(`Sisa ${tn(rem)} ke guidance, artinya perlu ${tn(rem / left)} per hari kerja selama ${left} hari kerja tersisa${ok(perDay) ? `, ${pct(rem / left / perDay, 0)} dari laju sekarang` : ''}.`);
+        else lines.push(rem > 0 ? `Masih kurang ${tn(rem)} dari guidance.` : `Guidance sudah terlampaui ${tn(-rem)}.`);
+        if (rem > 0) mood = '';
+      }
+      if (ok(p.progDisb)) lines.push(`Terhadap prognosa ${tn(p.prognosa)}: ${pct(p.progDisb, 1)}.`);
+      chips = [{ k: 'Disburse', v: tn(p.disb) }, { k: 'Guidance', v: tn(p.guidance) }, { k: 'Capaian', v: pct(p.achDisb, 1) }, { k: 'Per hari kerja', v: tn(perDay) }];
+    } else if (focus === 'os' || focus === 'deb') {
+      const os = focus === 'os';
+      const show = os ? tn : (x) => `${fmt.num(x)} debitur`;
+      const [v, rka, ach] = os ? [p.os, p.rkaOs, p.achOs] : [p.deb, p.rkaDeb, p.achDeb];
+      head = `Capaian RKA ${os ? 'outstanding' : 'debitur'} ${d.name} ${pct(ach, 1)}: ${show(v)} dari RKA ${show(rka)}.`;
+      if (ok(v) && ok(rka)) {
+        const gap = rka - v;
+        lines.push(gap > 0 ? `Masih kurang ${show(gap)} untuk 100%.` : `Sudah melampaui RKA ${show(-gap)}.`);
+        if (gap > 0) mood = '';
+        const b = d.before?.end ? d.before : null;
+        if (os && b && ok(b.os)) lines.push(`Bulan ${month} outstanding ${p.os >= b.os ? 'tumbuh' : 'turun'} ${tn(Math.abs(p.os - b.os))} dari akhir ${fmt.month(b.month)}.`);
+      }
+      chips = [{ k: os ? 'Outstanding' : 'Debitur', v: show(v) }, { k: 'RKA', v: show(rka) }, { k: 'Capaian', v: pct(ach, 1) }];
+    } else {
+      const npl = focus === 'npl';
+      const [now, rka] = npl ? [p.nplPct, p.rkaNplPct] : [p.smlPct, p.rkaSmlPct];
+      const name = npl ? 'NPL' : 'SML';
+      head = `%${name} ${d.name} ${pct(now)} terhadap RKA ${pct(rka)}.`;
+      if (ok(now) && ok(rka)) {
+        const over = now - rka;
+        lines.push(over > 0 ? `Di atas RKA ${fmt.num(over * 100, 2)} poin, setara sekitar ${tn(over * p.os)} kredit yang perlu diselesaikan.` : `Masih di bawah RKA ${fmt.num(-over * 100, 2)} poin.`);
+        if (over > 0) mood = 'sad';
+      }
+      chips = [{ k: `%${name}`, v: pct(now) }, { k: 'RKA', v: pct(rka) }];
+    }
+    offer = { say: ro ? `Saran untuk ${d.name}` : 'Saran dong', ask: pickOne(['Mau saya kasih saran langkahnya?', 'Perlu saran untuk mengejarnya?']) };
+    lastAnswer = { text: [head, ...lines].join(' '), lines, fact: head };
+    reply(esc(head), {
+      title: `Posisi ${fmt.date(p.date)}`, lines: lines.map(esc), chips: chips.filter((x) => x.v && x.v !== '–'), mood,
+      next: [offer.say, ro ? `Lihat ${d.name}` : 'Briefing hari ini', 'Proyeksi akhir tahun'],
+      speakText: `${head} ${lines.join(' ')} ${mood ? '' : offer.ask}`,
+    });
+  }
+
+  function ratioForecast(ro, focus) {
+    const c = getContext();
+    if (!c) return;
+    const rows = periodRows(c.pm, ro, '3').filter((x) => ok(x.smlPct) && ok(x.nplPct));
+    const name = ro ? shortRo(ro) : 'Nasional';
+    if (rows.length < 3) { chat('Riwayat belum cukup untuk proyeksi.', { mood: 'confused' }); return; }
+    focusRo = ro || '';
+    const get = (x) => (focus === 'npl' ? x.nplPct : x.smlPct);
+    const steps = rows.slice(1).map((x, i) => get(x) - get(rows[i])).sort((a, b) => a - b);
+    const step = steps[Math.floor(steps.length / 2)];
+    const last = rows.at(-1);
+    const next = Math.max(0, get(last) + step);
+    const rka = focus === 'npl' ? last.rkaNplPct : last.rkaSmlPct;
+    const label = focus === 'npl' ? 'NPL' : 'SML';
+    const nextMonth = fmt.month(shiftMonth(last.month, 1));
+    const head = `Kalau tren tiga bulan terakhir berlanjut, %${label} ${name} akhir ${nextMonth} sekitar ${pct(next)} (sekarang ${pct(get(last))}).`;
+    const lines = [
+      `Rata-rata pergerakan per bulan ${step >= 0 ? 'naik' : 'turun'} ${fmt.num(Math.abs(step) * 100, 2)} poin.`,
+      ok(rka) ? (next > rka ? `Itu di atas RKA ${pct(rka)}, jadi perlu penagihan lebih awal.` : `Masih di bawah RKA ${pct(rka)}.`) : '',
+      ok(last.os) ? `Setara nominal ${label} sekitar ${tn(next * last.os)} bila OS tetap.` : '',
+    ].filter(Boolean);
+    offer = { say: ro ? `Detail ${label} ${name}` : `Detail ${label}`, ask: `Mau lihat detail ${label}-nya?` };
+    lastAnswer = { text: [head, ...lines].join(' '), lines, fact: head };
+    reply(esc(head), { title: 'Proyeksi sederhana', lines: lines.map(esc), mood: ok(rka) && next > rka ? 'sad' : 'happy', next: [offer.say, 'Saran dong', `Tren ${label} 6 bulan`], speakText: `${head} ${lines.join(' ')} ${offer.ask}` });
+  }
+
+  function yearEnd(ro) {
+    const c = getContext();
+    if (!c) return;
+    const o = outlook(c.pm, { ro, real: c.realModel || null, perRo: false });
+    const name = ro ? shortRo(ro) : 'Nasional';
+    const curYear = c.cur.slice(0, 4);
+    const dec = `${curYear}-12`;
+    if (!o?.year?.base?.path) { chat('Riwayat data belum cukup untuk proyeksi akhir tahun.', { mood: 'confused' }); return; }
+    focusRo = ro || '';
+    const at = (path) => path?.find((x) => x.month === dec)?.os;
+    const base = c.cur >= dec ? regionData(c, ro).now?.os : at(o.year.base.path);
+    const low = at(o.year.low?.path);
+    const high = at(o.year.cap?.path);
+    const p = regionData(c, ro).now || {};
+    const rows = periodRows(c.pm, ro, '3').filter((x) => ok(x.rkaOs));
+    const steps = rows.slice(1).map((x, i) => x.rkaOs - rows[i].rkaOs);
+    const step = steps.length ? steps.sort((a, b) => a - b)[Math.floor(steps.length / 2)] : null;
+    const monthsLeft = Math.max(0, 12 - Number(c.cur.slice(5, 7)));
+    const rkaDec = ok(p.rkaOs) && ok(step) ? p.rkaOs + step * monthsLeft : null;
+    if (!ok(base)) { chat('Proyeksi akhir tahun belum bisa dihitung.', { mood: 'confused' }); return; }
+    const ach = ok(rkaDec) && rkaDec > 0 ? base / rkaDec : null;
+    const head = `Dengan laju biasa, outstanding ${name} akhir Desember ${curYear} diperkirakan ${tn(base)}${ok(p.os) ? `, tumbuh ${tn(base - p.os)} dari sekarang` : ''}.`;
+    const lines = [
+      ok(rkaDec) ? `Kalau RKA terus naik seperti tiga bulan terakhir, RKA Desember sekitar ${tn(rkaDec)}, jadi capaiannya sekitar ${pct(ach, 1)}.` : '',
+      ok(low) && ok(high) && high - low > Math.abs(base) * 0.001 ? `Rentangnya ${tn(low)} sampai ${tn(high)}, tergantung laju penyaluran.` : '',
+      ok(ach) && ach < 1 ? `Untuk mengejar, perlu tambahan pertumbuhan sekitar ${tn(rkaDec - base)} di atas laju biasa sampai Desember.` : ok(ach) ? 'Arahnya sudah aman untuk melewati RKA.' : '',
+    ].filter(Boolean);
+    offer = { say: `Strategi ${Number(curYear) + 1}`, ask: `Mau lihat rencana tahun ${Number(curYear) + 1}?` };
+    lastAnswer = { text: [head, ...lines].join(' '), lines, fact: head };
+    reply(esc(head), {
+      title: 'Proyeksi akhir tahun', lines: lines.map(esc), mood: ok(ach) && ach < 1 ? '' : 'happy', full: true,
+      chips: [{ k: 'Proyeksi Desember', v: tn(base) }, { k: 'Perkiraan RKA', v: ok(rkaDec) ? tn(rkaDec) : '' }, { k: 'Capaian', v: ok(ach) ? pct(ach, 1) : '' }].filter((x) => x.v && x.v !== '–'),
+      next: [offer.say, 'Saran dong', 'Disburse bulan depan harus berapa?'],
+      speakText: `${head} ${lines.join(' ')} ${offer.ask}`,
+    });
+  }
+
+  function quarterView(ro, part, focus) {
+    const c = getContext();
+    if (!c) return;
+    const cy = Number(c.cur.slice(0, 4));
+    const y = part.y || (part.lastYear ? cy - 1 : cy);
+    const span = part.kind === 'q' ? 3 : 6;
+    const endM = part.n * span;
+    const mm = (n) => String(n).padStart(2, '0');
+    const first = `${y}-${mm(endM - span + 1)}`;
+    let to = `${y}-${mm(endM)}`;
+    const label = part.kind === 'q' ? `Q${part.n} ${y}` : `Semester ${part.n} ${y}`;
+    if (first > c.cur) { chat(`${label} belum berjalan. Data terakhir ${fmt.month(c.cur)}.`, { mood: 'confused' }); return; }
+    if (to > c.cur) to = c.cur;
+    let from = shiftMonth(first, -1);
+    if (!monthData(c, ro, from).now?.end) from = first;
+    if (from === to) { showMonth(ro, to); return; }
+    showMonthCompare(ro, [from, to], focus, { label: `${label}${to < `${y}-${mm(endM)}` ? ` (berjalan sampai ${fmt.month(to)})` : ''}` });
+  }
+
+  function showMonthCompare(ro, specs, focus = '', { quiet = false, label = '' } = {}) {
+    const c = getContext();
+    if (!c) return;
+    let [x, y] = specs.map((sp) => monthOf(sp, c));
+    if (!y || x === y) { showMonth(ro, x); return; }
+    if (x > y) [x, y] = [y, x];
+    const a = monthData(c, ro, x);
+    const b = monthData(c, ro, y);
+    const miss = [a, b].find((d) => !d.now?.end);
+    if (miss) { noMonth(miss.ym, c); return; }
+    focusRo = ro || '';
+    const key = COMPARE_KEYS.has(focus) ? focus : '';
+    build();
+    showing = '';
+    const stage = $('va-stage');
+    stage.innerHTML = compareHtml(a, b, key, { list: MONTH_ROWS, pick: (d) => `data-va-month="${esc(d.ym)}" data-va-ro="${esc(ro || '')}"` });
+    setStage('show');
+    flyIn(stage, $('va-orb'));
+    const where = ro ? `${a.place} ` : '';
+    offer = { say: `Lihat ${where}${b.when}`, ask: '' };
+    suggest([`Lihat ${where}${a.when}`, `Lihat ${where}${b.when}`, `Performance ${a.place} 6 bulan`]);
+    setMood('happy');
+    ding('done');
+    remember({ kind: 'monthCompare', args: [ro, [x, y], focus] });
+    viewCtx = { kind: 'monthCompare', ro, months: [x, y], at: Date.now() };
+    lastRegion = null;
+    const story = monthTalk(a, b, key);
+    lastAnswer = { text: story, lines: [], fact: story };
+    const lead = label ? `${label}, ${ro ? a.place : 'Nasional'}: posisi akhir ${a.when} dibanding akhir ${b.when}.` : `${pickOne(['Oke, kita bandingkan', 'Siap, ini perbandingan', 'Baik, saya jejerkan'])} ${a.when} dan ${b.when}${ro ? ` untuk ${a.place}` : ', Nasional'}.`;
+    say(quiet ? `Kembali ke perbandingan ${a.when} dan ${b.when}.` : `${lead} ${story} ${key ? '' : compareTalk(a, b, '', { list: MONTH_ROWS })} Mau saya buka salah satu bulannya?`);
   }
 
   async function brief() {
@@ -1233,7 +1491,9 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const prev = trail.pop();
     if (!prev) { reply('Belum ada tampilan sebelumnya.', { keep: false, next: HINTS }); return; }
     if (prev.kind === 'region') showRegion(prev.args[0], { quiet: true });
-    else if (prev.kind === 'compare') showCompare(prev.args[0], prev.args[1], prev.args[2], { quiet: true });
+    else if (prev.kind === 'compare') showCompare(prev.args[0], prev.args[1], prev.args[2], { quiet: true, month: prev.args[3] || null });
+    else if (prev.kind === 'month') showMonth(prev.args[0], prev.args[1], { quiet: true });
+    else if (prev.kind === 'monthCompare') showMonthCompare(prev.args[0], prev.args[1], prev.args[2], { quiet: true });
     else if (prev.kind === 'help') helpCard(prev.args[0]);
     else reply(prev.args[0], { ...prev.args[1], speakText: 'Ini tampilan sebelumnya.' });
   }
@@ -1259,6 +1519,13 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (ticket !== busy) return;
     const cmd = routeCommand(text, { q, regions: list, showing, focus: focusRo });
     if (cmd.corrected) prefix = line('ralat');
+    const chained = askChain && Date.now() - askAt < ASK_MEMORY_MS;
+    if (!KEEP_CHAIN.has(cmd.type)) askChain = false;
+    const view = viewCtx && Date.now() - viewCtx.at < ASK_MEMORY_MS ? viewCtx : null;
+    if (!['month', 'monthCompare', 'quarter', ...KEEP_CHAIN].includes(cmd.type)) viewCtx = null;
+    const short = cmd.type === 'ask' && view && cmd.text && cmd.text.split(' ').length <= 4 && !/\b(20\d\d|bulan|minggu|hari|tahun|kemarin|januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/.test(cmd.text);
+    if (short && view.kind === 'monthCompare' && COMPARE_KEYS.has(targetOf(cmd.text))) { showMonthCompare(cmd.ro || view.ro, view.months, targetOf(cmd.text)); return; }
+    if (short && view.kind === 'month') cmd.text = `${cmd.text} ${fmt.month(view.months[0]).toLowerCase()}${view.ro && !cmd.ro ? ` ${shortRo(view.ro).toLowerCase()}` : ''}`;
     const pending = offer;
     if (cmd.type !== 'yes' && cmd.type !== 'no') offer = null;
     const prevKind = lastKind;
@@ -1300,6 +1567,19 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       case 'joke': case 'sing': case 'isAi': case 'whoMade': case 'age': case 'love': case 'like': case 'eat': case 'weather': case 'english': case 'sad': case 'tired': case 'motivate': case 'congrats':
         personal(cmd.type); return;
       case 'weekend': case 'payday': case 'birthday': case 'miss': personal(cmd.type); return;
+      case 'missList': {
+        const list = readMiss();
+        if (!list.length) { chat('Belum ada pertanyaan yang gagal saya jawab. Mantap!', { mood: 'happy' }); return; }
+        lastAnswer = { text: list.map((x) => x.t).join('; '), lines: [], fact: '' };
+        offer = { say: 'Salin jawabannya', ask: '' };
+        reply(esc(`${list.length} pertanyaan belum bisa saya jawab`), {
+          title: 'Catatan belajar', lines: list.slice(-12).reverse().map((x) => `${esc(x.t)} <small>${esc(longDate(x.at))}</small>`), mood: 'confused', keep: false,
+          next: ['Salin jawabannya', 'Hapus catatan belajar'],
+          speakText: `Ada ${list.length} pertanyaan yang belum bisa saya jawab. Daftarnya di layar. Salin lalu kirimkan ke tim pembuat, supaya saya bisa belajar menjawabnya.`,
+        });
+        return;
+      }
+      case 'missClear': writeMiss([]); talkOnly('Sudah, catatan belajar saya kosongkan.', 'happy'); return;
       case 'notThat': offer = null; chat(line('notThat'), { mood: 'confused', next: HINTS }); return;
       case 'salam': chat(`${line('salam')} ${pickOne(['Ada yang bisa saya bantu?', 'Mau lihat apa hari ini?', 'Silakan, mau cek apa?'])}`, { mood: 'love' }); return;
       case 'laugh': talkOnly(line('laugh'), 'laugh'); return;
@@ -1534,7 +1814,13 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       }
       case 'analysis': analysis(cmd.ro || ''); return;
       case 'region': showRegion(cmd.ro); return;
-      case 'compare': showCompare(cmd.ros[0], cmd.ros[1], cmd.metric); return;
+      case 'compare': showCompare(cmd.ros[0], cmd.ros[1], cmd.metric, { month: cmd.month || null }); return;
+      case 'month': showMonth(cmd.ro || c?.sel?.ro || '', cmd.month); return;
+      case 'monthCompare': showMonthCompare(cmd.ro || c?.sel?.ro || '', cmd.months, cmd.focus); return;
+      case 'quarter': quarterView(cmd.ro || c?.sel?.ro || '', cmd.part, cmd.focus); return;
+      case 'yearEnd': yearEnd(cmd.ro || c?.sel?.ro || ''); return;
+      case 'ratioForecast': ratioForecast(cmd.ro || c?.sel?.ro || '', cmd.focus); return;
+      case 'target': targetGap(cmd.ro || c?.sel?.ro || '', cmd.focus); return;
       case 'brief': brief(); return;
       case 'rankShow': rankShow(cmd.order); return;
       case 'back': goBack(); return;
@@ -1543,8 +1829,12 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       default: break;
     }
     try {
+      if (!chained) engine.reset?.();
+      if (cmd.note) prefix = cmd.note;
       const { a, q: asked } = await engine.ask(cmd.text || text, { context: { ro: showing || c?.sel?.ro || '' } });
       if (ticket !== busy) return;
+      askChain = a.ok !== false;
+      askAt = Date.now();
       const ros = (asked?.entities?.ro || []).filter((r) => list.includes(r));
       if (ros.length === 1) focusRo = ros[0];
       const lines = (a.lines || []).slice(0, 3);
@@ -1555,6 +1845,12 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       ].slice(0, 3);
       const failed = a.ok === false;
       if (failed && loose) { showHeard(text, false); setPhase(pref.wake ? 'listen' : 'idle'); return; }
+      if (failed) {
+        const said = String(text).trim().slice(0, 140);
+        const list = readMiss().filter((x) => x.t !== said);
+        list.push({ t: said, at: new Date().toISOString().slice(0, 10) });
+        writeMiss(list);
+      }
       if (failed) ding('oops');
       const title = a.title || 'Belum ada jawaban.';
       if (!failed && ros.length === 1 && Math.random() < 0.6) offer = { say: `Lihat ${shortRo(ros[0])}`, ask: `Mau saya tampilkan kondisi lengkap ${shortRo(ros[0])}?` };
@@ -1568,7 +1864,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       const lead = failed ? line('confused') : echo ? line('askEcho', { topic }) : line('askLead');
       const tail = failed ? 'Coba pakai kata lain, misalnya "NPL Bandung berapa?"' : offer ? offer.ask : line('askClose');
       lastAnswer = { text: [title, ...lines].map(plain).join(' '), lines, fact: plain(title) };
-      reply(title, { lines, chips, next: next.length ? next : HINTS, mood: failed ? 'confused' : 'happy', speakText: [lead, title, tail].filter(Boolean).join(' ') });
+      const body = asked?.intent === 'define' ? lines.slice(0, 2).map(plain).join(' ') : '';
+      reply(title, { lines, chips, next: next.length ? next : HINTS, mood: failed ? 'confused' : 'happy', full: !!body, speakText: [asked?.intent === 'define' ? `${plain(title)}.` : lead, asked?.intent === 'define' ? body : title, tail].filter(Boolean).join(' ') });
     } catch (err) {
       console.error(err);
       reply(pickOne(['Maaf, jawabannya belum bisa dihitung. Coba ulangi dengan kata lain ya.', 'Aduh, ada yang macet waktu menghitung. Boleh diulang dengan kata lain?']), { mood: 'sad' });

@@ -896,7 +896,7 @@ async function compareEntities(q, D) {
     const sorted = [...valid].sort((a, c) => c.v - a.v);
     const hi = sorted[0];
     const lo = sorted.at(-1);
-    const diff = hi.ratioKind ? bps(hi.v - lo.v) : hi.f === rpM || hi.f === rpReal ? hi.f(hi.v - lo.v) : num(hi.v - lo.v);
+    const diff = hi.ratioKind ? bps(hi.v - lo.v) : typeof hi.f === 'function' ? hi.f(hi.v - lo.v) : num(hi.v - lo.v);
     return {
       ok: true,
       title: `${b(cap(hi.label))} lebih tinggi dari ${b(lo.label)}: ${hi.text} dibanding ${lo.text} (${hi.ratioKind ? `selisih ${diff}` : `selisih ${diff}, ${signedPct(ratio(hi.v, lo.v) - 1)}`}), ${hi.period}.`,

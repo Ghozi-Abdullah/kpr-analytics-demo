@@ -153,6 +153,18 @@ export function workdaysLeft(d = new Date()) {
   return { work, calendar: end.getDate() - d.getDate() + 1, last, month: MONTHS[d.getMonth()] };
 }
 
+export function workdaysIn(ym, fromDay = 1, toDay = 31) {
+  const [y, m] = String(ym).split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  let work = 0;
+  for (let day = Math.max(1, fromDay); day <= Math.min(last, toDay); day += 1) {
+    const x = new Date(y, m - 1, day);
+    if (x.getDay() === 0 || x.getDay() === 6 || isHoliday(iso(x))) continue;
+    work += 1;
+  }
+  return work;
+}
+
 export function longDate(isoDate) {
   const [y, m, d] = String(isoDate || '').split('-').map(Number);
   if (!y || !m || !d) return '';

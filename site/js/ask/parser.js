@@ -626,6 +626,8 @@ export function mergeFollowUp(q, prev) {
     return { ...q, followUp: true, metric: prev.metric, time: q.time.kind ? q.time : prev.time, domain: prev.domain, sla: prev.sla };
   }
   const prevEnt = Object.values(prev.entities || {}).some((v) => (Array.isArray(v) ? v.length : v));
+  const fresh = /^(lihat|liat|tampilkan|tampilin|tunjukkan|tunjukin|buka|bukain|cek|check|coba lihat|coba cek|kasih lihat)\b/.test(q.norm);
+  if (fresh && !followWord) return q;
   if (q.metric && !hasEntity && !q.domain && !q.groupBy && !/\bnasional\b/.test(q.norm) && prevEnt
     && (q.tokens.length <= 3 || followWord) && !['coverage', 'plan', 'help', 'define'].includes(q.intent)) {
     return { ...q, followUp: true, entities: prev.entities, time: q.time.kind ? q.time : prev.time };

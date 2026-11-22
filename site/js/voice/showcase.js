@@ -21,6 +21,18 @@ export function regionData(c, ro) {
   };
 }
 
+export function monthData(c, ro, ym, { label = 'month' } = {}) {
+  const [before, now] = perfPeriods(c.pm, ro, [shiftMonth(ym, -1), ym]);
+  const place = ro ? roShort(ro) : 'Nasional';
+  const when = fmt.month(ym);
+  return {
+    ro, ym, place, when, c, now, before,
+    name: label === 'month' ? when : place, code: label === 'month' ? place : when,
+    real: c.realModel?.rows.length && c.realModel.rows.some((r) => r.bulan === ym) ? realCompare(c.realModel, ro, c.sel.sumber, ym) : null,
+    sla: null,
+  };
+}
+
 const status = (state, html) => `<p class="va-t ${state}"><i aria-hidden="true"></i>${html}</p>`;
 
 function meter(value, ref, state) {
@@ -251,6 +263,8 @@ const COMPARE = [
   { key: 'sla', label: 'Berkas lewat SLA', get: (d) => d.sla?.late, show: (v) => fmt.num(v), good: 'low' },
 ];
 
+export const MONTH_ROWS = COMPARE.filter((row) => row.key !== 'sla').map((row) => ({ ...row, label: row.label.replace(/ bulan ini$/, '') }));
+
 function winnerOf(row, a, b) {
   const x = row.get(a);
   const y = row.get(b);
@@ -258,8 +272,8 @@ function winnerOf(row, a, b) {
   return (row.good === 'high' ? x > y : x < y) ? -1 : 1;
 }
 
-export function compareHtml(a, b, focus = '') {
-  const rows = COMPARE.map((row) => {
+export function compareHtml(a, b, focus = '', { list = COMPARE, pick = (d) => `data-va-pick="${esc(d.ro)}"` } = {}) {
+  const rows = list.map((row) => {
     const x = row.get(a);
     const y = row.get(b);
     const max = Math.max(Math.abs(x || 0), Math.abs(y || 0)) || 1;
@@ -271,14 +285,14 @@ export function compareHtml(a, b, focus = '') {
       <span class="bar b"><i style="--w:${ok(y) ? (Math.abs(y) / max).toFixed(4) : 0}"></i></span>
       <b class="${w > 0 ? 'win' : ''}">${esc(ok(y) ? row.show(y) : '–')}</b></li>`;
   }).join('');
-  const wins = COMPARE.reduce((acc, row) => { const w = winnerOf(row, a, b); if (w < 0) acc[0] += 1; if (w > 0) acc[1] += 1; return acc; }, [0, 0]);
-  const better = (sign) => COMPARE.filter((row) => winnerOf(row, a, b) === sign).map((row) => row.label);
-  const side = (d, cls, i, n, list) => `<article class="va-card va-side ${cls}" style="--i:${i}" data-va-pick="${esc(d.ro)}">
+  const wins = list.reduce((acc, row) => { const w = winnerOf(row, a, b); if (w < 0) acc[0] += 1; if (w > 0) acc[1] += 1; return acc; }, [0, 0]);
+  const better = (sign) => list.filter((row) => winnerOf(row, a, b) === sign).map((row) => row.label);
+  const side = (d, cls, i, n, good) => `<article class="va-card va-side ${cls}" style="--i:${i}" ${pick(d)}>
     <p class="va-code">${esc(d.code || 'Regional')}</p><h2>${esc(d.name)}</h2>
-    <p class="va-wins"><b>${esc(n)}</b> dari ${esc(COMPARE.length)} ukuran lebih baik</p>
+    <p class="va-wins"><b>${esc(n)}</b> dari ${esc(list.length)} ukuran lebih baik</p>
     <div class="va-big small"><span>Outstanding</span><b>${esc(tn(d.now.os))}</b></div>
     ${status(tone(d.now.achOs), `<b>${esc(pct(d.now.achOs, 1))}</b> dari RKA`)}
-    ${list.length ? `<div class="va-winlist"><span>Lebih baik di</span><ul>${list.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    ${good.length ? `<div class="va-winlist"><span>Lebih baik di</span><ul>${good.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
   </article>`;
   return `<div class="va-compare">${side(a, 'a', 0, wins[0], better(-1))}
     <article class="va-card va-vs" style="--i:1" aria-label="Perbandingan ${esc(a.name)} dan ${esc(b.name)}">
@@ -287,9 +301,9 @@ export function compareHtml(a, b, focus = '') {
     </article>${side(b, 'b', 2, wins[1], better(1))}</div>`;
 }
 
-export function compareTalk(a, b, focus = '') {
+export function compareTalk(a, b, focus = '', { list = COMPARE } = {}) {
   const lines = [];
-  const rowsFor = focus ? COMPARE.filter((r) => r.key === focus) : [];
+  const rowsFor = focus ? list.filter((r) => r.key === focus) : [];
   if (rowsFor.length) {
     const row = rowsFor[0];
     const x = row.get(a);
@@ -298,14 +312,34 @@ export function compareTalk(a, b, focus = '') {
     lines.push(`${row.label} ${a.name} ${ok(x) ? row.show(x) : 'belum ada'}, ${b.name} ${ok(y) ? row.show(y) : 'belum ada'}.`);
     if (w) lines.push(`${w < 0 ? a.name : b.name} lebih baik.`);
   } else {
-    const winA = COMPARE.filter((r) => winnerOf(r, a, b) < 0).map((r) => r.label);
-    const winB = COMPARE.filter((r) => winnerOf(r, a, b) > 0).map((r) => r.label);
-    const lead = winA.length === winB.length ? `${a.name} dan ${b.name} seimbang.` : `${winA.length > winB.length ? a.name : b.name} unggul di ${Math.max(winA.length, winB.length)} dari ${COMPARE.length} ukuran.`;
+    const winA = list.filter((r) => winnerOf(r, a, b) < 0).map((r) => r.label);
+    const winB = list.filter((r) => winnerOf(r, a, b) > 0).map((r) => r.label);
+    const lead = winA.length === winB.length ? `${a.name} dan ${b.name} seimbang.` : `${winA.length > winB.length ? a.name : b.name} unggul di ${Math.max(winA.length, winB.length)} dari ${list.length} ukuran.`;
     lines.push(lead);
     const other = winA.length > winB.length ? [b.name, winB] : [a.name, winA];
     if (other[1].length) lines.push(`${other[0]} lebih baik di ${other[1].slice(0, 3).join(', ')}.`);
   }
   return lines.join(' ');
+}
+
+const moved = (d, up = 'naik', down = 'turun', flat = 'tetap') => (!ok(d) || Math.abs(d) < 1e-9 ? flat : d > 0 ? up : down);
+
+export function monthTalk(a, b, focus = '') {
+  const p = a.now;
+  const q = b.now;
+  const parts = {
+    os: ok(p.os) && ok(q.os) ? `outstanding ${moved(q.os - p.os, 'tumbuh')} ${tn(Math.abs(q.os - p.os))} (${fmt.signedPct(q.os / p.os - 1, 1)}) menjadi ${tn(q.os)}${ok(q.achOs) ? `, ${pct(q.achOs, 1)} dari RKA` : ''}` : '',
+    deb: ok(p.deb) && ok(q.deb) ? `debitur ${moved(q.deb - p.deb, 'bertambah', 'berkurang')} ${fmt.num(Math.abs(q.deb - p.deb))} menjadi ${fmt.num(q.deb)}` : '',
+    npl: ok(p.nplPct) && ok(q.nplPct) ? `%NPL ${moved(q.nplPct - p.nplPct)} ${fmt.num(Math.abs(q.nplPct - p.nplPct) * 100, 2)} poin ke ${pct(q.nplPct)}` : '',
+    sml: ok(p.smlPct) && ok(q.smlPct) ? `%SML ${moved(q.smlPct - p.smlPct)} ${fmt.num(Math.abs(q.smlPct - p.smlPct) * 100, 2)} poin ke ${pct(q.smlPct)}` : '',
+    disb: ok(p.disb) && ok(q.disb) ? `disburse ${tn(p.disb)} lawan ${tn(q.disb)}${q.full ? '' : ` (${b.when} baru sampai ${fmt.date(q.date)})`}` : '',
+    real: ok(a.real?.total) && ok(b.real?.total) ? `realisasi ${realRp(a.real.total)} lawan ${realRp(b.real.total)}` : '',
+  };
+  const key = { history: 'os' }[focus] || focus;
+  const order = [key, 'os', 'npl', 'sml', 'disb', 'real', 'deb'].filter((k, i, arr) => k && parts[k] && arr.indexOf(k) === i);
+  const pick = order.slice(0, key && parts[key] ? 2 : 3).map((k) => parts[k]);
+  if (!pick.length) return '';
+  return `Dari ${a.when} ke ${b.when}, ${pick.join(', ')}.`;
 }
 
 const MINI_ICON = {
