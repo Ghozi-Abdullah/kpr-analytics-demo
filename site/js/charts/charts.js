@@ -297,16 +297,12 @@ function gradient(color) {
   };
 }
 
-const X_TICKS = { color: C.muted, autoSkip: true, autoSkipPadding: 10, maxRotation: 0, font: { size: FS.caption } };
 const xScale = (extra = {}) => ({
   grid: { display: false },
   border: { display: false },
-  ticks: X_TICKS,
+  ticks: { color: C.muted, autoSkip: true, autoSkipPadding: 10, maxRotation: 0, font: { size: FS.caption } },
   ...extra,
 });
-const xLabeled = (labels, xLabel) => (xLabel
-  ? xScale({ ticks: { ...X_TICKS, autoSkip: false, callback: (_v, i) => xLabel(labels[i], i) } })
-  : xScale());
 const yScale = (show, tickFormat, extra = {}) => (show ? {
   grid: { color: C.grid, drawTicks: false },
   border: { display: false, dash: [4, 4] },
@@ -324,7 +320,7 @@ function clickHandler(onClick) {
 
 export function lineChart(canvas, {
   labels, series, format, title, hint, footer, yAxis = false, tickFormat, pulse: withPulse = false,
-  onClick, sort = false, beginAtZero = null, grace = '8%', refs = [], values = 'auto', labelFormat, xLabel = null,
+  onClick, sort = false, beginAtZero = null, grace = '8%', refs = [], values = 'auto', labelFormat,
 }) {
   if (onClick) canvas.parentNode.classList.add('clickable');
   const allValues = series.flatMap((s) => s.data.filter(Number.isFinite));
@@ -370,7 +366,7 @@ export function lineChart(canvas, {
     options: {
       interaction: { mode: 'index', intersect: false },
       layout: { padding: values ? { top: 18, right: 22, left: 2 } : { top: 10, right: 10, left: 2 } },
-      scales: { x: xLabeled(labels, xLabel), y: yScale(yAxis, tickFormat, { grace: values ? '14%' : grace, beginAtZero: zeroBased }) },
+      scales: { x: xScale(), y: yScale(yAxis, tickFormat, { grace: values ? '14%' : grace, beginAtZero: zeroBased }) },
       onClick: clickHandler(onClick),
       plugins: {
         tooltip: { enabled: false, external: externalTooltip },
@@ -461,7 +457,7 @@ function hugScales(bars, pct, { gap = 0.06, top = 0.86 } = {}) {
 
 export function bandCombo(canvas, {
   labels, bars, barColors, pct, color, lineColor = color, barLabel, pctLabel, format = (v) => fmt.num(v),
-  pctFormat = (v) => fmt.pct(v, 1), labelFormat, tickFormat, title, refs = [], barValues = true, lineValues = true,
+  pctFormat = (v) => fmt.pct(v, 1), labelFormat, tickFormat, title, refs = [],
 }) {
   const refMax = Math.max(0, ...refs.filter((r) => r.axis === 'y').map((r) => r.value));
   const { yMax, pMin, pMax } = hugScales(bars, pct);
@@ -474,12 +470,11 @@ export function bandCombo(canvas, {
       datasets: [
         { type: 'line', label: pctLabel, data: pct, yAxisID: 'p', order: 0, $color: lineColor, $base: lineColor, $lab: 'main',
           borderColor: lineColor, backgroundColor: lineColor, borderWidth: 2.2, tension: 0.3, pointRadius: 0, pointHoverRadius: 4,
-          datalabels: lineValues ? { ...lineLabels(pctFormat, 40), offset: 4 } : { display: false } },
+          datalabels: { ...lineLabels(pctFormat, 40), offset: 4 } },
         { type: 'bar', label: barLabel, data: bars, yAxisID: 'y', order: 1, $color: color, $lab: 'main',
           backgroundColor: barColors || color, borderRadius: 3, borderSkipped: 'start', barPercentage: 0.84, categoryPercentage: 0.88,
           datalabels: {
             display: (ctx) => {
-              if (!barValues) return false;
               const y = ctx.chart.scales.y;
               const v = ctx.dataset.data[ctx.dataIndex];
               if (!y || !Number.isFinite(v) || Math.abs(y.getPixelForValue(0) - y.getPixelForValue(v)) < 34) return false;
