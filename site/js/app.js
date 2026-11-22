@@ -250,6 +250,7 @@ function onDocKey(e) {
   if (((e.metaKey || e.ctrlKey) && k === 'k') || (k === '/' && !typing(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey)) {
     if (!document.querySelector('dialog[open]:not(#ask-dialog)') && !S.editing) {
       e.preventDefault();
+      if (S.view?.assistant) { S.view.assistant(); return; }
       askDialog?.open();
       return;
     }
@@ -374,7 +375,7 @@ async function mountScreen(view, token) {
 function renderScreen() {
   const view = S.view;
   destroyCharts(`${view.id}-`);
-  view.render($('board'), S.ctx, { set: setParams });
+  view.render($('board'), S.ctx, { set: setParams, ask: askEngine });
   $('board').removeAttribute('aria-busy');
   updateStatus();
 }
@@ -383,6 +384,7 @@ async function mount({ view: vid, params }) {
   const token = ++S.token;
   setEditing(false);
   const view = VIEWS[vid];
+  if (S.view && S.view !== view) S.view.leave?.();
   updateNav(vid);
   document.body.classList.toggle('is-screen', !!view.screen);
   if (view.screen) {

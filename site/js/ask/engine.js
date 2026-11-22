@@ -88,6 +88,11 @@ export function createAsk() {
     return { q, a };
   }
 
+  async function parse(text) {
+    await ensure();
+    return parseQuestion(text, vocab);
+  }
+
   function suggest(text) {
     const t = normalizeText(text);
     if (!t) return [];
@@ -102,5 +107,5 @@ export function createAsk() {
     return out.slice(0, 7);
   }
 
-  return { ask, suggest, ensure, reset: () => { memory = null; }, invalidate: () => { hubRef = null; slaRef = null; slaLoad = null; } };
+  return { ask, parse, suggest, ensure, reset: () => { memory = null; }, invalidate: () => { hubRef = null; slaRef = null; slaLoad = null; } };
 }

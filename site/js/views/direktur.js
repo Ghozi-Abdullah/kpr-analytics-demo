@@ -10,7 +10,8 @@ import { indexPerf, NASIONAL, dayOf } from '../models/performance-model.js';
 import { sumberMode } from '../models/realisasi-sumber.js';
 import { periodsOf, perfPeriods, realCompare, pfSplit, slaNow, roStanding } from '../models/direktur-model.js';
 import { tn, realRp, pfRp, pct, short, roShort, tone, diff } from './direktur-format.js';
-import { openScDetail, refreshScDetail } from './direktur-detail.js';
+import { openScDetail, refreshScDetail, closeScDetail } from './direktur-detail.js';
+import { createAtlas } from '../voice/atlas.js';
 
 const soft = (p) => p.catch((err) => { console.warn(err); return null; });
 
@@ -176,12 +177,22 @@ function screenHtml(c) {
     <header class="sc-head">
       <h1>Dashboard KPR</h1>
       <button class="sc-pos" type="button" data-open-status><span class="dot" id="exec-status-dot"></span><span>${esc(where)}</span><span>${esc(fmt.date(c.now.date))}</span></button>
-      <div class="sc-tools">${roPick}</div>
+      <div class="sc-tools"><button class="atl-launch" id="atl-launch" type="button" aria-label="Atlas, asisten suara (Ctrl+Spasi)"><span class="blob" aria-hidden="true"><span class="swirl"></span><span class="eyes"><i></i><i></i></span></span><span class="t">Atlas<small>Ctrl+Spasi</small></span></button>${roPick}</div>
     </header>
     <div class="sc-kpis">${kpis(c)}</div>
     <div class="sc-row sc-row-a">${realBlock(c)}${splitBlock(c)}${slaBlock(c)}</div>
     <div class="sc-row sc-row-b${watch ? '' : ' solo'}">${historyBlock(c)}${watch}</div>
   </div>`;
+}
+
+let latest = null;
+let pendingDetail = '';
+let atlas = null;
+
+function openFor(id, ro) {
+  if (!latest) return;
+  if (ro && ro !== latest.c.sel.ro) { pendingDetail = id; latest.set({ ro }); return; }
+  openScDetail(id, latest.c, latest.set);
 }
 
 export default {
@@ -216,7 +227,8 @@ export default {
     return `<div class="sc sc-loading" aria-hidden="true"><div class="sc-head"><h1>Dashboard KPR</h1></div>
       <div class="sc-kpis"></div><div class="sc-row sc-row-a"></div><div class="sc-row sc-row-b"></div></div>`;
   },
-  render(root, c, { set }) {
+  render(root, c, { set, ask }) {
+    latest = { c, set };
     root.innerHTML = screenHtml(c);
     enhancePicks(root);
     root.querySelector('#sc-ro')?.addEventListener('change', (e) => set({ ro: e.target.value }));
@@ -227,6 +239,23 @@ export default {
       if (e.target.closest('button, a, input, label, select, [role="listbox"]')) return;
       openScDetail(el.dataset.detail, c, set);
     }));
-    refreshScDetail(c, set);
+    if (pendingDetail) {
+      const id = pendingDetail;
+      pendingDetail = '';
+      openScDetail(id, c, set);
+    } else refreshScDetail(c, set);
+    if (ask && !atlas) {
+      atlas = createAtlas({
+        engine: ask, getContext: () => latest?.c, set: (p) => latest?.set(p), openDetail: openFor, closeDetail: closeScDetail,
+      });
+    }
+    atlas?.attach(root.querySelector('#atl-launch'));
+  },
+  assistant() {
+    atlas?.openTyped();
+  },
+  leave() {
+    atlas?.detach();
+    closeScDetail();
   },
 };

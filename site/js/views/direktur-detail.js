@@ -3,9 +3,8 @@ import { ok, ratio } from '../core/values.js';
 import { seg, onSeg } from '../core/controls.js';
 import { shiftMonth, daysInMonth } from '../core/dates.js';
 import { openDetail } from '../core/ui.js';
-import { lineChart, barChart, bandCombo, destroyCharts, C, SERIES, CONTEXT_GRAY } from '../charts/charts.js';
+import { lineChart, barChart, bandCombo, destroyCharts, C } from '../charts/charts.js';
 import { NASIONAL, dayOf } from '../models/performance-model.js';
-import { colorIndexOf } from '../models/realisasi-sumber.js';
 import { ACTIVE_STAGES } from '../models/sla-model.js';
 import { perfPeriods, roPeriods, realByRo, realMonths, pfTrend, pfByRo, slaByRo, slaDays } from '../models/direktur-model.js';
 import { tn, signedTn, realRp, pfRp, pct, points, short, roShort, tone, diff, trendTone } from './direktur-format.js';
@@ -17,6 +16,8 @@ const FI = C.accent;
 const NFI = C.prev;
 
 let openId = '';
+let openKey = '';
+let chartTimer = 0;
 
 const stat = (label, value, { sub = '', state = '' } = {}) => `<div class="scd-stat"><span>${esc(label)}</span>
   <b class="${state}">${esc(value)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
@@ -24,7 +25,7 @@ const summary = (items) => `<div class="scd-sum">${items.join('')}</div>`;
 const aside = (text) => (text ? `<p class="scd-aside">${esc(text)}</p>` : '');
 const card = (title, body, { note = '', cls = '' } = {}) => `<section class="scd-card${cls ? ` ${cls}` : ''}">
   <header><h3>${esc(title)}</h3>${aside(note)}</header>${body}</section>`;
-const plot = (id, label, size = '') => `<div class="scd-plot${size ? ` ${size}` : ''}"><canvas id="${PREFIX}${id}" role="img" aria-label="${esc(label)}"></canvas></div>`;
+const plot = (id, label, size = '') => `<div class="scd-plot${size ? ` ${size}` : ''}"><canvas id="${PREFIX}${id}" data-still role="img" aria-label="${esc(label)}"></canvas></div>`;
 const key = (items) => `<p class="scd-key">${items.map(([kind, label, color]) => `<span><i class="${kind}"${color ? ` style="--k:${color}"` : ''}></i>${esc(label)}</span>`).join('')}</p>`;
 const pair = (left, right) => `<div class="scd-grid"><div class="scd-col">${left}</div><div class="scd-col">${right}</div></div>`;
 const td = (value, cls = '') => `<td${cls ? ` class="${cls}"` : ''}>${esc(value)}</td>`;
@@ -216,7 +217,17 @@ function disburseDetail(c) {
 
 const tipeName = (t) => t || 'Lainnya';
 const realCell = (v) => realRp(v, Math.abs(v || 0) >= 1e6 ? 1 : 0);
-const tipeColor = (t) => (t ? SERIES[colorIndexOf(t)] : CONTEXT_GRAY);
+
+function columns(items) {
+  const max = Math.max(1, ...items.map((x) => x.value || 0));
+  return `<ol class="scd-cols" style="--n:${items.length}">${items.map((x) => `<li class="${x.now ? 'now' : ''}${x.partial ? ' partial' : ''}">
+    <b>${esc(x.label)}</b><span class="bar" style="--h:${((x.value || 0) / max).toFixed(4)}" title="${esc(`${x.name}: ${x.label}`)}"></span><small>${esc(x.name)}</small></li>`).join('')}</ol>`;
+}
+
+function spark(values) {
+  const max = Math.max(1, ...values);
+  return `<span class="scd-spark" aria-hidden="true">${values.map((v, i) => `<i class="${i === values.length - 1 ? 'now' : ''}" style="--h:${(v / max).toFixed(4)}"></i>`).join('')}</span>`;
+}
 
 function realDetail(c) {
   const mode = c.sel.sumber;
@@ -227,6 +238,7 @@ function realDetail(c) {
   const top = cmp.rows[0];
   const grow = [...cmp.rows].filter((x) => ok(x.change) && x.prev).sort((a, b) => b.change - a.change)[0];
   const period = cmp.full ? fmt.month(cmp.month, true) : `${short(cmp.month)} s.d. ${cmp.lastDay}`;
+  const vsLabel = cmp.full ? `vs ${pm}` : `vs ${pm} s.d. tgl ${cmp.lastDay}`;
   const stats = summary([
     stat(`Realisasi ${period}`, realRp(cmp.total)),
     stat(cmp.full ? `Dibanding total ${pm}` : `Dibanding ${pm} s.d. tgl ${cmp.lastDay}`, fmt.signedPct(cmp.change, 0), { state: trendTone(cmp.change), sub: `${pm}: ${realRp(cmp.prevTotal)}` }),
@@ -235,25 +247,27 @@ function realDetail(c) {
   ]);
   const modes = c.realModel.modes || ['7', '5'];
   const tools = modes.length > 1 ? seg({ name: 'scd-sumber', label: 'Pembagian sumber realisasi', small: true, value: mode, options: modes.map((m) => ({ value: m, label: `${m} sumber` })) }) : '';
-  const monthHead = mon.months.map((m, i) => (i === mon.months.length - 1 && mon.partial ? `${short(m)} s.d. ${cmp.lastDay}` : short(m)));
+  const last = mon.months.length - 1;
+  const monthHead = mon.months.map((m, i) => (i === last && mon.partial ? `${short(m)} s.d. ${cmp.lastDay}` : short(m)));
+  const totalCols = columns(mon.months.map((m, i) => ({ name: monthHead[i], label: realCell(mon.totals[i]), value: mon.totals[i], now: i === last, partial: i === last && mon.partial })));
+  const sources = cmp.rows.map((r) => {
+    const trend = mon.months.map((m) => mon.value(m, r.tipe));
+    const share = cmp.total ? r.value / cmp.total : 0;
+    return `<li><div class="nm"><b>${esc(tipeName(r.tipe))}</b><span class="share"><i style="--w:${share.toFixed(4)}"></i></span><small>porsi ${esc(pct(share, 0))}</small></div>
+      ${spark(trend)}<div class="val"><b>${esc(realCell(r.value))}</b><small class="${trendTone(r.change)}">${esc(ok(r.change) ? `${fmt.signedPct(r.change, 0)} ${vsLabel}` : `– ${vsLabel}`)}</small></div></li>`;
+  }).join('');
   const monTable = table(['Sumber', ...monthHead], [
     ...mon.tipes.map((t) => monthRow(tipeName(t), mon.months.map((m) => td(realCell(mon.value(m, t)))).join(''))),
   ], `<tr><th scope="row" class="l">Total</th>${mon.totals.map((v) => td(realCell(v))).join('')}</tr>`);
   const roHead = ['RO', ...byRo.tipes.map(tipeName), 'Total', `vs ${pm}`];
   const roTable = table(roHead, byRo.rows.map((x) => roRow(x.ro, c.sel.ro,
     `${byRo.tipes.map((t) => td(realCell(x.cells.get(t) || 0), x.cells.get(t) ? '' : 'none')).join('')}<td class="sum">${esc(realCell(x.total))}</td>${td(fmt.signedPct(x.change, 0), trendTone(x.change))}`)));
-  const legend = key(mon.tipes.map((t) => ['bx', tipeName(t), tipeColor(t)]));
+  const srcCard = `<ul class="scd-src">${sources}</ul><details class="scd-more"><summary>Angka per bulan per sumber</summary>${monTable}</details>`;
   return {
     title: 'Realisasi',
     tools,
-    html: `${stats}${pair(card('Realisasi per bulan', `${legend}${plot('real', 'Realisasi per bulan per sumber', 'tall')}`), card(`Per bulan, ${mon.months[0]?.slice(0, 4) || ''}`, monTable))}
+    html: `${stats}${pair(card('Total realisasi per bulan', totalCols, { note: mon.partial ? `${short(mon.months[last])} baru sampai tanggal ${cmp.lastDay}` : '' }), card(`Per sumber, ${period}`, srcCard, { note: 'Batang kecil = 6 bulan terakhir' }))}
       ${card('Per RO', roTable, { note: 'Urut total terbesar', cls: 'wide' })}`,
-    charts() {
-      barChart(document.getElementById(`${PREFIX}real`), {
-        labels: monthHead, stacked: true, format: (v) => realRp(v), tickFormat: (v) => fmt.rupiah(v * 1e6, 0), valueLabels: true,
-        series: mon.tipes.map((t) => ({ label: tipeName(t), data: mon.months.map((m) => mon.value(m, t)), color: tipeColor(t) })),
-      });
-    },
     bind(dlg, set) {
       onSeg(dlg, 'scd-sumber', (v) => set({ sumber: v === '7' ? '' : v }));
     },
@@ -397,25 +411,41 @@ const VIEWS = {
 };
 
 
+const keyOf = (id, c) => [id, c.sel.ro, c.sel.sumber, c.now.date, c.now.os, c.now.disb, c.real?.total, c.sla?.berkas, c.sla?.late, c.split?.os?.fi].join('|');
+
 export function openScDetail(id, c, set) {
   const d = VIEWS[id]?.(c);
   if (!d) return;
+  const dlg0 = document.getElementById('detail-dialog');
+  const reopen = !!(openId && dlg0?.open && dlg0.dataset.tone === 'full');
+  const sameView = reopen && openId === id && openKey.split('|').slice(0, 3).join('|') === keyOf(id, c).split('|').slice(0, 3).join('|');
+  const scroll = sameView ? dlg0.querySelector('.detail-body')?.scrollTop || 0 : 0;
   openId = id;
+  openKey = keyOf(id, c);
+  clearTimeout(chartTimer);
   destroyCharts(PREFIX);
   const where = c.sel.ro || NASIONAL;
   const footer = c.sel.ro ? `<button class="btn" type="button" data-scd-ro="">Kembali ke ${esc(NASIONAL)}</button>` : '';
   const dlg = openDetail({ title: d.title, subtitle: `${where}, posisi ${fmt.date(c.now.date)}`, html: `<div class="scd">${d.html}</div>`, footer, tone: 'full' });
   if (!dlg.dataset.scd) {
     dlg.dataset.scd = 'on';
-    dlg.addEventListener('close', () => { openId = ''; destroyCharts(PREFIX); });
+    dlg.addEventListener('close', () => { openId = ''; openKey = ''; clearTimeout(chartTimer); destroyCharts(PREFIX); });
   }
   if (d.tools) dlg.querySelector('.dialog-head [data-close]').insertAdjacentHTML('beforebegin', `<div class="scd-head-tools">${d.tools}</div>`);
   dlg.querySelectorAll('[data-scd-ro]').forEach((b) => b.addEventListener('click', () => set({ ro: b.dataset.scdRo })));
   d.bind?.(dlg, set);
-  if (d.charts) requestAnimationFrame(() => { if (dlg.open && openId === id) d.charts(); });
+  if (scroll) dlg.querySelector('.detail-body').scrollTop = scroll;
+  if (d.charts) chartTimer = setTimeout(() => { if (dlg.open && openId === id) d.charts(); }, reopen ? 0 : 220);
 }
 
 export function refreshScDetail(c, set) {
   const dlg = document.getElementById('detail-dialog');
-  if (openId && dlg?.open && dlg.dataset.tone === 'full') openScDetail(openId, c, set);
+  if (!openId || !dlg?.open || dlg.dataset.tone !== 'full') return;
+  if (keyOf(openId, c) === openKey) return;
+  openScDetail(openId, c, set);
 }
+
+export const closeScDetail = () => {
+  const dlg = document.getElementById('detail-dialog');
+  if (openId && dlg?.open) dlg.close();
+};

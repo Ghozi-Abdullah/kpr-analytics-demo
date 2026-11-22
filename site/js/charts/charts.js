@@ -275,6 +275,7 @@ function mount(canvas, config, ktip = {}) {
   canvas.parentNode.querySelector(':scope > .pulse')?.remove();
   const tip = canvas.parentNode.querySelector(':scope > .chart-tooltip');
   if (tip) tip.style.opacity = 0;
+  if ('still' in canvas.dataset) config.options = { ...config.options, animation: false };
   const chart = new Chart(canvas, config);
   chart.$ktip = ktip;
   registry.set(key, chart);
