@@ -11,7 +11,7 @@ import { sumberMode } from '../models/realisasi-sumber.js';
 import { periodsOf, perfPeriods, realCompare, pfSplit, slaNow, roStanding } from '../models/direktur-model.js';
 import { tn, realRp, pfRp, pct, short, roShort, tone, diff } from './direktur-format.js';
 import { openScDetail, refreshScDetail, closeScDetail } from './direktur-detail.js';
-import { createAssistant, orbHtml } from '../voice/assistant.js';
+import { createAssistant, launchHtml } from '../voice/assistant.js';
 import { WAKE_NAME } from '../voice/command.js';
 
 const soft = (p) => p.catch((err) => { console.warn(err); return null; });
@@ -178,7 +178,7 @@ function screenHtml(c) {
     <header class="sc-head">
       <h1>Dashboard KPR</h1>
       <button class="sc-pos" type="button" data-open-status><span class="dot" id="exec-status-dot"></span><span>${esc(where)}</span><span>${esc(fmt.date(c.now.date))}</span></button>
-      <div class="sc-tools"><button class="va-launch" id="va-launch" type="button" aria-label="${esc(WAKE_NAME)}, asisten suara (Ctrl+Spasi)">${orbHtml()}<span class="t">${esc(WAKE_NAME)}<small>Ctrl+Spasi</small></span></button>${roPick}</div>
+      <div class="sc-tools"><button class="va-launch" id="va-launch" type="button" aria-label="${esc(WAKE_NAME)}, asisten suara (Ctrl+Spasi)">${launchHtml()}<span class="t">${esc(WAKE_NAME)}<small>Ctrl+Spasi</small></span></button>${roPick}</div>
     </header>
     <div class="sc-kpis">${kpis(c)}</div>
     <div class="sc-row sc-row-a">${realBlock(c)}${splitBlock(c)}${slaBlock(c)}</div>

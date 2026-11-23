@@ -17,7 +17,7 @@ export const LINES = {
   compare: ['Oke, kita adu {a} dan {b} ya.', 'Siap, ini {a} lawan {b}.', 'Baik, saya jejerkan {a} dan {b}.', 'Menarik nih, {a} dibanding {b}.', 'Oke, {a} dan {b} kita bandingkan berdampingan.'],
   askLead: ['Oke{nm}, saya cek ya.', 'Sebentar ya.', 'Baik.', 'Nah,', 'Oke, ini dia.', 'Sudah ketemu.', 'Siap.', '', '', ''],
   askEcho: ['Soal {topic} ya.', 'Untuk {topic},', 'Oke, {topic}.', 'Nah, {topic}.'],
-  askClose: ['Ada lagi yang mau dicek?', 'Mau dilihat lebih dalam?', 'Ada yang mau ditanyakan lagi?', '', '', '', ''],
+  askClose: ['Ada lagi yang mau dicek?', 'Mau dilihat lebih dalam?', 'Ada yang mau ditanyakan lagi?', 'Mau lanjut ke wilayah lain?', 'Perlu saya bandingkan dengan bulan lalu?'],
   askMore: ['Mau saya lanjut cek {f}?', 'Perlu sekalian saya cek {f}?', 'Kalau mau, saya bisa lanjut ke {f}. Gimana?'],
   thinking: ['Sebentar ya…', 'Saya cek dulu…', 'Lagi saya hitung…', 'Hmm, saya lihat datanya…', 'Oke, saya carikan…', 'Tunggu sebentar…'],
   confused: ['Hmm, maaf{nm}, saya belum nangkep maksudnya.', 'Maaf ya, yang ini saya belum paham.', 'Aduh, saya kurang ngerti. Boleh pakai kata lain?', 'Hmm, yang ini saya belum bisa jawab.', 'Maaf, saya belum yakin maksudnya yang mana.'],
@@ -35,7 +35,8 @@ export const LINES = {
   no: ['Baik.', 'Oke, tidak jadi.', 'Siap, lain kali saja.', 'Oke, nggak apa-apa.', 'Baik, saya standby saja.'],
   wait: ['Baik, saya tunggu ya.', 'Siap, santai saja.', 'Oke, saya di sini.', 'Santai{nm}, saya tunggu.', 'Iya, pelan-pelan saja.'],
   present: ['Iya{nm}, saya di sini.', 'Saya dengar kok. Ada apa?', 'Hadir! Mau lihat apa?', 'Iya, masih di sini kok.', 'Selalu standby{nm}.'],
-  wakeAck: ['Iya{nm}?', 'Ya, saya dengar.', 'Iya, ada apa?', 'Hadir.', 'Siap, silakan.'],
+  wakeAck: ['Iya{nm}? Ada yang bisa saya bantu?', 'Hai{nm}! Mau lihat data apa?', 'Iya, saya di sini. Mau cek apa?', 'Siap{nm}, silakan. Mau mulai dari mana?', 'Hadir! Mau saya briefing atau langsung cek wilayah?'],
+  hello: ['{salam}{nm}! Mau lihat data apa hari ini?', '{salam}{nm}. Saya siap bantu, mau mulai dari mana?', 'Hai{nm}! {salam}. Mau saya briefing dulu, atau langsung cek wilayah?', '{salam}{nm}! Tanya saya soal OS, NPL, atau realisasi ya.'],
   smalltalk: {
     pagi: ['Kabar baik, makasih sudah tanya. Pagi ini datanya sudah siap. Mau mulai dari mana?', 'Baik sekali{nm}. Semoga pagi ini lancar. Mau saya briefing dulu?', 'Alhamdulillah baik. Pagi-pagi enaknya lihat ringkasan dulu, mau?'],
     siang: ['Baik, makasih. Sudah makan siang? Habis itu yuk lihat angka.', 'Baik sekali{nm}. Siang-siang begini mau cek wilayah mana?', 'Kabar baik. Jangan lupa makan siang ya, habis itu kita cek angka.'],

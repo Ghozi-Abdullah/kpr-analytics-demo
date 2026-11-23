@@ -9,7 +9,7 @@ const SITE = path.join(ROOT, 'site');
 const OUT = path.resolve(ROOT, process.argv[2] || '_site');
 const TARGET = ['chrome109', 'safari16', 'firefox115', 'edge109'];
 const RUNTIME_FILES = ['css/login-photo.webp', 'css/google-g.svg', 'css/google-g.png', 'icon.svg', 'apple-touch-icon.png', 'privasi.html'];
-const RUNTIME_DIRS = ['img', 'data', 'model'];
+const RUNTIME_DIRS = ['img', 'data'];
 
 const fail = (msg) => { console.error(`GAGAL: ${msg}`); process.exit(1); };
 const read = (p) => fs.readFileSync(path.join(SITE, p), 'utf8');
@@ -53,7 +53,7 @@ fs.writeFileSync(path.join(OUT, vendorName), vendorText);
 
 for (const f of RUNTIME_FILES) copy(f);
 for (const d of RUNTIME_DIRS) copy(d);
-for (const f of ['lib/LICENSE-chartjs.md', 'lib/LICENSE-datalabels.md', 'lib/fonts/LICENSE-OFL-GoogleSansFlex.txt', 'lib/vtuber.js', 'lib/LICENSE-vtuber.md']) copy(f);
+for (const f of ['lib/LICENSE-chartjs.md', 'lib/LICENSE-datalabels.md', 'lib/fonts/LICENSE-OFL-GoogleSansFlex.txt']) copy(f);
 
 let html = read('index.html');
 const swap = (from, to) => {

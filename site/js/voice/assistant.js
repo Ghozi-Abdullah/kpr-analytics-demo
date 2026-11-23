@@ -6,9 +6,9 @@ import { checkSmooth } from '../core/smooth.js';
 import { speakRemote } from '../services/data-source.js';
 import { roStanding } from '../models/direktur-model.js';
 import { nearSpeech, setMicClean, micClean, micSupport } from './mic.js';
-import { visemeAt } from './mouth.js';
 import { voiceSupport, createRecognizer, speak, hush, createLevel, chime, setCloudSpeaker, setVoice, setRate, setPitch, setVolume, nextVoice, usingCloud, voiceList, findVoice, voiceLevel, voiceCue } from './speech.js';
 import { mountAvatar3d } from './avatar3d.js';
+import { HALF, FULL, FACE, DEPTH, MOUTH, MOTION } from './kirana-art.js';
 import { routeCommand, findWake, cleanSpoken, spoken, shortRo, targetOf, WAKE_NAME, WAKE_PHRASE } from './command.js';
 import { regionData, monthData, MONTH_ROWS, monthTalk, showcaseHtml, regionTalk, compareHtml, compareTalk, flyIn, toneOf, regionMore } from './showcase.js';
 import { createPersona, pickOne, salam, partOfDay, clockText, dateText, workdaysLeft, workdaysIn, longDate, parseReminder, nameFrom } from './persona.js';
@@ -132,9 +132,7 @@ const readMiss = () => { try { const v = JSON.parse(localStorage.getItem(MISS_KE
 const writeMiss = (list) => { try { localStorage.setItem(MISS_KEY, JSON.stringify(list.slice(-MISS_MAX))); } catch {} };
 const readPref = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch { return {}; } };
 const writePref = (p) => { try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch {} };
-const VRM_LIB = 'lib/vtuber.js';
-const VRM_SCREEN = '(min-width: 1000px) and (pointer: fine)';
-const CHAT_SCREEN = '(min-width: 1100px) and (min-height: 620px)';
+const WIDE_SCREEN = '(min-width: 1100px) and (min-height: 620px)';
 const LOG_MAX = 60;
 const DOCK_MS = 620;
 const plain = (html) => String(html || '').replace(/<(br|\/p|\/li|\/div|\/h\d)[^>]*>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
@@ -173,10 +171,21 @@ const sameText = (a, b) => {
   return !!x && !!y && (x === y || y.startsWith(x) || x.startsWith(y));
 };
 
-const POSES = ['idle', 'blink', 'smile', 'grin', 'laugh', 'love', 'think', 'hmm', 'wow', 'sad', 'sleepy', 'talk'];
-const MOOD_POSE = { love: 'love', laugh: 'laugh', surprised: 'wow', sad: 'sad', confused: 'hmm', sleepy: 'sleepy' };
-const poseOf = (state, mood) => (state === 'error' ? 'sad' : MOOD_POSE[mood] || (state === 'speak' ? 'talk' : mood === 'happy' ? 'grin' : state === 'think' ? 'think' : state === 'listen' ? 'smile' : 'idle'));
-export const orbHtml = () => `<span class="blob" aria-hidden="true">${POSES.map((p) => `<i class="kira-pose kira-${p}"></i>`).join('')}</span>`;
+const MOOD_FACE = {
+  happy: 'bright', laugh: 'laugh', giggle: 'giggle', love: 'blush', shy: 'shy', joy: 'joy', excited: 'excited', energetic: 'energetic',
+  surprised: 'surprised', awed: 'awed', realize: 'realize', idea: 'idea', determined: 'determined', sad: 'sad', worried: 'worried',
+  confused: 'confused', sleepy: 'sleepy', thinking: 'thinking', wave: 'bright',
+};
+const MOOD_FULL = {
+  happy: 'cheer', laugh: 'cheer', excited: 'cheer', energetic: 'cheer', giggle: 'happy', love: 'happy', shy: 'happy', joy: 'happy',
+  surprised: 'gasp', awed: 'gasp', realize: 'gasp', idea: 'smile', determined: 'smile', sad: 'confused', worried: 'confused',
+  confused: 'confused', sleepy: 'yawn', thinking: 'think', wave: 'wave',
+};
+const poseOf = (state, mood) => (state === 'error' ? 'worried' : state === 'speak' ? 'talk' : MOOD_FACE[mood] || (state === 'think' ? 'thinking' : state === 'listen' ? 'smile' : 'neutral'));
+const fullOf = (state, mood) => (state === 'error' ? 'confused' : MOOD_FULL[mood] || (state === 'think' ? 'think' : state === 'speak' || state === 'listen' ? 'smile' : 'stand'));
+const halfHtml = () => Object.entries(HALF).map(([face, src]) => `<i class="kira-pose${face === 'neutral' ? ' on' : ''}" data-face="${face}" style="background-image: url('${src}')"></i>`).join('');
+const fullHtml = () => Object.entries(FULL).map(([pose, src]) => `<img class="${pose === 'stand' ? 'on' : ''}" data-pose="${pose}" src="${src}" alt="" decoding="async" draggable="false">`).join('');
+export const launchHtml = () => `<span class="blob" aria-hidden="true"><img class="kira-face" src="${FACE.idle}" alt=""><img class="kira-face smile" src="${FACE.smile}" alt=""></span>`;
 
 const FX = `<span class="fx" aria-hidden="true"><i class="q">?</i><i class="zz">z</i><i class="zz">z</i><i class="sp"></i><i class="sp"></i><i class="sp"></i><i class="sp"></i>
   <i class="hrt">${HEART}</i><i class="hrt">${HEART}</i><span class="dots"><b></b><b></b><b></b></span></span>`;
@@ -256,9 +265,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let launcher = null;
   let orbEl = null;
   let avatar = null;
-  let model = null;
-  let modelLoading = null;
   let lastUserMsg = null;
+  let sayLogged = true;
   let logStick = true;
   let phase = 'idle';
   let mode = 'off';
@@ -276,10 +284,11 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let lastSpeech = '';
   let trail = [];
   let pointerRaf = 0;
+  let followRaf = 0;
+  let helloAt = 0;
   const early = { timer: 0, text: '', done: '' };
   const $ = (id) => dlg?.querySelector(`#${id}`);
-  const level = createLevel((v) => { orbEl?.style.setProperty('--lvl', v.toFixed(3)); avatar?.listen(v); });
-  const figure = () => model || avatar;
+  const level = createLevel((v) => { $('va-panel')?.style.setProperty('--lvl', v.toFixed(3)); avatar?.listen(v); });
   const rec = createRecognizer({ onResult, onEnd, onError, onStart: () => { quickEnds = 0; } });
   const ding = (kind) => { if (!pref.mute) chime(kind); };
   const regions = () => getContext()?.pm?.regions || [];
@@ -299,33 +308,39 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       </div>
 
       <div class="va-stage" id="va-stage"></div>
-      <div class="va-dock">
-        <section class="va-chat" id="va-chat" aria-label="Obrolan dengan ${esc(WAKE_NAME)}">
-          <div class="va-log" id="va-log" role="log" aria-label="Riwayat obrolan" tabindex="0"></div>
-          <p class="va-heard" id="va-heard" aria-live="polite"></p>
-          <div class="va-next" id="va-next"></div>
+      <section class="va-panel" id="va-panel" aria-label="Obrolan dengan ${esc(WAKE_NAME)}">
+        <div class="va-log" id="va-log" role="log" aria-label="Riwayat obrolan" tabindex="0"></div>
+        <div class="va-scene">
+          <div class="va-bubble"><p class="va-say" id="va-say" aria-live="polite"></p></div>
+          <button class="va-full" type="button" id="va-full" aria-label="Bicara ke ${esc(WAKE_NAME)}">${fullHtml()}</button>
+          <button class="va-orb" type="button" id="va-orb" aria-label="Bicara ke ${esc(WAKE_NAME)}"><span class="halo" aria-hidden="true"></span><span class="blob" aria-hidden="true">${halfHtml()}</span>${FX}</button>
+        </div>
+        <p class="va-heard" id="va-heard" aria-live="polite"></p>
+        <p class="va-status" id="va-status" role="status"></p>
+        <div class="va-next" id="va-next"></div>
+        <div class="va-bar">
           <form class="va-type" id="va-type">
-            <input id="va-input" type="text" autocomplete="off" enterkeyhint="send" placeholder="Ketik perintah, misalnya: lihat Bandung" aria-label="Perintah untuk ${esc(WAKE_NAME)}">
+            <input id="va-input" type="text" autocomplete="off" enterkeyhint="send" placeholder="Tanya Kirana…" aria-label="Pesan untuk ${esc(WAKE_NAME)}">
             <button type="submit" aria-label="Kirim">${icon('send', 16)}</button>
           </form>
-        </section>
-        <div class="va-me">
-          <p class="va-status" id="va-status" role="status"></p>
-          <button class="va-orb" type="button" id="va-orb" aria-label="Bicara ke ${esc(WAKE_NAME)}"><span class="halo" aria-hidden="true"></span>${orbHtml()}${FX}</button>
+          <button class="va-mic" type="button" id="va-mic" aria-label="Bicara ke ${esc(WAKE_NAME)}" aria-pressed="false">${MIC}</button>
         </div>
-      </div>`;
+      </section>`;
     document.body.append(dlg);
     orbEl = $('va-orb');
     const log = $('va-log');
     log.addEventListener('scroll', () => { logStick = log.scrollHeight - log.scrollTop - log.clientHeight < 40; }, { passive: true });
     new ResizeObserver(() => { if (logStick) log.scrollTop = log.scrollHeight; }).observe(log);
-    avatar = mountAvatar3d(orbEl, { voiceLevel, voiceCue, lite: () => document.documentElement.classList.contains('fx-lite') });
+    avatar = mountAvatar3d(orbEl, { faces: HALF, depth: DEPTH, mouth: MOUTH, motion: MOTION, voiceLevel, voiceCue, lite: () => document.documentElement.classList.contains('fx-lite') });
     suggest(HINTS);
     dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
     dlg.addEventListener('click', onClick);
     dlg.addEventListener('pointermove', onPointer, { passive: true });
     $('va-close').addEventListener('click', close);
-    $('va-orb').addEventListener('click', () => (phase === 'listen' ? stopListening() : listen()));
+    const talkToggle = () => (phase === 'listen' ? stopListening() : listen());
+    $('va-orb').addEventListener('click', talkToggle);
+    $('va-full').addEventListener('click', talkToggle);
+    $('va-mic').addEventListener('click', talkToggle);
     $('va-wake').addEventListener('click', () => setWake(!pref.wake, true));
     $('va-mute').addEventListener('click', () => setMute(!pref.mute));
     $('va-type').addEventListener('submit', (e) => {
@@ -346,9 +361,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       const r = orbEl.getBoundingClientRect();
       const dx = (e.clientX - (r.left + r.width / 2)) / 320;
       const dy = (e.clientY - (r.top + r.height / 2)) / 320;
-      orbEl.style.setProperty('--lx', Math.max(-1, Math.min(1, dx)).toFixed(3));
-      orbEl.style.setProperty('--ly', Math.max(-1, Math.min(1, dy)).toFixed(3));
-      figure()?.look(dx, dy);
+      avatar?.look(dx, dy);
     });
     awake();
   }
@@ -406,14 +419,16 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     phase = next;
     if (!dlg) return;
     dlg.dataset.state = next;
+    if (next !== 'think') $('va-say')?.classList.remove('typing');
     syncPose();
     if (next === 'listen' && dlg.open && voiceSupport.level) level.start();
     const idleText = !voiceSupport.listen ? ERRORS.unsupported
-      : pref.wake ? `Ucapkan "${WAKE_PHRASE}" atau klik Kirana untuk bicara` : 'Klik Kirana atau tekan Ctrl+Spasi untuk bicara';
+      : pref.wake ? `Ucapkan "${WAKE_PHRASE}" atau ketuk mic untuk bicara`
+        : matchMedia('(pointer: fine)').matches ? 'Klik Kirana atau tekan Ctrl+Spasi untuk bicara' : 'Ketuk mic untuk bicara';
     let listenText = 'Mendengarkan';
     if (next === 'listen' && greetOnOpen) {
       greetOnOpen = false;
-      listenText = `${salam()}${pref.name ? `, ${pref.name}` : ''}. Silakan bicara`;
+      listenText = 'Silakan bicara, saya dengarkan';
     }
     $('va-status').textContent = text || { listen: listenText, think: 'Sebentar ya', speak: '', idle: idleText, error: '' }[next] || '';
     if (next === 'idle') snooze();
@@ -422,7 +437,13 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   function syncPose() {
     const orb = $('va-orb');
     if (!orb || !dlg) return;
-    orb.dataset.pose = poseOf(dlg.dataset.state, dlg.dataset.mood);
+    const pose = poseOf(dlg.dataset.state, dlg.dataset.mood);
+    orb.dataset.pose = pose;
+    const face = pose === 'talk' ? 'smile' : pose;
+    orb.querySelectorAll('.kira-pose').forEach((el) => el.classList.toggle('on', el.dataset.face === face));
+    const full = fullOf(dlg.dataset.state, dlg.dataset.mood);
+    $('va-full').querySelectorAll('img').forEach((el) => el.classList.toggle('on', el.dataset.pose === full));
+    $('va-mic').setAttribute('aria-pressed', String(dlg.dataset.state === 'listen'));
   }
 
   function setMood(mood, ms = MOOD_MS) {
@@ -445,6 +466,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
 
   function setStage(kind) {
     if (dlg.dataset.stage !== kind) dlg.dataset.stage = kind;
+    if (kind === 'show' && dlg.open) dock();
   }
 
   const isOpen = () => !!dlg?.open;
@@ -454,16 +476,17 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (!dlg.open) {
       dlg.showModal();
       dlg.dataset.layout = 'intro';
-      figure()?.start();
-      loadModel();
+      avatar?.start();
       setStage(showing || $('va-stage').childElementCount ? 'show' : 'empty');
       checkSmooth();
-      setMood('surprised', 800);
+      setSay(line('hello', { salam: salam() }));
+      helloAt = Date.now();
+      setMood('wave', 2600);
       greetOnOpen = true;
     }
     if (phase !== 'think') setPhase('idle');
     if (focusInput || !voiceSupport.listen || matchMedia('(pointer: fine)').matches) $('va-input').focus({ preventScroll: true });
-    else $('va-orb').focus({ preventScroll: true });
+    else $(dlg.dataset.layout === 'chat' ? 'va-orb' : 'va-mic').focus({ preventScroll: true });
     if (listenNow && voiceSupport.listen) listen();
   }
 
@@ -483,7 +506,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     speakingNow = false;
     clearTimeout(autoTimer);
     dlg.close();
-    figure()?.stop();
+    avatar?.stop();
     clearStage();
     $('va-heard').textContent = '';
     suggest(HINTS);
@@ -494,39 +517,63 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     syncPills();
   }
 
-  function loadModel() {
-    const src = document.documentElement.dataset.vrm;
-    if (model || modelLoading || !src || !orbEl || !window.WebGL2RenderingContext || !matchMedia(VRM_SCREEN).matches) return;
-    const lite = () => document.documentElement.classList.contains('fx-lite');
-    modelLoading = import(new URL(VRM_LIB, document.baseURI).href)
-      .then(({ mountVtuber }) => mountVtuber(orbEl, { url: new URL(src, document.baseURI).href, voiceLevel, voiceCue, visemeAt, lite }))
-      .then((m) => {
-        model = m;
-        avatar?.stop();
-        orbEl.classList.add('is-vrm');
-        if (isOpen()) model.start();
-      })
-      .catch((err) => { console.warn('Model 3D Kirana tidak dimuat:', err?.message || err); });
-  }
-
-  function chatWanted() {
-    return matchMedia(CHAT_SCREEN).matches;
-  }
-
   function dock() {
-    if (!dlg || dlg.dataset.layout === 'chat' || !chatWanted()) return;
-    const orb = $('va-orb');
-    const chat = $('va-chat');
-    const from = orb.getBoundingClientRect();
+    if (!dlg || dlg.dataset.layout === 'chat') return;
+    const panel = $('va-panel');
+    const from = panel.getBoundingClientRect();
     dlg.dataset.layout = 'chat';
     scrollLog(true);
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const to = orb.getBoundingClientRect();
-    const dx = from.left + from.width / 2 - (to.left + to.width / 2);
-    const dy = from.top + from.height / 2 - (to.top + to.height / 2);
-    const k = from.width / Math.max(1, to.width);
-    orb.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${k})` }, { transform: 'none' }], { duration: DOCK_MS, easing: 'cubic-bezier(.2, .8, .2, 1)' });
-    chat.animate([{ opacity: 0, transform: 'translateX(32px)' }, { opacity: 1, transform: 'none' }], { duration: DOCK_MS * 0.8, delay: DOCK_MS * 0.35, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'backwards' });
+    const easing = 'cubic-bezier(.2, .8, .2, 1)';
+    if (matchMedia(WIDE_SCREEN).matches) {
+      const to = panel.getBoundingClientRect();
+      const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+      const dy = from.bottom - to.bottom;
+      panel.animate([{ transform: `translate(${dx}px, ${dy}px)`, opacity: 0.6 }, { transform: 'none', opacity: 1 }], { duration: DOCK_MS, easing });
+    }
+    $('va-orb').animate([{ opacity: 0, transform: 'translateY(28px) scale(.92)' }, { opacity: 1, transform: 'none' }], { duration: 460, delay: DOCK_MS * 0.45, easing, fill: 'backwards' });
+  }
+
+  function flushSay() {
+    const el = $('va-say');
+    if (el && !sayLogged && el.textContent) logMsg('kira', el.textContent);
+    sayLogged = true;
+  }
+
+  function setSay(text) {
+    const el = $('va-say');
+    if (!el) return;
+    flushSay();
+    el.classList.remove('typing');
+    el.textContent = plain(text);
+    el.scrollTop = 0;
+    sayLogged = !el.textContent;
+  }
+
+  function followSay(out) {
+    const el = $('va-say');
+    cancelAnimationFrame(followRaf);
+    if (!el) return;
+    const tick = () => {
+      if (!speakingNow || !isOpen()) return;
+      const room = el.scrollHeight - el.clientHeight;
+      const c = room > 4 && !el.matches(':hover') ? voiceCue() : null;
+      if (c) {
+        const at = Math.max(0, out.indexOf(c.text));
+        const goal = Math.max(0, Math.min(1, (at + c.index) / out.length - 0.15)) * room;
+        el.scrollTop += (goal - el.scrollTop) * 0.1;
+      }
+      followRaf = requestAnimationFrame(tick);
+    };
+    followRaf = requestAnimationFrame(tick);
+  }
+
+  function typing() {
+    const el = $('va-say');
+    if (!el) return;
+    flushSay();
+    el.textContent = '';
+    el.classList.add('typing');
   }
 
   function scrollLog(force = false) {
@@ -757,7 +804,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       if (!wake && Date.now() > followUntil) return;
       clearTimeout(wakeAckTimer);
       if (!cmd) {
-        if (wake && final) wakeAckTimer = setTimeout(() => { if (isOpen() && phase === 'listen') talkOnly(line('wakeAck'), 'happy'); }, 1100);
+        if (wake && final) wakeAckTimer = setTimeout(() => { if (isOpen() && phase === 'listen') talkOnly(line('wakeAck'), 'wave'); }, 1100);
         return;
       }
       showHeard(cmd, final);
@@ -822,10 +869,11 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     el.classList.toggle('final', !!final);
   }
 
-  function say(text, { after, full = false } = {}) {
-    if (prefix && text) text = `${prefix} ${text}`;
+  function say(text, { after, full = false, show = '' } = {}) {
+    if (prefix && text) { text = `${prefix} ${text}`; if (show) show = `${prefix} ${show}`; }
     prefix = '';
-    if (text && isOpen()) { logMsg('kira', text); dock(); }
+    if (text && isOpen()) setSay(show || text);
+    const feelNow = dlg?.dataset.mood || '';
     const asking = /\?\s*$/.test(plain(text));
     const done = () => {
       after?.();
@@ -846,10 +894,12 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     bargeTries = 0;
     if (!pref.wake && voiceSupport.listen && !lastTyped && mode === 'off' && matchMedia('(pointer: fine)').matches) startBarge();
     speak(out, {
-      onStart: () => { if (isOpen()) setPhase('speak'); },
+      onStart: () => { if (isOpen()) { setPhase('speak'); followSay(out); } },
       onEnd: () => {
         lastSelf = new Set(tokensOf(out.slice(-180)));
         speakingNow = false;
+        const keepFeel = dlg?.dataset.mood || feelNow;
+        if (isOpen() && keepFeel && !['sleepy', 'wave'].includes(keepFeel)) setMood(keepFeel, 1800);
         speakingUntil = Date.now() + ECHO_MS;
         selfUntil = Date.now() + ECHO_TAIL_MS;
         done();
@@ -864,6 +914,12 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
 
   function reply(html, { title = '', chips = [], lines = [], speakText, next = null, mood = '', keep = true, full = false } = {}) {
     build();
+    if (!keep && !title && !chips.length) {
+      if (next) suggest(next);
+      if (mood) setMood(mood);
+      say(speakText ?? html, { full, show: [plain(html), ...lines.map(plain)].filter(Boolean).join(' ') });
+      return;
+    }
     showing = '';
     const stage = $('va-stage');
     stage.innerHTML = `<article class="va-card va-answer">
@@ -957,7 +1013,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     focusRo = d.ro || '';
     offer = talk.offer;
     suggest(talk.next);
-    setMood('happy');
+    setMood({ good: 'excited', bad: 'worried' }[toneOf(d)] || 'happy');
     ding('done');
     remember({ kind: 'region', args: [ro] });
     say(quiet ? `Kembali ke ${d.name}.` : talk.text);
@@ -1142,7 +1198,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     ].filter(Boolean);
     offer = { say: ro ? `Detail ${label} ${name}` : `Detail ${label}`, ask: `Mau lihat detail ${label}-nya?` };
     lastAnswer = { text: [head, ...lines].join(' '), lines, fact: head };
-    reply(esc(head), { title: 'Proyeksi sederhana', lines: lines.map(esc), mood: ok(rka) && next > rka ? 'sad' : 'happy', next: [offer.say, 'Saran dong', `Tren ${label} 6 bulan`], speakText: `${head} ${lines.join(' ')} ${offer.ask}` });
+    reply(esc(head), { title: 'Proyeksi sederhana', lines: lines.map(esc), mood: ok(rka) && next > rka ? 'worried' : 'idea', next: [offer.say, 'Saran dong', `Tren ${label} 6 bulan`], speakText: `${head} ${lines.join(' ')} ${offer.ask}` });
   }
 
   function yearEnd(ro) {
@@ -1375,7 +1431,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   }
 
   function personal(type) {
-    const moods = { joke: 'laugh', sing: 'happy', isAi: 'happy', whoMade: 'love', age: 'happy', love: 'love', like: 'happy', eat: 'happy', weather: 'confused', english: 'confused', sad: 'love', tired: 'love', motivate: 'happy', congrats: 'laugh', weekend: 'happy', payday: 'laugh', birthday: 'love', miss: 'love' };
+    const moods = { joke: 'giggle', sing: 'joy', isAi: 'happy', whoMade: 'shy', age: 'giggle', love: 'shy', like: 'happy', eat: 'joy', weather: 'thinking', english: 'confused', sad: 'worried', tired: 'worried', motivate: 'determined', congrats: 'excited', weekend: 'joy', payday: 'energetic', birthday: 'excited', miss: 'shy' };
     if (type === 'tired') feel.tired = true;
     if (type === 'sad') feel.sad = true;
     const offers = {
@@ -1509,7 +1565,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const head = `${line('advice')} untuk ${d.name} ada ${list.length} hal.`;
     offer = { say: ro ? `Performance ${d.name} 3 bulan` : 'RO mana yang perlu perhatian?', ask: ro ? 'Mau saya bukakan tren tiga bulannya?' : 'Mau saya tunjukkan RO yang paling perlu dorongan?' };
     lastAnswer = { text: [head, ...list].join(' '), lines: list, fact: list[0] };
-    reply(esc(head), { lines: list.map((x) => esc(x.charAt(0).toUpperCase() + x.slice(1))), mood: 'happy', full: true, next: [offer.say, 'Intinya apa?', 'Kabar buruknya apa?'], speakText: `${head} ${list.join(' ')} ${offer.ask}` });
+    reply(esc(head), { lines: list.map((x) => esc(x.charAt(0).toUpperCase() + x.slice(1))), mood: 'determined', full: true, next: [offer.say, 'Intinya apa?', 'Kabar buruknya apa?'], speakText: `${head} ${list.join(' ')} ${offer.ask}` });
   }
 
   function gist() {
@@ -1517,7 +1573,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       const d = lastRegion.d;
       const { parts } = verdict(d.now || {}, '');
       const word = { good: 'aman', bad: 'perlu perhatian', mixed: 'ada plus minusnya' }[toneOf(d)];
-      talkOnly(`${line('gist')} ${d.name} ${word}. ${parts.slice(0, 2).join(', ').replace(/^./, (x) => x.toUpperCase())}.`, toneOf(d) === 'bad' ? 'sad' : 'happy');
+      talkOnly(`${line('gist')} ${d.name} ${word}. ${parts.slice(0, 2).join(', ').replace(/^./, (x) => x.toUpperCase())}.`, toneOf(d) === 'bad' ? 'worried' : 'happy');
       return;
     }
     if (lastAnswer?.text) { talkOnly(`${line('gist')} ${lowerFirst(firstSentence(plain(lastAnswer.text)))}`, 'happy'); return; }
@@ -1544,7 +1600,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (i === lastFact && facts.length > 1) i = (i + 1) % facts.length;
     lastFact = i;
     lastKind = 'funFact';
-    chat(`${line('funFact')} ${facts[i]}`, { mood: 'surprised', next: ['Fakta menarik lagi', 'Briefing hari ini', 'Cerita lucu dong'] });
+    chat(`${line('funFact')} ${facts[i]}`, { mood: 'awed', next: ['Fakta menarik lagi', 'Briefing hari ini', 'Cerita lucu dong'] });
   }
 
   function meetingPrep() {
@@ -1591,8 +1647,12 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     clearTimeout(autoTimer);
     awake();
     if (!isOpen()) open({ listenNow: false, focusInput: typed });
-    lastUserMsg = inner ? null : logMsg('me', text);
-    if (!inner) dock();
+    if (!inner) {
+      flushSay();
+      lastUserMsg = logMsg('me', text);
+      dock();
+      typing();
+    }
     if (mode === 'command' || mode === 'barge') { rec.abort(); mode = 'off'; }
     autoListen = false;
     hush();
@@ -1620,10 +1680,10 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     lastKind = cmd.type;
     const onStage = !!showing || !!$('va-stage')?.childElementCount;
     switch (cmd.type) {
-      case 'none': lastUserMsg?.remove(); lastUserMsg = null; setPhase('idle'); return;
+      case 'none': lastUserMsg?.remove(); lastUserMsg = null; $('va-say').classList.remove('typing'); setPhase('idle'); return;
       case 'yes':
         offer = null;
-        if (pending) { handle(pending.say, { inner: true }); return; }
+        if (pending) { prefix = pickOne(['Siap.', 'Oke.', 'Baik.']); handle(pending.say, { inner: true }); return; }
         if (/\b(lanjut|gas|terus)\b/.test(cmd.text)) { lastKind = prevKind; continueTalk(null); return; }
         if (onStage) { talkOnly(line('ack'), 'happy'); return; }
         reply('Siap. Mau lihat apa?', { next: HINTS, mood: 'happy' });
@@ -1633,25 +1693,25 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       case 'close': ding('off'); closeDetail(); close(); return;
       case 'bye': setMood('love'); ding('off'); say(line(feel.tired ? 'byeCare' : feel.sad ? 'byeGlad' : partOfDay() === 'malam' ? 'byeNight' : 'bye'), { after: close }); return;
       case 'goodnight': setMood('sleepy', 0); ding('off'); say(line('byeNight'), { after: close }); return;
-      case 'thanks': ding('love'); if (onStage) talkOnly(`${line('thanks')} ${pickOne(['Ada lagi?', '', ''])}`, 'love'); else reply(esc(line('thanks')), { mood: 'love', next: HINTS, keep: false }); return;
+      case 'thanks': ding('love'); if (onStage) talkOnly(`${line('thanks')} ${pickOne(['Ada lagi yang mau dicek?', 'Mau lanjut lihat yang lain?', 'Kabari saja kalau perlu lagi.'])}`, 'joy'); else reply(esc(line('thanks')), { mood: 'joy', next: HINTS, keep: false }); return;
       case 'praise':
         if (showing !== '' && lastRegion && !/\b(kamu|kirana)\b/i.test(text)) {
           const tone = toneOf(lastRegion.d);
-          talkOnly(tone === 'good' ? `Iya, ${lastRegion.name} memang lagi bagus.` : tone === 'bad' ? `Hmm, sebenarnya ${lastRegion.name} masih perlu dikejar.` : `Iya, sebagian sudah bagus. Tinggal dijaga.`, tone === 'bad' ? 'confused' : 'happy');
+          talkOnly(tone === 'good' ? `Iya, ${lastRegion.name} memang lagi bagus.` : tone === 'bad' ? `Hmm, sebenarnya ${lastRegion.name} masih perlu dikejar.` : `Iya, sebagian sudah bagus. Tinggal dijaga.`, tone === 'good' ? 'energetic' : tone === 'bad' ? 'thinking' : 'happy');
           return;
         }
-        ding('love'); if (onStage) talkOnly(line('praise'), 'love'); else reply(esc(line('praise')), { mood: 'love', keep: false });
+        ding('love'); if (onStage) talkOnly(line('praise'), 'shy'); else reply(esc(line('praise')), { mood: 'shy', keep: false });
         return;
       case 'reactBad':
-        if (pending?.ask) { offer = pending; talkOnly(`Iya, betul. ${pending.ask}`, 'sad'); return; }
+        if (pending?.ask) { offer = pending; talkOnly(`Iya, betul. ${pending.ask}`, 'worried'); return; }
         offer = { say: 'Kabar buruknya apa?', ask: '' };
-        talkOnly(showing !== '' && lastRegion ? `Iya, ${lastRegion.name} memang perlu perhatian. Mau saya rangkum yang perlu dikejar?` : 'Iya, yang ini perlu dikejar. Mau saya rangkum yang perlu diwaspadai?', 'sad');
+        talkOnly(showing !== '' && lastRegion ? `Iya, ${lastRegion.name} memang perlu perhatian. Mau saya rangkum yang perlu dikejar?` : 'Iya, yang ini perlu dikejar. Mau saya rangkum yang perlu diwaspadai?', 'worried');
         return;
       case 'ack': talkOnly(line('ack'), 'happy'); return;
       case 'present': talkOnly(line('present'), 'happy'); return;
       case 'wait': talkOnly(line('wait'), 'happy'); return;
       case 'sorry': talkOnly(line('sorry'), 'love'); return;
-      case 'annoyed': ding('oops'); talkOnly(line('annoyed'), 'sad'); return;
+      case 'annoyed': ding('oops'); talkOnly(line('annoyed'), 'worried'); return;
       case 'joke': case 'sing': case 'isAi': case 'whoMade': case 'age': case 'love': case 'like': case 'eat': case 'weather': case 'english': case 'sad': case 'tired': case 'motivate': case 'congrats':
         personal(cmd.type); return;
       case 'weekend': case 'payday': case 'birthday': case 'miss': personal(cmd.type); return;
@@ -1674,7 +1734,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       case 'wow': {
         if (showing !== '' && lastRegion && trail.at(-1)?.kind === 'region') {
           const tone = toneOf(lastRegion.d);
-          talkOnly(tone === 'good' ? line('wowGood', { n: lastRegion.name }) : tone === 'bad' ? line('wowBad', { n: lastRegion.name }) : line('wow'), tone === 'bad' ? 'sad' : 'happy');
+          talkOnly(tone === 'good' ? line('wowGood', { n: lastRegion.name }) : tone === 'bad' ? line('wowBad', { n: lastRegion.name }) : line('wow'), tone === 'bad' ? 'worried' : 'excited');
           return;
         }
         talkOnly(line('wow'), 'surprised');
@@ -1863,15 +1923,14 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         const said = (cmd.text.match(/\b(pagi|siang|sore|malam)\b/) || [])[1];
         const now = partOfDay();
         const nm = pref.name ? `, ${pref.name}` : '';
-        const hello = said && said !== now
+        const hello = Date.now() - helloAt < 90000 && !said ? `${pickOne(['Hai juga', 'Halo juga'])}${nm}!`
+          : said && said !== now
           ? `Selamat ${said} juga${nm}. Eh, sekarang ${PARTS.indexOf(said) > PARTS.indexOf(now) ? 'masih' : 'sudah'} ${now} lho, hehe.`
           : `${salam()}${nm}.`;
         const flavor = dayFlavor();
-        reply(esc(`${hello} ${pickOne(['Ada yang bisa saya bantu?', 'Mau lihat apa hari ini?', 'Senang ketemu lagi. Mau mulai dari mana?'])}`), {
-          lines: [flavor, ask ? 'Oh iya, mau dipanggil siapa? Bilang saja, misalnya, "panggil saya Pak Andi".' : 'Contoh: "briefing hari ini", "lihat Bandung", atau "kabar baik hari ini apa".'].filter(Boolean).map(esc),
-          next: HINTS, mood: 'happy', keep: false,
-          speakText: `${hello} ${flavor} ${pickOne(['Ada yang bisa saya bantu?', 'Mau lihat apa hari ini?', 'Mau mulai dari mana?'])}`,
-        });
+        const q = ask ? 'Oh iya, mau dipanggil siapa?' : pickOne(['Ada yang bisa saya bantu?', 'Mau lihat data apa hari ini?', 'Senang ketemu lagi. Mau mulai dari mana?']);
+        const greeting = [hello, flavor, q].filter(Boolean).join(' ');
+        reply(esc(greeting), { lines: ask ? [esc('Bilang saja, misalnya, "panggil saya Pak Andi".')] : [], next: HINTS, mood: 'wave', keep: false, speakText: greeting });
         return;
       }
       case 'sumber': set({ sumber: cmd.mode === '7' ? '' : cmd.mode }); reply(`Siap, realisasi sekarang memakai ${esc(cmd.mode)} sumber.`, { mood: 'happy', keep: false }); return;
@@ -1942,7 +2001,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         ...(a.followups || []).filter((f) => typeof f === 'string'),
       ].slice(0, 3);
       const failed = a.ok === false;
-      if (failed && loose) { lastUserMsg?.remove(); lastUserMsg = null; showHeard(text, false); setPhase(pref.wake ? 'listen' : 'idle'); return; }
+      if (failed && loose) { lastUserMsg?.remove(); lastUserMsg = null; $('va-say').classList.remove('typing'); showHeard(text, false); setPhase(pref.wake ? 'listen' : 'idle'); return; }
       if (failed) {
         const said = String(text).trim().slice(0, 140);
         const list = readMiss().filter((x) => x.t !== said);
@@ -1952,7 +2011,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       if (failed) ding('oops');
       const title = a.title || 'Belum ada jawaban.';
       if (!failed && ros.length === 1 && Math.random() < 0.6) offer = { say: `Lihat ${shortRo(ros[0])}`, ask: `Mau saya tampilkan kondisi lengkap ${shortRo(ros[0])}?` };
-      if (!failed && !offer && Math.random() < 0.55) {
+      if (!failed && !offer) {
         const f = (a.followups || []).find((x) => typeof x === 'string' && x.length < 70);
         if (f) offer = { say: f, ask: line('askMore', { f: lowerFirst(f.replace(/[?.!]+$/, '')) }) };
       }

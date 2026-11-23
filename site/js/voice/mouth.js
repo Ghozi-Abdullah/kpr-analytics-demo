@@ -1,6 +1,5 @@
 export const REST = [0, 1, 0, 0];
-export const SILENT = [0, 0, 0, 0, 0];
-const QUIET = [...REST, ...SILENT];
+const QUIET = [...REST, 0, 0, 0, 0, 0];
 
 const VOWEL = {
   a: [0.92, 1, 0, 0, 1, 0, 0, 0, 0],
@@ -194,4 +193,3 @@ function lookAt(plan, units) {
 }
 
 export const mouthAt = (plan, units) => lookAt(plan, units).slice(0, 4);
-export const visemeAt = (plan, units) => lookAt(plan, units).slice(4);
