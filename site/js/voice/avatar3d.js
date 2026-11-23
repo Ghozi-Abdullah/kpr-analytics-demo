@@ -1,11 +1,19 @@
+import { REST, mouthAt } from './mouth.js';
+
 const PAD_X = 0.06;
 const PAD_TOP = 0.08;
 const FOCUS = 0.42;
 const DEPTH_PUSH = 0.05;
 const FADE_MS = 360;
-const LIPS_AT = [0.537, 0.62];
-const LIPS_SIZE = [0.09, 0.057];
-const LIP_FACES = ['idle', 'talk', 'grin', 'wow'];
+const MOUTH_RECT = [0.4318, 0.5530, 0.2197, 0.1439];
+const MOUTH_HOLE = [0.4914, 0.4737, 0.3793, 0.3289];
+const MOUTH_HOME = [0.4914, 0.3947];
+const MOUTH_OPEN = [0.5172, 0.3684];
+const MOUTH_ROUND = [0.5086, 0.3158];
+const ROUND_FIT = [1.6000, 1.0588];
+const MOUTH_TILE_PX = 38;
+const g = (n) => Number(n).toFixed(4);
+const v2 = (a) => `vec2(${g(a[0])}, ${g(a[1])})`;
 
 const VERT = `attribute vec2 pos;
 varying vec2 uv;
@@ -27,13 +35,19 @@ uniform float roll;
 uniform float lift;
 uniform float zoom;
 uniform vec4 frame;
-uniform sampler2D lipsM;
-uniform sampler2D lipsA;
-uniform sampler2D lipsE;
-uniform sampler2D lipsO;
-uniform vec4 lips;
+uniform sampler2D mouthTex;
+uniform vec4 mouth;
+uniform float talkMix;
 
 float zAt(vec2 p) { return texture2D(depth, p).r; }
+
+vec4 tile(float i, vec2 q) {
+  if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec4(0.0);
+  float edge = 0.5 / ${MOUTH_TILE_PX}.0;
+  return texture2D(mouthTex, vec2(q.x, (i + clamp(q.y, edge, 1.0 - edge)) / 4.0));
+}
+
+vec2 reach(vec2 q, vec2 from, vec2 scale) { return from + (q - ${v2(MOUTH_HOME)}) / scale; }
 
 void main() {
   vec2 q = (uv - frame.xy) * frame.zw;
@@ -48,14 +62,17 @@ void main() {
   for (int i = 0; i < 3; i++) p = q - tilt * (zAt(p) - ${FOCUS.toFixed(2)}) * ${DEPTH_PUSH.toFixed(3)};
   if (p.x < 0.0 || p.y < 0.0 || p.x > 1.0 || p.y > 1.0) { gl_FragColor = vec4(0.0); return; }
   vec4 col = mix(mix(texture2D(faceA, p), texture2D(faceB, p), blendAB), texture2D(faceC, p), blendC);
-  float open = lips.x + lips.y + lips.z + lips.w;
-  if (open > 0.002) {
-    float r = length((p - vec2(${LIPS_AT[0]}, ${LIPS_AT[1]})) / vec2(${LIPS_SIZE[0]}, ${LIPS_SIZE[1]}));
-    float m = smoothstep(1.35, 0.75, r);
-    if (m > 0.0) {
-      vec4 shape = texture2D(lipsM, p) * lips.x + texture2D(lipsA, p) * lips.y + texture2D(lipsE, p) * lips.z + texture2D(lipsO, p) * lips.w;
-      col = mix(col, shape + col * max(0.0, 1.0 - open), m);
-    }
+  vec2 mq = (p - vec2(${g(MOUTH_RECT[0])}, ${g(MOUTH_RECT[1])})) / vec2(${g(MOUTH_RECT[2])}, ${g(MOUTH_RECT[3])});
+  if (talkMix > 0.001 && mq.x >= 0.0 && mq.y >= 0.0 && mq.x <= 1.0 && mq.y <= 1.0) {
+    float hole = 1.0 - smoothstep(0.85, 1.15, length((mq - vec2(${g(MOUTH_HOLE[0])}, ${g(MOUTH_HOLE[1])})) / vec2(${g(MOUTH_HOLE[2])}, ${g(MOUTH_HOLE[3])})));
+    float shut = 1.0 - smoothstep(0.08, 0.24, mouth.x);
+    float gape = max(mouth.x, 0.12);
+    vec4 closed = tile(1.0, reach(mq, ${v2(MOUTH_HOME)}, vec2(mouth.y * (1.0 - 0.12 * mouth.z), 1.0 - 0.3 * mouth.z)));
+    vec4 wide = tile(2.0, reach(mq, ${v2(MOUTH_OPEN)}, vec2(mouth.y, gape)));
+    vec4 pursed = tile(3.0, reach(mq, ${v2(MOUTH_ROUND)}, vec2(mouth.y * ${g(ROUND_FIT[0])}, gape * ${g(ROUND_FIT[1])})));
+    vec4 lips = closed * shut + mix(wide, pursed, mouth.w) * (1.0 - shut);
+    vec4 mouthCol = lips + tile(0.0, mq) * (1.0 - lips.a);
+    col = mix(col, mouthCol, max(hole, lips.a) * talkMix);
   }
   gl_FragColor = col;
 }`;
@@ -76,24 +93,7 @@ const BODY = {
 const BASE = { talk: 'smile', blink: 'idle' };
 const ALT = { idle: 'blink' };
 
-const LIP = { a: 1, i: 2, e: 2, o: 3, u: 3, m: 0, b: 0, p: 0 };
-const NEAR = { w: [3, 0.7], f: [2, 0.4], v: [2, 0.4], y: [2, 0.5] };
-const QUIET = /[\s.,!?;:]/;
-
-function lipTarget(text, index) {
-  const w = [0, 0, 0, 0];
-  const ch = String(text[index] || ' ').toLowerCase();
-  if (QUIET.test(ch)) return w;
-  if (ch in LIP) { w[LIP[ch]] = 1; return w; }
-  if (ch in NEAR) { const [k, v] = NEAR[ch]; w[k] = v; return w; }
-  for (let j = index + 1; j < Math.min(text.length, index + 3); j += 1) {
-    const n = String(text[j]).toLowerCase();
-    if (QUIET.test(n)) break;
-    if (LIP[n] > 0) { w[LIP[n]] = 0.55; return w; }
-  }
-  w[1] = 0.3;
-  return w;
-}
+const MOUTH_RATE = [[26, 34], [16, 16], [34, 22], [14, 14]];
 
 const urlOf = (value) => (String(value || '').match(/url\(\s*["']?(.*?)["']?\s*\)/) || [])[1] || '';
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -137,13 +137,14 @@ export function mountAvatar3d(orb, { voiceLevel = () => -1, voiceCue = () => nul
   canvas.className = 'kira-3d';
   canvas.setAttribute('aria-hidden', 'true');
   const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: 'low-power' });
-  if (!gl || gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) < 8) return null;
+  if (!gl || gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) < 5) return null;
   const prog = program(gl);
   if (!prog) return null;
 
   const calm = matchMedia('(prefers-reduced-motion: reduce)');
   const faces = new Map();
   let depthTex = null;
+  let mouthTex = null;
   let ready = false;
   let running = false;
   let raf = 0;
@@ -153,7 +154,8 @@ export function mountAvatar3d(orb, { voiceLevel = () => -1, voiceCue = () => nul
   const view = { a: 'idle', b: 'blink', c: 'idle', target: 'idle', ab: 0, fade: 0, fadeFrom: 0, fading: false };
   let pose = 'idle';
   let mouth = 0;
-  const lips = [0, 0, 0, 0];
+  const lips = [...REST];
+  let talkMix = 0;
   let talkFrom = 0;
   let listen = 0;
   let blinkAt = 0;
@@ -168,13 +170,13 @@ export function mountAvatar3d(orb, { voiceLevel = () => -1, voiceCue = () => nul
   const at = gl.getAttribLocation(prog, 'pos');
   gl.enableVertexAttribArray(at);
   gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(['faceA', 'faceB', 'faceC', 'depth', 'blendAB', 'blendC', 'tilt', 'roll', 'lift', 'zoom', 'frame', 'lipsM', 'lipsA', 'lipsE', 'lipsO', 'lips']
+  const u = Object.fromEntries(['faceA', 'faceB', 'faceC', 'depth', 'blendAB', 'blendC', 'tilt', 'roll', 'lift', 'zoom', 'frame', 'mouthTex', 'mouth', 'talkMix']
     .map((k) => [k, gl.getUniformLocation(prog, k)]));
   gl.uniform1i(u.faceA, 0);
   gl.uniform1i(u.faceB, 1);
   gl.uniform1i(u.faceC, 2);
   gl.uniform1i(u.depth, 3);
-  ['lipsM', 'lipsA', 'lipsE', 'lipsO'].forEach((k, i) => gl.uniform1i(u[k], 4 + i));
+  gl.uniform1i(u.mouthTex, 4);
   gl.uniform4f(u.frame, PAD_X / (1 + 2 * PAD_X), PAD_TOP / (1 + PAD_TOP), 1 + 2 * PAD_X, 1 + PAD_TOP);
   gl.clearColor(0, 0, 0, 0);
 
@@ -193,11 +195,14 @@ export function mountAvatar3d(orb, { voiceLevel = () => -1, voiceCue = () => nul
 
   async function load() {
     const names = [...blob.querySelectorAll('.kira-pose')].map((el) => [el.className.match(/kira-(\w+)$/)?.[1], urlOf(getComputedStyle(el).backgroundImage)]);
-    const depthUrl = urlOf(getComputedStyle(orb).getPropertyValue('--kira-depth'));
-    if (!depthUrl || names.some(([n, src]) => !n || !src)) return false;
-    const [depthImg, ...imgs] = await Promise.all([loadImage(depthUrl), ...names.map(([, src]) => loadImage(src))]);
+    const css = getComputedStyle(orb);
+    const depthUrl = urlOf(css.getPropertyValue('--kira-depth'));
+    const mouthUrl = urlOf(css.getPropertyValue('--kira-mouth'));
+    if (!depthUrl || !mouthUrl || names.some(([n, src]) => !n || !src)) return false;
+    const [depthImg, mouthImg, ...imgs] = await Promise.all([loadImage(depthUrl), loadImage(mouthUrl), ...names.map(([, src]) => loadImage(src))]);
     if (gl.isContextLost()) return false;
     depthTex = texture(depthImg);
+    mouthTex = texture(mouthImg);
     names.forEach(([n], i) => faces.set(n, texture(imgs[i])));
     return true;
   }
@@ -240,29 +245,29 @@ export function mountAvatar3d(orb, { voiceLevel = () => -1, voiceCue = () => nul
       if (view.fade >= 1) { view.a = view.c; view.b = altOf(pose); view.ab = 0; view.fade = 0; view.fading = false; }
     }
 
-    let shape = [0, 0, 0, 0];
-    if (pose === 'talk') {
+    let shape = REST;
+    const talking = pose === 'talk';
+    if (talking) {
       const live = voiceLevel();
       const cue = voiceCue();
-      if (cue) {
-        shape = lipTarget(cue.text, cue.index);
-        if (live >= 0) {
-          const open = smooth(0.04, 0.3, clamp(live * 4, 0, 1));
-          shape = shape.map((v, k) => (k === 0 ? v : v * (0.35 + 0.65 * open)));
-          if (live < 0.008) shape = [0, 0, 0, 0];
-        }
+      if (cue?.plan) {
+        shape = mouthAt(cue.plan, cue.units);
+        if (live >= 0 && live < 0.008) shape = REST;
+        else if (live >= 0) shape = [shape[0] * (0.55 + 0.45 * smooth(0.04, 0.3, clamp(live * 4, 0, 1))), shape[1], shape[2], shape[3]];
       } else {
         const t = clock - talkFrom;
         const beat = Math.max(0, Math.sin(t * 2 * Math.PI * 4.1 + Math.sin(t * 1.7) * 1.6));
         const phrase = 0.72 + 0.28 * Math.cos(t * 1.3);
-        shape[1] = live >= 0 ? smooth(0.12, 0.5, clamp(live * 4, 0, 1)) : smooth(0.15, 0.7, beat ** 0.7 * phrase);
+        const open = live >= 0 ? smooth(0.12, 0.5, clamp(live * 4, 0, 1)) : smooth(0.15, 0.7, beat ** 0.7 * phrase);
+        shape = [open * 0.8, 1, 0, 0];
       }
     }
     for (let k = 0; k < 4; k += 1) {
-      const rate = shape[k] > lips[k] ? 30 : 18;
-      lips[k] += (shape[k] - lips[k]) * Math.min(1, rate * dt);
+      const [up, down] = MOUTH_RATE[k];
+      lips[k] += (shape[k] - lips[k]) * Math.min(1, (shape[k] > lips[k] ? up : down) * dt);
     }
-    mouth = lips[1] + lips[2] * 0.8 + lips[3] * 0.7;
+    talkMix += ((talking ? 1 : 0) - talkMix) * Math.min(1, (talking ? 14 : 8) * dt);
+    mouth = lips[0];
 
     let blink = 0;
     if (baseOf(pose) === 'idle' && !view.fading) {
@@ -302,11 +307,12 @@ export function mountAvatar3d(orb, { voiceLevel = () => -1, voiceCue = () => nul
   function draw() {
     fit();
     gl.clear(gl.COLOR_BUFFER_BIT);
-    [view.a, view.b, view.c, null, ...LIP_FACES].forEach((name, i) => {
+    [faces.get(view.a), faces.get(view.b), faces.get(view.c), depthTex, mouthTex].forEach((tex, i) => {
       gl.activeTexture(gl.TEXTURE0 + i);
-      gl.bindTexture(gl.TEXTURE_2D, name ? faces.get(name) || faces.get('idle') : depthTex);
+      gl.bindTexture(gl.TEXTURE_2D, tex || faces.get('idle'));
     });
-    gl.uniform4f(u.lips, lips[0], lips[1], lips[2], lips[3]);
+    gl.uniform4f(u.mouth, lips[0], lips[1], lips[2], lips[3]);
+    gl.uniform1f(u.talkMix, talkMix);
     gl.uniform1f(u.blendAB, view.ab);
     gl.uniform1f(u.blendC, view.fading ? view.fade : 0);
     gl.uniform2f(u.tilt, motion.tx.x, motion.ty.x);

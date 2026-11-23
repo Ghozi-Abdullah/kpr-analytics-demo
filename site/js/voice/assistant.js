@@ -5,6 +5,7 @@ import { shiftMonth } from '../core/dates.js';
 import { checkSmooth } from '../core/smooth.js';
 import { speakRemote } from '../services/data-source.js';
 import { roStanding } from '../models/direktur-model.js';
+import { nearSpeech, setMicClean, micClean, micSupport } from './mic.js';
 import { voiceSupport, createRecognizer, speak, hush, createLevel, chime, setCloudSpeaker, setVoice, setRate, setPitch, setVolume, nextVoice, usingCloud, voiceList, findVoice, voiceLevel, voiceCue } from './speech.js';
 import { mountAvatar3d } from './avatar3d.js';
 import { routeCommand, findWake, cleanSpoken, spoken, shortRo, targetOf, WAKE_NAME, WAKE_PHRASE } from './command.js';
@@ -198,7 +199,8 @@ function revealWords(el) {
 }
 
 export function createAssistant({ engine, getContext, set, openDetail, closeDetail }) {
-  const pref = { wake: false, mute: false, voiceId: '', rate: 1, pitch: 1, volume: 1, short: false, name: '', askedName: false, ...readPref() };
+  const pref = { wake: false, mute: false, voiceId: '', rate: 1, pitch: 1, volume: 1, short: false, clean: true, name: '', askedName: false, ...readPref() };
+  setMicClean(pref.clean !== false);
   delete pref.voice;
   setVoice(pref.voiceId);
   setRate(pref.rate);
@@ -654,6 +656,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   }
 
   function onResult({ text, alts, final }) {
+    const strict = mode === 'wake' || mode === 'barge' || speakingNow || autoListen;
+    if (strict && rec.cleaned && !nearSpeech()) return;
     if (speakingNow) {
       if (!interrupts(text, final)) return;
       bargeIn();
@@ -1677,6 +1681,16 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       }
       case 'short': pref.short = true; writePref(pref); talkOnly('Siap, mulai sekarang saya jawab singkat.', 'happy'); return;
       case 'long': pref.short = false; writePref(pref); talkOnly('Baik, saya jawab lengkap lagi.', 'happy'); return;
+      case 'cleanOn':
+      case 'cleanOff':
+      case 'cleanStatus': {
+        const desk = micSupport && matchMedia('(pointer: fine)').matches;
+        if (cmd.type !== 'cleanStatus') { pref.clean = cmd.type === 'cleanOn'; writePref(pref); setMicClean(pref.clean); }
+        if (!desk) { talkOnly('Peredam bising cuma jalan di laptop atau komputer. Di HP, saya pakai peredam bawaan HP.', ''); return; }
+        if (!micClean()) { talkOnly(cmd.type === 'cleanOff' ? 'Oke, peredam bising saya matikan. Semua suara di ruangan ikut saya dengar.' : 'Peredam bising lagi mati. Bilang "nyalakan peredam bising" kalau ruangannya rame.', ''); return; }
+        talkOnly(cmd.type === 'cleanOn' ? 'Siap, peredam bising nyala. Saya cuma dengar suara yang dekat ke mikrofon, obrolan di sekitar saya abaikan.' : 'Peredam bising nyala. Suara jauh dan obrolan sekitar saya abaikan.', 'happy');
+        return;
+      }
       case 'whereAmI': {
         const view = (location.hash.match(/^#\/([a-z]+)/) || [])[1] || 'direktur';
         const ro = c?.sel?.ro || '';

@@ -1,3 +1,6 @@
+import { planSpeech } from './mouth.js';
+import { openMic, releaseMic, micTrack, micReady, micLevel, micSupport } from './mic.js';
+
 const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
 
 export const voiceSupport = {
@@ -6,9 +9,32 @@ export const voiceSupport = {
   level: !!globalThis.navigator?.mediaDevices?.getUserMedia && !!(globalThis.AudioContext || globalThis.webkitAudioContext),
 };
 
+const deskMic = () => micSupport && globalThis.matchMedia?.('(pointer: fine)').matches;
+
 export function createRecognizer({ lang = 'id-ID', onResult, onEnd, onError, onStart }) {
   let rec = null;
   let gen = 0;
+  let feed = null;
+
+  function unfeed() {
+    feed?.stop();
+    feed = null;
+  }
+
+  function launch(r, mine) {
+    if (mine !== gen) return false;
+    unfeed();
+    const track = micTrack()?.clone() || null;
+    try {
+      if (track) { feed = track; r.start(track); } else r.start();
+      return true;
+    } catch {
+      unfeed();
+      if (track) { try { r.start(); return true; } catch {} }
+      if (rec === r) rec = null;
+      return false;
+    }
+  }
 
   function start({ continuous = false } = {}) {
     if (!Recognition) { onError?.('unsupported'); return false; }
@@ -31,17 +57,22 @@ export function createRecognizer({ lang = 'id-ID', onResult, onEnd, onError, onS
     r.onend = () => {
       if (mine !== gen) return;
       rec = null;
+      unfeed();
+      releaseMic('listen');
       onEnd?.();
     };
     rec = r;
-    try {
-      r.start();
-    } catch (err) {
-      rec = null;
-      onError?.('start');
-      return false;
+    if (deskMic()) {
+      const ready = micReady();
+      const opening = openMic('listen');
+      if (!ready) {
+        opening.then(() => { if (!launch(r, mine) && mine === gen) onError?.('start'); });
+        return true;
+      }
     }
-    return true;
+    if (launch(r, mine)) return true;
+    onError?.('start');
+    return false;
   }
 
   function abort() {
@@ -49,9 +80,11 @@ export function createRecognizer({ lang = 'id-ID', onResult, onEnd, onError, onS
     const r = rec;
     rec = null;
     if (r) { try { r.abort(); } catch {} }
+    unfeed();
+    releaseMic('listen');
   }
 
-  return { start, abort, get active() { return !!rec; } };
+  return { start, abort, get active() { return !!rec; }, get cleaned() { return !!feed; } };
 }
 
 const MALE = /andika|ardi|\bmale\b|pria|laki/i;
@@ -189,14 +222,11 @@ let meter = null;
 let meterData = null;
 let cue = null;
 let saidBefore = '';
-const PAUSE = { ' ': 0.6, ',': 4, ';': 4, ':': 4, '.': 6, '!': 6, '?': 6 };
-const MS_PER_UNIT = 62;
+const MS_PER_UNIT = 100;
 
 function makeCue(text, { dur = 0, rate = 1 } = {}) {
-  const cum = [];
-  let total = 0;
-  for (const ch of String(text)) { total += PAUSE[ch] ?? 1; cum.push(total); }
-  return { text: String(text), cum, total, t0: performance.now(), dur, unit: MS_PER_UNIT / Math.max(0.5, rate), anchor: null };
+  const plan = planSpeech(text);
+  return { text: String(text), plan, cum: plan.cum, total: plan.total, t0: performance.now(), dur, unit: MS_PER_UNIT / Math.max(0.5, rate), anchor: null };
 }
 
 function beginCue(text, opts) {
@@ -211,11 +241,11 @@ export function voiceCue() {
   if (cue.anchor) units = (cue.cum[cue.anchor.i - 1] || 0) + (now - cue.anchor.at) / cue.unit;
   else if (cue.dur) units = ((now - cue.t0) / cue.dur) * cue.total;
   else units = (now - cue.t0) / cue.unit;
-  if (units >= cue.total) return { text: cue.text, index: cue.text.length, before: saidBefore };
+  if (units >= cue.total) return { text: cue.text, index: cue.text.length, before: saidBefore, units: cue.total, plan: cue.plan };
   let lo = 0;
   let hi = cue.cum.length - 1;
   while (lo < hi) { const mid = (lo + hi) >> 1; if (cue.cum[mid] < units) lo = mid + 1; else hi = mid; }
-  return { text: cue.text, index: lo, before: saidBefore };
+  return { text: cue.text, index: lo, before: saidBefore, units, plan: cue.plan };
 }
 
 export function voiceLevel() {
@@ -330,40 +360,24 @@ export function chime(kind = 'on') {
 }
 
 export function createLevel(onLevel) {
-  let stream = null;
-  let ctx = null;
   let raf = 0;
-  let level = 0;
   let wanted = false;
+  let frame = 0;
+
+  const loop = () => {
+    raf = requestAnimationFrame(loop);
+    frame += 1;
+    if (frame % 2) return;
+    onLevel(micLevel());
+  };
 
   async function start() {
+    if (wanted) return micReady();
     wanted = true;
-    if (stream || !voiceSupport.level) return !!stream;
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-      if (!wanted) { s.getTracks().forEach((t) => t.stop()); return false; }
-      stream = s;
-    } catch {
-      return false;
-    }
-    const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-    ctx = new AC();
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 512;
-    ctx.createMediaStreamSource(stream).connect(analyser);
-    const data = new Uint8Array(analyser.fftSize);
-    let frame = 0;
-    const loop = () => {
-      raf = requestAnimationFrame(loop);
-      frame += 1;
-      if (frame % 2) return;
-      analyser.getByteTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 1) { const x = (data[i] - 128) / 128; sum += x * x; }
-      const now = Math.min(1, Math.sqrt(sum / data.length) * 5);
-      level = now > level ? level * 0.45 + now * 0.55 : level * 0.82 + now * 0.18;
-      onLevel(level);
-    };
+    if (!voiceSupport.level) return false;
+    const okay = await openMic('meter');
+    if (!wanted || !okay) return false;
+    cancelAnimationFrame(raf);
     loop();
     return true;
   }
@@ -371,11 +385,8 @@ export function createLevel(onLevel) {
   function stop() {
     wanted = false;
     cancelAnimationFrame(raf);
-    stream?.getTracks().forEach((t) => t.stop());
-    ctx?.close().catch(() => null);
-    stream = null;
-    ctx = null;
-    level = 0;
+    raf = 0;
+    releaseMic('meter');
     onLevel(0);
   }
 
