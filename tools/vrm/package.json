@@ -1,0 +1,10 @@
+{
+  "name": "kpr-analytics-vrm",
+  "private": true,
+  "type": "module",
+  "description": "Pustaka model 3D Kirana (three.js + three-vrm), dibundel ke site/lib/vtuber.js oleh tools/build_vrm.mjs",
+  "dependencies": {
+    "three": "0.187.0",
+    "@pixiv/three-vrm": "3.5.5"
+  }
+}

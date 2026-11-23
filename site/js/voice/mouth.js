@@ -1,23 +1,27 @@
 export const REST = [0, 1, 0, 0];
+export const SILENT = [0, 0, 0, 0, 0];
+const QUIET = [...REST, ...SILENT];
 
 const VOWEL = {
-  a: [0.92, 1, 0, 0],
-  i: [0.34, 1.1, 0, 0],
-  e: [0.52, 1.06, 0, 0],
-  E: [0.62, 1.04, 0, 0],
-  '@': [0.44, 0.95, 0, 0],
-  o: [0.76, 0.66, 0, 1],
-  u: [0.46, 0.5, 0, 1],
+  a: [0.92, 1, 0, 0, 1, 0, 0, 0, 0],
+  i: [0.34, 1.1, 0, 0, 0, 1, 0, 0, 0],
+  e: [0.52, 1.06, 0, 0, 0, 0, 0, 1, 0],
+  E: [0.62, 1.04, 0, 0, 0.3, 0, 0, 0.8, 0],
+  '@': [0.44, 0.95, 0, 0, 0.25, 0.1, 0, 0.45, 0],
+  o: [0.76, 0.66, 0, 1, 0, 0, 0, 0, 1],
+  u: [0.46, 0.5, 0, 1, 0, 0, 1, 0, 0],
 };
+const GLIDE_Y = [0.24, 1.04, 0, 0, 0, 0.5, 0, 0.1, 0];
+const GLIDE_W = [0.3, 0.52, 0, 1, 0, 0, 0.7, 0, 0];
 
 const CONSONANT = [
-  [/^[mbp]$/, [0, 0.92, 1, 0], 0, 0.5],
-  [/^[fv]$/, [0.14, 0.98, 0, 0], 0.2, 0.45],
-  [/^w$/, [0.3, 0.5, 0, 1], 0.2, 0.4],
-  [/^(c|j|sy)$/, [0.22, 0.94, 0, 0.3], 0.3, 0.46],
-  [/^(s|z|y|ny)$/, [0.22, 1.03, 0, 0], 0.35, 0.44],
-  [/^[tdnlr]$/, [0.3, 1, 0, 0], 0.55, 0.4],
-  [/^(k|g|ng|kh|h)$/, [0.4, 1, 0, 0], 0.85, 0.42],
+  [/^[mbp]$/, [0, 0.92, 1, 0, 0, 0, 0, 0, 0], 0, 0.5],
+  [/^[fv]$/, [0.14, 0.98, 0, 0, 0, 0.2, 0, 0.1, 0], 0.2, 0.45],
+  [/^w$/, [0.3, 0.5, 0, 1, 0, 0, 0.85, 0, 0], 0.2, 0.4],
+  [/^(c|j|sy)$/, [0.22, 0.94, 0, 0.3, 0, 0.2, 0.25, 0.1, 0], 0.3, 0.46],
+  [/^(s|z|y|ny)$/, [0.22, 1.03, 0, 0, 0, 0.35, 0, 0.15, 0], 0.35, 0.44],
+  [/^[tdnlr]$/, [0.3, 1, 0, 0, 0.15, 0.1, 0, 0.2, 0], 0.55, 0.4],
+  [/^(k|g|ng|kh|h)$/, [0.4, 1, 0, 0, 0.2, 0, 0, 0.1, 0], 0.85, 0.42],
 ];
 
 const DIGRAPH = new Set(['kh', 'ng', 'ny', 'sy']);
@@ -103,7 +107,7 @@ function wordPhones(word) {
         continue;
       }
       phones.push({ at, n: ch.length, d: 1, shape: VOWEL[v], vowel: true });
-      if (next && isVowel(next.ch)) phones.push({ at: next.at, n: 0, d: GLIDE, shape: 'iEe@'.includes(v) ? [0.24, 1.04, 0, 0] : [0.3, 0.52, 0, 1] });
+      if (next && isVowel(next.ch)) phones.push({ at: next.at, n: 0, d: GLIDE, shape: 'iEe@'.includes(v) ? GLIDE_Y : GLIDE_W });
       continue;
     }
     for (const part of ch === 'ks' ? ['k', 's'] : [ch]) {
@@ -121,7 +125,7 @@ function wordPhones(word) {
     const ref = onset ? phones[nextV] : prevV !== undefined ? phones[prevV] : null;
     const target = ref ? (onset && ref.from ? ref.from : ref.shape) : VOWEL['@'];
     p.shape = mix(p.own, target, p.coart);
-    if (p.own[2] === 1) p.shape = [0, p.shape[1], 1, target[3] * 0.5];
+    if (p.own[2] === 1) p.shape = [0, p.shape[1], 1, target[3] * 0.5, 0, 0, 0, 0, 0];
   }
   return phones;
 }
@@ -160,7 +164,7 @@ export function planSpeech(text) {
       continue;
     }
     const pause = PAUSE[tok];
-    if (pause) { phones.push({ s: t, d: pause, shape: REST }); t += pause; } else t += tok === ' ' ? GAP : 0.3;
+    if (pause) { phones.push({ s: t, d: pause, shape: QUIET }); t += pause; } else t += tok === ' ' ? GAP : 0.3;
     cum[start] = t;
   }
   return { cum, total: t, phones };
@@ -168,23 +172,26 @@ export function planSpeech(text) {
 
 const ease = (x) => x * x * (3 - 2 * x);
 
-export function mouthAt(plan, units) {
+function lookAt(plan, units) {
   const list = plan?.phones;
-  if (!list?.length) return REST;
+  if (!list?.length) return QUIET;
   const u = units + LEAD;
-  if (u >= plan.total) return REST;
+  if (u >= plan.total) return QUIET;
   let lo = 0;
   let hi = list.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (list[mid].s <= u) lo = mid; else hi = mid - 1; }
   const p = list[lo];
-  if (u < p.s) return REST;
+  if (u < p.s) return QUIET;
   const local = (u - p.s) / p.d;
   if (local >= 1) {
     const next = list[lo + 1];
-    if (!next) return REST;
+    if (!next) return QUIET;
     const gap = Math.max(1e-3, next.s - (p.s + p.d));
     return mix(p.shape, next.from || next.shape, ease(Math.min(1, (u - p.s - p.d) / gap)));
   }
   if (p.from) return mix(p.from, p.shape, ease(Math.min(1, Math.max(0, (local - 0.25) / 0.75))));
   return p.shape;
 }
+
+export const mouthAt = (plan, units) => lookAt(plan, units).slice(0, 4);
+export const visemeAt = (plan, units) => lookAt(plan, units).slice(4);

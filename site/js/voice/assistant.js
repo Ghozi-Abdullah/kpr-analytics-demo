@@ -6,6 +6,7 @@ import { checkSmooth } from '../core/smooth.js';
 import { speakRemote } from '../services/data-source.js';
 import { roStanding } from '../models/direktur-model.js';
 import { nearSpeech, setMicClean, micClean, micSupport } from './mic.js';
+import { visemeAt } from './mouth.js';
 import { voiceSupport, createRecognizer, speak, hush, createLevel, chime, setCloudSpeaker, setVoice, setRate, setPitch, setVolume, nextVoice, usingCloud, voiceList, findVoice, voiceLevel, voiceCue } from './speech.js';
 import { mountAvatar3d } from './avatar3d.js';
 import { routeCommand, findWake, cleanSpoken, spoken, shortRo, targetOf, WAKE_NAME, WAKE_PHRASE } from './command.js';
@@ -131,6 +132,11 @@ const readMiss = () => { try { const v = JSON.parse(localStorage.getItem(MISS_KE
 const writeMiss = (list) => { try { localStorage.setItem(MISS_KEY, JSON.stringify(list.slice(-MISS_MAX))); } catch {} };
 const readPref = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch { return {}; } };
 const writePref = (p) => { try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch {} };
+const VRM_LIB = 'lib/vtuber.js';
+const VRM_SCREEN = '(min-width: 1000px) and (pointer: fine)';
+const CHAT_SCREEN = '(min-width: 1100px) and (min-height: 620px)';
+const LOG_MAX = 60;
+const DOCK_MS = 620;
 const plain = (html) => String(html || '').replace(/<(br|\/p|\/li|\/div|\/h\d)[^>]*>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
 const shorten = (text) => {
   const parts = String(text).split(/(?<=[.!?])\s+/).filter(Boolean);
@@ -250,6 +256,10 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let launcher = null;
   let orbEl = null;
   let avatar = null;
+  let model = null;
+  let modelLoading = null;
+  let lastUserMsg = null;
+  let logStick = true;
   let phase = 'idle';
   let mode = 'off';
   let speakingUntil = 0;
@@ -269,6 +279,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   const early = { timer: 0, text: '', done: '' };
   const $ = (id) => dlg?.querySelector(`#${id}`);
   const level = createLevel((v) => { orbEl?.style.setProperty('--lvl', v.toFixed(3)); avatar?.listen(v); });
+  const figure = () => model || avatar;
   const rec = createRecognizer({ onResult, onEnd, onError, onStart: () => { quickEnds = 0; } });
   const ding = (kind) => { if (!pref.mute) chime(kind); };
   const regions = () => getContext()?.pm?.regions || [];
@@ -289,17 +300,25 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
 
       <div class="va-stage" id="va-stage"></div>
       <div class="va-dock">
-        <p class="va-heard" id="va-heard" aria-live="polite"></p>
-        <button class="va-orb" type="button" id="va-orb" aria-label="Bicara ke ${esc(WAKE_NAME)}"><span class="halo" aria-hidden="true"></span>${orbHtml()}${FX}</button>
-        <p class="va-status" id="va-status" role="status"></p>
-        <form class="va-type" id="va-type">
-          <input id="va-input" type="text" autocomplete="off" enterkeyhint="send" placeholder="Ketik perintah, misalnya: lihat Bandung" aria-label="Perintah untuk ${esc(WAKE_NAME)}">
-          <button type="submit" aria-label="Kirim">${icon('send', 16)}</button>
-        </form>
-        <div class="va-next" id="va-next"></div>
+        <section class="va-chat" id="va-chat" aria-label="Obrolan dengan ${esc(WAKE_NAME)}">
+          <div class="va-log" id="va-log" role="log" aria-label="Riwayat obrolan" tabindex="0"></div>
+          <p class="va-heard" id="va-heard" aria-live="polite"></p>
+          <div class="va-next" id="va-next"></div>
+          <form class="va-type" id="va-type">
+            <input id="va-input" type="text" autocomplete="off" enterkeyhint="send" placeholder="Ketik perintah, misalnya: lihat Bandung" aria-label="Perintah untuk ${esc(WAKE_NAME)}">
+            <button type="submit" aria-label="Kirim">${icon('send', 16)}</button>
+          </form>
+        </section>
+        <div class="va-me">
+          <p class="va-status" id="va-status" role="status"></p>
+          <button class="va-orb" type="button" id="va-orb" aria-label="Bicara ke ${esc(WAKE_NAME)}"><span class="halo" aria-hidden="true"></span>${orbHtml()}${FX}</button>
+        </div>
       </div>`;
     document.body.append(dlg);
     orbEl = $('va-orb');
+    const log = $('va-log');
+    log.addEventListener('scroll', () => { logStick = log.scrollHeight - log.scrollTop - log.clientHeight < 40; }, { passive: true });
+    new ResizeObserver(() => { if (logStick) log.scrollTop = log.scrollHeight; }).observe(log);
     avatar = mountAvatar3d(orbEl, { voiceLevel, voiceCue, lite: () => document.documentElement.classList.contains('fx-lite') });
     suggest(HINTS);
     dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
@@ -329,7 +348,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       const dy = (e.clientY - (r.top + r.height / 2)) / 320;
       orbEl.style.setProperty('--lx', Math.max(-1, Math.min(1, dx)).toFixed(3));
       orbEl.style.setProperty('--ly', Math.max(-1, Math.min(1, dy)).toFixed(3));
-      avatar?.look(dx, dy);
+      figure()?.look(dx, dy);
     });
     awake();
   }
@@ -434,7 +453,9 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     build();
     if (!dlg.open) {
       dlg.showModal();
-      avatar?.start();
+      dlg.dataset.layout = 'intro';
+      figure()?.start();
+      loadModel();
       setStage(showing || $('va-stage').childElementCount ? 'show' : 'empty');
       checkSmooth();
       setMood('surprised', 800);
@@ -462,7 +483,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     speakingNow = false;
     clearTimeout(autoTimer);
     dlg.close();
-    avatar?.stop();
+    figure()?.stop();
     clearStage();
     $('va-heard').textContent = '';
     suggest(HINTS);
@@ -471,6 +492,62 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     clearTimeout(sleepTimer);
     if (pref.wake) startWake();
     syncPills();
+  }
+
+  function loadModel() {
+    const src = document.documentElement.dataset.vrm;
+    if (model || modelLoading || !src || !orbEl || !window.WebGL2RenderingContext || !matchMedia(VRM_SCREEN).matches) return;
+    const lite = () => document.documentElement.classList.contains('fx-lite');
+    modelLoading = import(new URL(VRM_LIB, document.baseURI).href)
+      .then(({ mountVtuber }) => mountVtuber(orbEl, { url: new URL(src, document.baseURI).href, voiceLevel, voiceCue, visemeAt, lite }))
+      .then((m) => {
+        model = m;
+        avatar?.stop();
+        orbEl.classList.add('is-vrm');
+        if (isOpen()) model.start();
+      })
+      .catch((err) => { console.warn('Model 3D Kirana tidak dimuat:', err?.message || err); });
+  }
+
+  function chatWanted() {
+    return matchMedia(CHAT_SCREEN).matches;
+  }
+
+  function dock() {
+    if (!dlg || dlg.dataset.layout === 'chat' || !chatWanted()) return;
+    const orb = $('va-orb');
+    const chat = $('va-chat');
+    const from = orb.getBoundingClientRect();
+    dlg.dataset.layout = 'chat';
+    scrollLog(true);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const to = orb.getBoundingClientRect();
+    const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+    const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+    const k = from.width / Math.max(1, to.width);
+    orb.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${k})` }, { transform: 'none' }], { duration: DOCK_MS, easing: 'cubic-bezier(.2, .8, .2, 1)' });
+    chat.animate([{ opacity: 0, transform: 'translateX(32px)' }, { opacity: 1, transform: 'none' }], { duration: DOCK_MS * 0.8, delay: DOCK_MS * 0.35, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'backwards' });
+  }
+
+  function scrollLog(force = false) {
+    const log = $('va-log');
+    if (!log) return;
+    if (force) logStick = true;
+    if (logStick) log.scrollTop = log.scrollHeight;
+  }
+
+  function logMsg(who, text) {
+    if (!dlg) return null;
+    const clean = plain(text);
+    if (!clean) return null;
+    const log = $('va-log');
+    const msg = document.createElement('p');
+    msg.className = `va-msg ${who}`;
+    msg.textContent = clean;
+    log.append(msg);
+    while (log.childElementCount > LOG_MAX) log.firstElementChild.remove();
+    scrollLog(who === 'me');
+    return msg;
   }
 
   function clearStage() {
@@ -748,6 +825,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   function say(text, { after, full = false } = {}) {
     if (prefix && text) text = `${prefix} ${text}`;
     prefix = '';
+    if (text && isOpen()) { logMsg('kira', text); dock(); }
     const asking = /\?\s*$/.test(plain(text));
     const done = () => {
       after?.();
@@ -1513,6 +1591,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     clearTimeout(autoTimer);
     awake();
     if (!isOpen()) open({ listenNow: false, focusInput: typed });
+    lastUserMsg = inner ? null : logMsg('me', text);
+    if (!inner) dock();
     if (mode === 'command' || mode === 'barge') { rec.abort(); mode = 'off'; }
     autoListen = false;
     hush();
@@ -1540,7 +1620,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     lastKind = cmd.type;
     const onStage = !!showing || !!$('va-stage')?.childElementCount;
     switch (cmd.type) {
-      case 'none': setPhase('idle'); return;
+      case 'none': lastUserMsg?.remove(); lastUserMsg = null; setPhase('idle'); return;
       case 'yes':
         offer = null;
         if (pending) { handle(pending.say, { inner: true }); return; }
@@ -1862,7 +1942,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         ...(a.followups || []).filter((f) => typeof f === 'string'),
       ].slice(0, 3);
       const failed = a.ok === false;
-      if (failed && loose) { showHeard(text, false); setPhase(pref.wake ? 'listen' : 'idle'); return; }
+      if (failed && loose) { lastUserMsg?.remove(); lastUserMsg = null; showHeard(text, false); setPhase(pref.wake ? 'listen' : 'idle'); return; }
       if (failed) {
         const said = String(text).trim().slice(0, 140);
         const list = readMiss().filter((x) => x.t !== said);

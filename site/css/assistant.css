@@ -459,11 +459,65 @@
   .voice-assistant[data-stage="show"] .va-type { justify-self: stretch; width: auto; }
   .va-launch .t small { display: none; }
 }
+.va-chat, .va-me { display: contents; }
+.va-heard { order: 1; }
+.va-orb { order: 2; }
+.va-status { order: 3; }
+.va-type { order: 4; }
+.va-next { order: 5; }
+.va-log { display: none; }
+.va-orb .kira-vrm { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
+.va-orb.is-vrm { width: calc(var(--orb) * 1.05); height: calc(var(--orb) * 1.3); border-radius: 28px; }
+.va-orb.is-vrm .blob, .va-orb.is-vrm .kira-3d, .va-orb.is-vrm .fx { display: none; }
+.va-orb.is-vrm .halo { inset: 8% -6% -4%; border-radius: 45%; }
+.voice-assistant:not([data-layout="chat"])[data-stage="empty"] .va-orb.is-vrm { --orb: 230px; }
+
+@media (min-width: 1100px) and (min-height: 620px) {
+  .voice-assistant[data-layout="chat"][open] {
+    --orb: 176px;
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 27vw, 430px); grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "top top" "stage dock";
+  }
+  .voice-assistant[data-layout="chat"] .va-top { grid-area: top; }
+  .voice-assistant[data-layout="chat"] .va-stage { grid-area: stage; padding: 0 12px 20px clamp(14px, 2.4vw, 32px); }
+  .voice-assistant[data-layout="chat"] .va-dock { grid-area: dock; display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 0 clamp(14px, 2vw, 28px) 16px 4px; }
+  .voice-assistant[data-layout="chat"] .va-chat {
+    display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; padding: 14px 12px 12px; border-radius: 22px;
+    background: rgb(255 255 255 / .9); box-shadow: inset 0 0 0 1px rgb(11 33 71 / .08), 0 22px 44px -30px rgb(11 33 71 / .5);
+  }
+  .voice-assistant[data-layout="chat"] .va-log {
+    display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; margin: 0; padding: 2px 4px 6px;
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgb(11 33 71 / .2) transparent;
+  }
+  .voice-assistant[data-layout="chat"] .va-log:focus-visible { outline: 2px solid var(--cakrawala); outline-offset: 2px; border-radius: 12px; }
+  .va-msg { max-width: 86%; margin: 0; padding: 9px 13px; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; animation: va-msg .28s cubic-bezier(.2, .8, .2, 1) both; }
+  .va-msg.me { align-self: flex-end; border-radius: 18px 18px 6px 18px; background: var(--nusantara); color: #fff; box-shadow: 0 6px 16px -10px rgb(8 87 195 / .6); }
+  .va-msg.kira { align-self: flex-start; border-radius: 6px 18px 18px 18px; background: #F2F6FC; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(11 33 71 / .06); }
+  .voice-assistant[data-layout="chat"] .va-heard { align-self: flex-end; max-width: 86%; min-height: 0; text-align: right; font-size: 13.5px; font-weight: 500; color: var(--muted); }
+  .voice-assistant[data-layout="chat"] .va-heard:empty, .voice-assistant[data-layout="chat"] .va-heard.final { display: none; }
+  .voice-assistant[data-layout="chat"] .va-next { justify-content: flex-start; flex-wrap: wrap; max-width: none; overflow: visible; gap: 6px; }
+  .voice-assistant[data-layout="chat"] .va-next button { flex: none; padding: 5px 11px; font-size: 12.5px; }
+  .voice-assistant[data-layout="chat"] .va-type { width: auto; }
+  .voice-assistant[data-layout="chat"] .va-heard { order: 1; }
+  .voice-assistant[data-layout="chat"] .va-next { order: 2; }
+  .voice-assistant[data-layout="chat"] .va-type { order: 3; }
+  .voice-assistant[data-layout="chat"] .va-me { display: flex; align-items: flex-end; justify-content: flex-end; gap: 12px; flex: none; }
+  .voice-assistant[data-layout="chat"] .va-status { flex: 1 1 auto; max-width: none; min-height: 0; text-align: right; font-size: 12.5px; }
+  .voice-assistant[data-layout="chat"] .va-orb { flex: none; animation: none; }
+  .voice-assistant[data-layout="chat"] .va-orb.is-vrm { --orb: 196px; }
+  @media (max-height: 820px) { .voice-assistant[data-layout="chat"] .va-orb.is-vrm { --orb: 150px; } }
+  .voice-assistant:not([data-layout="chat"])[data-stage="empty"][open] { grid-template-rows: auto minmax(0, 1fr); }
+  .voice-assistant:not([data-layout="chat"])[data-stage="empty"] .va-stage { display: none; }
+  .voice-assistant:not([data-layout="chat"])[data-stage="empty"] .va-dock { align-self: center; padding-bottom: 8vh; }
+}
+@keyframes va-msg { from { opacity: 0; transform: translateY(6px); } }
+
 @media (prefers-reduced-motion: reduce) {
   .blob, .kira-pose, .fx > *, .fx .dots b, .va-orb, .va-orb .halo, .va-launch.is-wake::before, .va-w, .va-next button, .va-wipe, .va-duel .bar i { animation: none !important; }
   .va-wipe { display: none; }
   .va-card.in, .va-card.in.swarm { animation: va-fade .2s both; }
   .va-ghosts, .va-tile { display: none; }
+  .va-msg { animation: none; }
   .va-meter i, .va-bars .bar i, .va-card.in .va-ring .dial, .va-dot, .va-end, .va-hist li span { animation: none; opacity: 1; }
 }
 @keyframes va-fade { from { opacity: 0; } to { opacity: 1; } }
