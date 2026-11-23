@@ -1,8 +1,11 @@
 .va-full {
-  position: relative; grid-row: 2; align-self: end; height: 100%; max-height: 640px; min-height: 0; aspect-ratio: 298 / 880;
-  padding: 0; border: 0; background: none; cursor: pointer; isolation: isolate; transform-origin: 50% 100%; animation: va-breathe 5.2s ease-in-out infinite;
+  position: relative; grid-row: 2; align-self: end; height: 100%; max-height: 640px; min-height: 0; aspect-ratio: 430 / 1364;
+  padding: 0; border: 0; background: none; cursor: pointer; isolation: isolate;
 }
 .voice-assistant[data-layout="chat"] .va-full { display: none; }
+.va-full .blob { inset: 0; animation: none; will-change: auto; }
+.va-full.is-gl img { visibility: hidden; }
+.va-full .kira-gl { left: -12%; width: 124%; height: 104%; }
 .va-full img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%;
   opacity: 0; transition: opacity .34s cubic-bezier(.45, 0, .25, 1); user-select: none; -webkit-user-drag: none; pointer-events: none;
@@ -19,17 +22,15 @@
   opacity: 0; transition: opacity .25s, scale .12s linear;
 }
 .voice-assistant[data-state="listen"] .va-full::after { opacity: calc(.45 + var(--lvl, 0) * .9); scale: calc(.92 + var(--lvl, 0) * .5) 1; }
-.voice-assistant[data-state="speak"] .va-full { animation-duration: 2.6s; }
-@keyframes va-breathe { 50% { scale: 1 1.007; } }
 @keyframes va-hop-full { 40% { translate: 0 -1.8%; } }
 
 .va-orb {
   position: relative; display: none; grid-column: 1; grid-row: 1; align-self: end;
-  width: var(--orb-w); aspect-ratio: 352 / 372; padding: 0; border: 0; background: none; cursor: pointer; isolation: isolate; font-size: calc(var(--orb-w) / 10);
+  width: var(--orb-w); aspect-ratio: 1; padding: 0; border: 0; background: none; cursor: pointer; isolation: isolate; font-size: calc(var(--orb-w) / 10);
 }
 .voice-assistant[data-layout="chat"] .va-orb { display: block; }
 .va-orb::before {
-  content: ""; position: absolute; inset: 44% -6% 0; z-index: -1; border-radius: 1.3em;
+  content: ""; position: absolute; inset: 47% -4% 0; z-index: -1; border-radius: 1.3em;
   background: radial-gradient(90% 70% at 22% 0%, rgb(113 197 232 / .62), transparent 62%), linear-gradient(170deg, #307FE2, #0857C3 78%);
   box-shadow: 0 1em 1.8em -1.1em rgb(8 87 195 / .75);
 }
@@ -41,16 +42,16 @@
 .voice-assistant[data-state="listen"] .va-orb .halo { opacity: calc(.35 + var(--lvl, 0) * .9); transform: scale(calc(.94 + var(--lvl, 0) * .22)); }
 .voice-assistant[data-state="speak"] .va-orb .halo { opacity: .4; animation: va-glow 1.4s ease-in-out infinite; }
 .blob { position: absolute; inset: 0; animation: va-bob 5.5s ease-in-out infinite; will-change: transform; transition: scale .12s linear; }
-.va-orb.is-3d .blob { animation: none; }
-.voice-assistant[data-state="speak"] .va-orb:not(.is-3d) .blob { animation: va-bob 5.5s ease-in-out infinite, va-nod 1.6s ease-in-out infinite; }
+.va-orb.is-gl .blob { animation: none; }
+.voice-assistant[data-state="speak"] .va-orb:not(.is-gl) .blob { animation: va-bob 5.5s ease-in-out infinite, va-nod 1.6s ease-in-out infinite; }
 .kira-pose {
   position: absolute; inset: 0; opacity: 0; background: center bottom / 100% 100% no-repeat;
-  -webkit-mask-image: linear-gradient(to top, transparent, #000 10%); mask-image: linear-gradient(to top, transparent, #000 10%);
+  -webkit-mask-image: linear-gradient(to top, transparent, #000 7%); mask-image: linear-gradient(to top, transparent, #000 7%);
   transition: opacity .3s cubic-bezier(.45, 0, .25, 1);
 }
 .kira-pose.on { opacity: 1; }
-.va-orb.is-3d .kira-pose { display: none; }
-.kira-3d { position: absolute; left: -6%; bottom: 0; width: 112%; height: 108%; pointer-events: none; }
+.va-orb.is-gl .kira-pose { display: none; }
+.kira-gl { position: absolute; left: -10%; bottom: 0; width: 120%; height: 112%; pointer-events: none; }
 @keyframes va-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-1.5%) rotate(1deg); } }
 @keyframes va-nod { 0%, 100% { translate: 0 0; } 50% { translate: 0 1.5%; } }
 @keyframes va-glow { 0%, 100% { transform: scale(.94); } 50% { transform: scale(1.02); } }
@@ -89,10 +90,10 @@
   position: relative; inset: auto; flex: none; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; animation: none;
   background: linear-gradient(165deg, #E6F1FD, #C7DFF9);
 }
-.kira-face { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; transition: opacity .25s ease; }
+.kira-face { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .25s ease; }
 .kira-face.smile { opacity: 0; }
 .va-launch:hover .kira-face.smile, .va-launch:focus-visible .kira-face.smile { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
-  .va-full, .va-full img.on, .blob, .fx > *, .va-orb .halo { animation: none !important; }
+  .va-full img.on, .blob, .fx > *, .va-orb .halo { animation: none !important; }
 }

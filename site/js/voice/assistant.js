@@ -7,8 +7,8 @@ import { speakRemote } from '../services/data-source.js';
 import { roStanding } from '../models/direktur-model.js';
 import { nearSpeech, setMicClean, micClean, micSupport } from './mic.js';
 import { voiceSupport, createRecognizer, speak, hush, createLevel, chime, setCloudSpeaker, setVoice, setRate, setPitch, setVolume, nextVoice, usingCloud, voiceList, findVoice, voiceLevel, voiceCue } from './speech.js';
-import { mountAvatar3d } from './avatar3d.js';
-import { HALF, FULL, FACE, DEPTH, MOUTH, MOTION } from './kirana-art.js';
+import { mountPuppet } from './puppet.js';
+import { HALF, FULL, FACE, HALF_RIG, FULL_RIG, HALF_POSES, FULL_POSES } from './kirana-art.js';
 import { routeCommand, findWake, cleanSpoken, spoken, shortRo, targetOf, WAKE_NAME, WAKE_PHRASE } from './command.js';
 import { regionData, monthData, MONTH_ROWS, monthTalk, showcaseHtml, regionTalk, compareHtml, compareTalk, flyIn, toneOf, regionMore } from './showcase.js';
 import { createPersona, pickOne, salam, partOfDay, clockText, dateText, workdaysLeft, workdaysIn, longDate, parseReminder, nameFrom } from './persona.js';
@@ -171,20 +171,15 @@ const sameText = (a, b) => {
   return !!x && !!y && (x === y || y.startsWith(x) || x.startsWith(y));
 };
 
-const MOOD_FACE = {
-  happy: 'bright', laugh: 'laugh', giggle: 'giggle', love: 'blush', shy: 'shy', joy: 'joy', excited: 'excited', energetic: 'energetic',
-  surprised: 'surprised', awed: 'awed', realize: 'realize', idea: 'idea', determined: 'determined', sad: 'sad', worried: 'worried',
-  confused: 'confused', sleepy: 'sleepy', thinking: 'thinking', wave: 'bright',
+const MOOD_POSE = {
+  happy: 'smile', laugh: 'laugh', giggle: 'laugh', love: 'blush', shy: 'blush', joy: 'laugh', excited: 'wave', energetic: 'wave',
+  surprised: 'surprised', awed: 'surprised', realize: 'surprised', idea: 'smile', determined: 'smile', sad: 'worried', worried: 'worried',
+  confused: 'confused', sleepy: 'sleepy', thinking: 'thinking', wave: 'wave',
 };
-const MOOD_FULL = {
-  happy: 'cheer', laugh: 'cheer', excited: 'cheer', energetic: 'cheer', giggle: 'happy', love: 'happy', shy: 'happy', joy: 'happy',
-  surprised: 'gasp', awed: 'gasp', realize: 'gasp', idea: 'smile', determined: 'smile', sad: 'confused', worried: 'confused',
-  confused: 'confused', sleepy: 'yawn', thinking: 'think', wave: 'wave',
-};
-const poseOf = (state, mood) => (state === 'error' ? 'worried' : state === 'speak' ? 'talk' : MOOD_FACE[mood] || (state === 'think' ? 'thinking' : state === 'listen' ? 'smile' : 'neutral'));
-const fullOf = (state, mood) => (state === 'error' ? 'confused' : MOOD_FULL[mood] || (state === 'think' ? 'think' : state === 'speak' || state === 'listen' ? 'smile' : 'stand'));
+const poseOf = (state, mood) => (state === 'error' ? 'worried' : state === 'speak' ? 'talk' : MOOD_POSE[mood] || (state === 'think' ? 'thinking' : state === 'listen' ? 'smile' : 'neutral'));
+const faceOf = (poses, pose) => poses[pose]?.face || 'neutral';
 const halfHtml = () => Object.entries(HALF).map(([face, src]) => `<i class="kira-pose${face === 'neutral' ? ' on' : ''}" data-face="${face}" style="background-image: url('${src}')"></i>`).join('');
-const fullHtml = () => Object.entries(FULL).map(([pose, src]) => `<img class="${pose === 'stand' ? 'on' : ''}" data-pose="${pose}" src="${src}" alt="" decoding="async" draggable="false">`).join('');
+const fullHtml = () => `<span class="blob" aria-hidden="true">${Object.entries(FULL).map(([face, src]) => `<img class="${face === 'neutral' ? 'on' : ''}" data-face="${face}" src="${src}" alt="" decoding="async" draggable="false">`).join('')}</span>`;
 export const launchHtml = () => `<span class="blob" aria-hidden="true"><img class="kira-face" src="${FACE.idle}" alt=""><img class="kira-face smile" src="${FACE.smile}" alt=""></span>`;
 
 const FX = `<span class="fx" aria-hidden="true"><i class="q">?</i><i class="zz">z</i><i class="zz">z</i><i class="sp"></i><i class="sp"></i><i class="sp"></i><i class="sp"></i>
@@ -265,6 +260,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let launcher = null;
   let orbEl = null;
   let avatar = null;
+  let figure = null;
   let lastUserMsg = null;
   let sayLogged = true;
   let logStick = true;
@@ -286,9 +282,10 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let pointerRaf = 0;
   let followRaf = 0;
   let helloAt = 0;
+  let cardAt = -1e9;
   const early = { timer: 0, text: '', done: '' };
   const $ = (id) => dlg?.querySelector(`#${id}`);
-  const level = createLevel((v) => { $('va-panel')?.style.setProperty('--lvl', v.toFixed(3)); avatar?.listen(v); });
+  const level = createLevel((v) => { $('va-panel')?.style.setProperty('--lvl', v.toFixed(3)); avatar?.listen(v); figure?.listen(v); });
   const rec = createRecognizer({ onResult, onEnd, onError, onStart: () => { quickEnds = 0; } });
   const ding = (kind) => { if (!pref.mute) chime(kind); };
   const regions = () => getContext()?.pm?.regions || [];
@@ -331,7 +328,9 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const log = $('va-log');
     log.addEventListener('scroll', () => { logStick = log.scrollHeight - log.scrollTop - log.clientHeight < 40; }, { passive: true });
     new ResizeObserver(() => { if (logStick) log.scrollTop = log.scrollHeight; }).observe(log);
-    avatar = mountAvatar3d(orbEl, { faces: HALF, depth: DEPTH, mouth: MOUTH, motion: MOTION, voiceLevel, voiceCue, lite: () => document.documentElement.classList.contains('fx-lite') });
+    const lite = () => document.documentElement.classList.contains('fx-lite');
+    avatar = mountPuppet(orbEl, { faces: HALF, rig: HALF_RIG, poses: HALF_POSES, voiceLevel, voiceCue, lite });
+    figure = mountPuppet($('va-full'), { faces: FULL, rig: FULL_RIG, poses: FULL_POSES, voiceLevel, voiceCue, lite });
     suggest(HINTS);
     dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
     dlg.addEventListener('click', onClick);
@@ -357,11 +356,12 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (pointerRaf) return;
     pointerRaf = requestAnimationFrame(() => {
       pointerRaf = 0;
-      if (!orbEl) return;
-      const r = orbEl.getBoundingClientRect();
+      if (!orbEl || !dlg) return;
+      const chat = dlg.dataset.layout === 'chat';
+      const r = (chat ? orbEl : $('va-full')).getBoundingClientRect();
       const dx = (e.clientX - (r.left + r.width / 2)) / 320;
-      const dy = (e.clientY - (r.top + r.height / 2)) / 320;
-      avatar?.look(dx, dy);
+      const dy = (e.clientY - (r.top + r.height * (chat ? 0.5 : 0.12))) / 320;
+      (chat ? avatar : figure)?.look(dx, dy);
     });
     awake();
   }
@@ -438,11 +438,11 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const orb = $('va-orb');
     if (!orb || !dlg) return;
     const pose = poseOf(dlg.dataset.state, dlg.dataset.mood);
+    const fullEl = $('va-full');
     orb.dataset.pose = pose;
-    const face = pose === 'talk' ? 'smile' : pose;
-    orb.querySelectorAll('.kira-pose').forEach((el) => el.classList.toggle('on', el.dataset.face === face));
-    const full = fullOf(dlg.dataset.state, dlg.dataset.mood);
-    $('va-full').querySelectorAll('img').forEach((el) => el.classList.toggle('on', el.dataset.pose === full));
+    fullEl.dataset.pose = pose;
+    orb.querySelectorAll('.kira-pose').forEach((el) => el.classList.toggle('on', el.dataset.face === faceOf(HALF_POSES, pose)));
+    fullEl.querySelectorAll('img').forEach((el) => el.classList.toggle('on', el.dataset.face === faceOf(FULL_POSES, pose)));
     $('va-mic').setAttribute('aria-pressed', String(dlg.dataset.state === 'listen'));
   }
 
@@ -466,6 +466,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
 
   function setStage(kind) {
     if (dlg.dataset.stage !== kind) dlg.dataset.stage = kind;
+    if (kind === 'show') cardAt = performance.now();
     if (kind === 'show' && dlg.open) dock();
   }
 
@@ -476,10 +477,11 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (!dlg.open) {
       dlg.showModal();
       dlg.dataset.layout = 'intro';
-      avatar?.start();
+      figure?.start();
       setStage(showing || $('va-stage').childElementCount ? 'show' : 'empty');
       checkSmooth();
       setSay(line('hello', { salam: salam() }));
+      sayLogged = true;
       helloAt = Date.now();
       setMood('wave', 2600);
       greetOnOpen = true;
@@ -507,6 +509,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     clearTimeout(autoTimer);
     dlg.close();
     avatar?.stop();
+    figure?.stop();
     clearStage();
     $('va-heard').textContent = '';
     suggest(HINTS);
@@ -522,6 +525,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const panel = $('va-panel');
     const from = panel.getBoundingClientRect();
     dlg.dataset.layout = 'chat';
+    figure?.stop();
+    avatar?.start();
     scrollLog(true);
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const easing = 'cubic-bezier(.2, .8, .2, 1)';
@@ -538,6 +543,14 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const el = $('va-say');
     if (el && !sayLogged && el.textContent) logMsg('kira', el.textContent);
     sayLogged = true;
+  }
+
+  function briefOf(text) {
+    const all = plain(text).replace(/\s+/g, ' ').trim();
+    if (all.length <= 170) return all;
+    const parts = all.split(/(?<=[.!?])\s+(?=[A-Z0-9"“(])/);
+    const last = parts.at(-1);
+    return [...parts.slice(0, 2), ...(parts.length > 2 && /\?$/.test(last) ? [last] : [])].join(' ');
   }
 
   function setSay(text) {
@@ -872,7 +885,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   function say(text, { after, full = false, show = '' } = {}) {
     if (prefix && text) { text = `${prefix} ${text}`; if (show) show = `${prefix} ${show}`; }
     prefix = '';
-    if (text && isOpen()) setSay(show || text);
+    if (text && isOpen()) setSay(show || (performance.now() - cardAt < 1500 ? briefOf(text) : text));
     const feelNow = dlg?.dataset.mood || '';
     const asking = /\?\s*$/.test(plain(text));
     const done = () => {

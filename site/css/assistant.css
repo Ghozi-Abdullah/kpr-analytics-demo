@@ -78,12 +78,14 @@
 .va-mic[aria-pressed="true"] { background: var(--cakrawala); box-shadow: 0 0 0 calc(4px + var(--lvl, 0) * 14px) rgb(48 127 226 / .22), 0 10px 22px -12px rgb(8 87 195 / .8); }
 
 .va-log {
-  display: none; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; margin: 0; padding: 2px 4px 6px;
-  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgb(11 33 71 / .2) transparent;
+  display: none; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; margin: 0; padding: 22px 2px 4px;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 26px); mask-image: linear-gradient(to bottom, transparent, #000 26px);
 }
+.va-log::-webkit-scrollbar { display: none; }
 .va-log::before { content: ""; margin-top: auto; }
 .va-log:focus-visible { outline: 2px solid var(--cakrawala); outline-offset: 2px; border-radius: 12px; }
-.va-msg { max-width: 86%; margin: 0; padding: 9px 13px; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; animation: va-msg .28s cubic-bezier(.2, .8, .2, 1) both; }
+.va-msg { flex: none; max-width: 86%; margin: 0; padding: 9px 13px; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; animation: va-msg .28s cubic-bezier(.2, .8, .2, 1) both; }
 .va-msg.me { align-self: flex-end; border-radius: 18px 18px 6px 18px; background: var(--nusantara); color: #fff; box-shadow: 0 6px 16px -10px rgb(8 87 195 / .6); }
 .va-msg.kira { align-self: flex-start; border-radius: 6px 18px 18px 18px; background: #F2F6FC; color: var(--ink-2); box-shadow: inset 0 0 0 1px rgb(11 33 71 / .06); }
 @keyframes va-msg { from { opacity: 0; transform: translateY(6px); } }
@@ -94,7 +96,7 @@
   justify-self: stretch; width: auto; align-items: stretch; gap: 8px; margin: 0 8px 8px; padding: 12px 12px 14px;
   border-radius: 24px; background: rgb(255 255 255 / .94); box-shadow: inset 0 0 0 1px rgb(11 33 71 / .07), 0 -10px 36px -26px rgb(11 33 71 / .45);
 }
-.voice-assistant[data-layout="chat"] .va-scene { --orb-w: 104px; flex: none; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; justify-items: stretch; align-items: start; column-gap: 12px; padding-top: 14px; }
+.voice-assistant[data-layout="chat"] .va-scene { --orb-w: 116px; flex: none; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; justify-items: stretch; align-items: start; column-gap: 12px; padding-top: 14px; }
 .voice-assistant[data-layout="chat"] .va-bubble {
   grid-column: 2; grid-row: 1; align-self: center; justify-self: start; max-width: 100%; margin: 0; padding: 10px 14px;
   border-radius: 6px 18px 18px 18px; background: #F2F6FC; filter: none; box-shadow: inset 0 0 0 1px rgb(11 33 71 / .06);
@@ -124,7 +126,7 @@
     box-shadow: inset 0 0 0 1px rgb(11 33 71 / .07), 0 24px 48px -30px rgb(11 33 71 / .5);
   }
   .voice-assistant[data-layout="chat"] .va-log { display: flex; }
-  .voice-assistant[data-layout="chat"] .va-scene { --orb-w: clamp(132px, 10vw, 168px); padding-top: 30px; }
+  .voice-assistant[data-layout="chat"] .va-scene { --orb-w: clamp(150px, 11.5vw, 188px); padding-top: 18px; }
   .voice-assistant[data-layout="chat"] .va-bubble { align-self: start; margin-top: 8px; }
   .voice-assistant[data-layout="chat"] .va-bubble::after { display: block; left: -7px; top: 14px; bottom: auto; width: 8px; height: 14px; margin: 0; clip-path: polygon(100% 0, 0 0, 100% 100%); background: #F2F6FC; }
   .voice-assistant[data-layout="chat"] .va-say { max-height: min(36vh, 280px); }
