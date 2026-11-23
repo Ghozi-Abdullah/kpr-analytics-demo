@@ -35,7 +35,7 @@ jobs:
       - name: Siapkan folder situs
         run: |
           node tools/build_pages.mjs _site
-          rm -rf _site/img
+          find _site/img -type f ! -name 'kira-*' -delete
           if grep -q "url: 'https://script.google.com/" site/js/deploy.js; then
             rm -rf _site/data
             echo "Mode login: data dikirim KPR API setelah login, folder data tidak ikut diterbitkan."
