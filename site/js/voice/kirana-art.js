@@ -68,7 +68,7 @@ export const FULL_RIG = {
     },
   },
   geo: { neck: [0.513, 0.1364], chin: 0.1289, shoulder: 0.161, waist: 0.2838, face: [0.5043, 0.0928], base: 0.9932 },
-  mouth: { url: 'img/kira-full-mouth.webp', rect: [0.4719, 0.101, 0.0909, 0.0232], hole: [0.4881, 0.4412, 0.2976, 0.2059], home: [0.4881, 0.3676], open: [0.4881, 0.3647], round: [0.4881, 0.3382], roundFit: [2.0, 1.0], tilePx: 32 },
+  mouth: { url: 'img/kira-full-mouth.webp', rect: [0.4719, 0.101, 0.0909, 0.0232], hole: [0.4881, 0.4412, 0.2976, 0.2059], home: [0.4881, 0.3676], open: [0.4881, 0.3647], round: [0.4881, 0.3382], roundFit: [1.56, 1.39], tilePx: 32 },
 };
 
 export const HALF_POSES = {
