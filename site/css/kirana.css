@@ -75,12 +75,39 @@
 .voice-assistant[data-mood="confused"] .fx .q { opacity: 1; animation: va-q 1.4s ease-in-out infinite; }
 .voice-assistant[data-mood="sleepy"] .fx .zz { animation: va-z 2.6s ease-in infinite; }
 .voice-assistant[data-mood="sleepy"] .fx .zz:nth-child(3) { animation-delay: 1.3s; }
-.voice-assistant:is([data-mood="happy"], [data-mood="excited"], [data-mood="joy"], [data-mood="energetic"], [data-mood="laugh"], [data-mood="giggle"], [data-mood="awed"], [data-mood="idea"]) .fx .sp { animation: va-spark 1.1s ease-out both; }
+.voice-assistant:is([data-mood="happy"], [data-mood="excited"], [data-mood="joy"], [data-mood="energetic"], [data-mood="laugh"], [data-mood="giggle"], [data-mood="awed"], [data-mood="idea"], [data-mood="wave"]) .fx .sp { animation: va-spark 1.1s ease-out both; }
 .voice-assistant[data-mood] .fx .sp:nth-child(5) { animation-delay: .12s; }
 .voice-assistant[data-mood] .fx .sp:nth-child(6) { animation-delay: .24s; }
 .voice-assistant[data-mood] .fx .sp:nth-child(7) { animation-delay: .36s; }
-.voice-assistant[data-mood="love"] .fx .hrt { animation: va-float 1.8s ease-out infinite; }
-.voice-assistant[data-mood="love"] .fx .hrt:nth-child(9) { animation-delay: .6s; }
+.voice-assistant:is([data-mood="love"], [data-mood="shy"]) .fx .hrt { animation: va-float 1.8s ease-out infinite; }
+.voice-assistant:is([data-mood="love"], [data-mood="shy"]) .fx .hrt:nth-child(9) { animation-delay: .6s; }
+.fx-full { inset: auto; left: 24%; top: -3%; width: 52%; height: 16%; font-size: clamp(8px, 1.6vh, 14px); z-index: 2; }
+.fx-full .q { right: -4%; top: -6%; font-size: 2.6em; }
+.fx-full .zz:nth-child(2) { right: 4%; top: 8%; }
+.fx-full .zz:nth-child(3) { right: -8%; top: -10%; }
+.fx-full .sp:nth-child(4) { left: 2%; top: 14%; }
+.fx-full .sp:nth-child(5) { right: 0; top: -4%; }
+.fx-full .sp:nth-child(6) { right: -6%; top: 44%; }
+.fx-full .sp:nth-child(7) { left: 8%; top: 52%; }
+.fx-full .hrt:nth-child(8) { right: 0; top: 4%; }
+.fx-full .hrt:nth-child(9) { left: 2%; top: 22%; }
+.fx .ex { right: -2%; top: -8%; font-size: 2.4em; font-weight: 800; line-height: 1; letter-spacing: -.12em; color: #F05A78; text-shadow: 0 .06em .25em rgb(255 255 255 / .9); }
+.fx .drop {
+  right: 6%; top: 6%; width: 1em; height: 1em; background: linear-gradient(160deg, #A9DBFF, #5AA9EF);
+  border-radius: 50% 0 50% 50%; rotate: -45deg; box-shadow: inset -.12em -.12em 0 rgb(255 255 255 / .45);
+}
+.fx .ang { right: 2%; top: -2%; width: 1.9em; height: 1.9em; }
+.fx .ang svg { display: block; width: 100%; height: 100%; fill: none; stroke: #E5484D; stroke-width: 2.8; stroke-linecap: round; }
+.fx .blu { left: 6%; top: 40%; width: 1.8em; height: 1em; }
+.fx .blu b { position: absolute; top: 0; width: .16em; height: 100%; border-radius: .1em; background: #F58FA8; rotate: 28deg; }
+.fx .blu b:nth-child(1) { left: 0; } .fx .blu b:nth-child(2) { left: .45em; } .fx .blu b:nth-child(3) { left: .9em; }
+.voice-assistant:is([data-mood="surprised"], [data-mood="awed"], [data-mood="realize"]) .fx .ex { animation: va-pop 1.2s cubic-bezier(.3, .7, .4, 1.3) both; }
+.voice-assistant:is([data-mood="sad"], [data-mood="worried"]) .fx .drop { animation: va-drip 2.2s ease-in-out both; }
+.voice-assistant[data-mood="pout"] .fx .ang { animation: va-throb .5s ease-in-out 4 alternate both; }
+.voice-assistant:is([data-mood="shy"], [data-mood="love"]) .fx .blu { animation: va-pop 1.6s ease-out both; }
+@keyframes va-pop { 0% { opacity: 0; transform: scale(.2); } 25% { opacity: 1; transform: scale(1.15); } 40% { transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes va-drip { 0% { opacity: 0; transform: translateY(-40%); } 25% { opacity: 1; } 80% { opacity: 1; transform: translateY(35%); } 100% { opacity: 0; transform: translateY(60%); } }
+@keyframes va-throb { 0% { opacity: 1; transform: scale(.85); } 100% { opacity: 1; transform: scale(1.15); } }
 @keyframes va-q { 0%, 100% { transform: rotate(-8deg) translateY(0); } 50% { transform: rotate(10deg) translateY(-12%); } }
 @keyframes va-z { 0% { opacity: 0; transform: translate(0, 30%) scale(.6); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(60%, -120%) scale(1.2); } }
 @keyframes va-spark { 0% { opacity: 0; transform: scale(0) rotate(0); } 40% { opacity: 1; transform: scale(1.2) rotate(30deg); } 100% { opacity: 0; transform: scale(.6) rotate(70deg); } }

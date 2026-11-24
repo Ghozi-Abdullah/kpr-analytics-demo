@@ -22,11 +22,14 @@ const FOLLOW_MS = 9000;
 const FOLLOW_ASK_MS = 13000;
 const ASK_MEMORY_MS = 180000;
 const KEEP_CHAIN = new Set(['ack', 'thanks', 'praise', 'wait', 'present', 'laugh', 'wow', 'really', 'yes', 'no', 'hush', 'sorry', 'repeat']);
-const COMPARE_KEYS = new Set(['os', 'deb', 'npl', 'sml', 'disb', 'real']);const ECHO_MS = 450;
+const COMPARE_KEYS = new Set(['os', 'deb', 'npl', 'sml', 'disb', 'real']);
+const ECHO_MS = 450;
 const ECHO_TAIL_MS = 1200;
 const EARLY_MS = 650;
 const MOOD_MS = 2400;
 const SLEEP_MS = 30000;
+const REGREET_MS = 10 * 60000;
+const PET_MS = 1100;
 const QUICK = new Set(['bye', 'pageUnknown', 'region', 'detail', 'close', 'filter', 'nasional', 'sumber', 'wakeOff', 'wakeOn', 'mute', 'unmute', 'thanks', 'help', 'yes', 'no', 'hush', 'compare', 'brief', 'page', 'menu', 'back', 'nextRo', 'prevRo', 'repeat', 'slower', 'faster', 'voice', 'praise', 'rankShow']);
 const DETAIL_NAME = {
   os: 'outstanding', deb: 'debitur', sml: 'SML', npl: 'NPL', disb: 'disburse', real: 'realisasi',
@@ -172,18 +175,25 @@ const sameText = (a, b) => {
 };
 
 const MOOD_POSE = {
-  happy: 'smile', laugh: 'laugh', giggle: 'laugh', love: 'blush', shy: 'blush', joy: 'laugh', excited: 'wave', energetic: 'wave',
+  happy: 'smile', laugh: 'laugh', giggle: 'giggle', love: 'blush', shy: 'blush', joy: 'laugh', excited: 'wave', energetic: 'wave',
   surprised: 'surprised', awed: 'surprised', realize: 'surprised', idea: 'smile', determined: 'smile', sad: 'worried', worried: 'worried',
-  confused: 'confused', sleepy: 'sleepy', thinking: 'thinking', wave: 'wave',
+  confused: 'confused', sleepy: 'sleepy', thinking: 'thinking', wave: 'wave', pout: 'pout',
 };
-const poseOf = (state, mood) => (state === 'error' ? 'worried' : state === 'speak' ? 'talk' : MOOD_POSE[mood] || (state === 'think' ? 'thinking' : state === 'listen' ? 'smile' : 'neutral'));
+const TALK_POSE = {
+  happy: 'talkHappy', laugh: 'talkHappy', giggle: 'talkHappy', love: 'talkHappy', shy: 'talkHappy', joy: 'talkHappy', excited: 'talkHappy',
+  energetic: 'talkHappy', wave: 'talkHappy', idea: 'talkHappy', determined: 'talkHappy', sad: 'talkSad', worried: 'talkSad', confused: 'talkThink', thinking: 'talkThink',
+};
+const poseOf = (state, mood) => (state === 'error' ? 'worried' : state === 'speak' ? TALK_POSE[mood] || 'talk' : MOOD_POSE[mood] || (state === 'think' ? 'thinking' : state === 'listen' ? 'smile' : 'neutral'));
 const faceOf = (poses, pose) => poses[pose]?.face || 'neutral';
+const fallbackFace = (pose) => (FULL[faceOf(FULL_POSES, pose)] ? faceOf(FULL_POSES, pose) : 'neutral');
 const halfHtml = () => Object.entries(HALF).map(([face, src]) => `<i class="kira-pose${face === 'neutral' ? ' on' : ''}" data-face="${face}" style="background-image: url('${src}')"></i>`).join('');
 const fullHtml = () => `<span class="blob" aria-hidden="true">${Object.entries(FULL).map(([face, src]) => `<img class="${face === 'neutral' ? 'on' : ''}" data-face="${face}" src="${src}" alt="" decoding="async" draggable="false">`).join('')}</span>`;
 export const launchHtml = () => `<span class="blob" aria-hidden="true"><img class="kira-face" src="${FACE.idle}" alt=""><img class="kira-face smile" src="${FACE.smile}" alt=""></span>`;
 
 const FX = `<span class="fx" aria-hidden="true"><i class="q">?</i><i class="zz">z</i><i class="zz">z</i><i class="sp"></i><i class="sp"></i><i class="sp"></i><i class="sp"></i>
   <i class="hrt">${HEART}</i><i class="hrt">${HEART}</i><span class="dots"><b></b><b></b><b></b></span></span>`;
+const FX_FULL = `<span class="fx fx-full" aria-hidden="true"><i class="q">?</i><i class="zz">z</i><i class="zz">z</i><i class="sp"></i><i class="sp"></i><i class="sp"></i><i class="sp"></i>
+  <i class="hrt">${HEART}</i><i class="hrt">${HEART}</i><i class="ex">!!</i><i class="drop"></i><i class="ang"><svg viewBox="0 0 24 24"><path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4"/></svg></i><i class="blu"><b></b><b></b><b></b></i></span>`;
 
 function revealWords(el) {
   if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -231,6 +241,9 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
   let viewCtx = null;
   let askAt = 0;
   let wakeAckTimer = 0;
+  let petTimer = 0;
+  let petAt = 0;
+  let greetFeel = false;
   let speakingNow = false;
   let selfWords = new Set();
   let lastSelf = new Set();
@@ -309,7 +322,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         <div class="va-log" id="va-log" role="log" aria-label="Riwayat obrolan" tabindex="0"></div>
         <div class="va-scene">
           <div class="va-bubble"><p class="va-say" id="va-say" aria-live="polite"></p></div>
-          <button class="va-full" type="button" id="va-full" aria-label="Bicara ke ${esc(WAKE_NAME)}">${fullHtml()}</button>
+          <button class="va-full" type="button" id="va-full" aria-label="Bicara ke ${esc(WAKE_NAME)}">${fullHtml()}${FX_FULL}</button>
           <button class="va-orb" type="button" id="va-orb" aria-label="Bicara ke ${esc(WAKE_NAME)}"><span class="halo" aria-hidden="true"></span><span class="blob" aria-hidden="true">${halfHtml()}</span>${FX}</button>
         </div>
         <p class="va-heard" id="va-heard" aria-live="polite"></p>
@@ -347,7 +360,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       $('va-input').value = '';
       if (v) handle(v, { typed: true });
     });
-    $('va-input').addEventListener('input', () => { awake(); stopTalking(); });
+    $('va-input').addEventListener('input', () => { awake(); stopTalking(); if (dlg.dataset.layout !== 'chat') figure?.look(-0.1, 0.9); });
     syncPills();
   }
 
@@ -361,8 +374,20 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       const dx = (e.clientX - (r.left + r.width / 2)) / 320;
       const dy = (e.clientY - (r.top + r.height * (chat ? 0.5 : 0.12))) / 320;
       (chat ? avatar : figure)?.look(dx, dy);
+      pet(!chat && Math.abs(e.clientX - (r.left + r.width / 2)) < r.width * 0.14 && e.clientY > r.top && e.clientY < r.top + r.height * 0.13);
     });
     awake();
+  }
+
+  function pet(on) {
+    if (!on) { clearTimeout(petTimer); petTimer = 0; return; }
+    if (petTimer || Date.now() - petAt < 12000) return;
+    petTimer = setTimeout(() => {
+      petTimer = 0;
+      if (!isOpen() || dlg.dataset.layout === 'chat' || !['idle', 'listen'].includes(phase) || speakingNow || dlg.dataset.mood) return;
+      petAt = Date.now();
+      setMood(pickOne(['shy', 'giggle']), 2400);
+    }, PET_MS);
   }
 
   function chooseVoice(id) {
@@ -441,7 +466,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     orb.dataset.pose = pose;
     fullEl.dataset.pose = pose;
     orb.querySelectorAll('.kira-pose').forEach((el) => el.classList.toggle('on', el.dataset.face === faceOf(HALF_POSES, pose)));
-    fullEl.querySelectorAll('img').forEach((el) => el.classList.toggle('on', el.dataset.face === faceOf(FULL_POSES, pose)));
+    fullEl.querySelectorAll('img').forEach((el) => el.classList.toggle('on', el.dataset.face === fallbackFace(pose)));
     $('va-mic').setAttribute('aria-pressed', String(dlg.dataset.state === 'listen'));
   }
 
@@ -471,28 +496,40 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
 
   const isOpen = () => !!dlg?.open;
 
-  function open({ listenNow = true, focusInput = false } = {}) {
+  function open({ listenNow = true, focusInput = false, greet = false } = {}) {
     build();
+    let hello = '';
     if (!dlg.open) {
       dlg.showModal();
       dlg.dataset.layout = 'intro';
       figure?.start();
       setStage(showing || $('va-stage').childElementCount ? 'show' : 'empty');
       checkSmooth();
-      setSay(line('hello', { salam: salam() }));
-      sayLogged = true;
+      hello = line(Date.now() - helloAt < REGREET_MS ? 'helloAgain' : 'hello', { salam: salam(), nm: pref.name ? `, ${pref.name}` : '' });
       helloAt = Date.now();
       setMood('wave', 2600);
       greetOnOpen = true;
     }
+    const voiced = !!hello && greet && !pref.mute && (voiceSupport.speak || usingCloud());
+    if (hello && !voiced) { setSay(hello); sayLogged = true; }
     if (phase !== 'think') setPhase('idle');
     if (focusInput || !voiceSupport.listen || matchMedia('(pointer: fine)').matches) $('va-input').focus({ preventScroll: true });
     else $(dlg.dataset.layout === 'chat' ? 'va-orb' : 'va-mic').focus({ preventScroll: true });
+    if (voiced) {
+      lastTyped = !listenNow;
+      setMood('wave', 0);
+      greetFeel = true;
+      say(hello);
+      sayLogged = true;
+      return true;
+    }
     if (listenNow && voiceSupport.listen) listen();
+    return false;
   }
 
   function close() {
     if (!dlg?.open) return;
+    greetFeel = false;
     clearTimeout(wakeAckTimer);
     hush();
     speakingUntil = 0;
@@ -670,7 +707,14 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (!rec.start({ continuous: true })) mode = 'off';
   }
 
+  function endGreet() {
+    if (!greetFeel) return;
+    greetFeel = false;
+    if (dlg?.dataset.mood === 'wave') setMood('happy', 1500);
+  }
+
   function stopTalking() {
+    endGreet();
     if (!speakingNow) return;
     hush();
     speakingNow = false;
@@ -804,9 +848,9 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       const wake = findWake(text);
       if (!isOpen()) {
         if (!wake) return;
-        open({ listenNow: false });
+        const greeted = open({ listenNow: false, greet: !wake.rest });
         ding('on');
-        setPhase('listen');
+        if (!greeted) setPhase('listen');
         follow();
         if (wake.rest) { showHeard(wake.rest, final); if (final) heardFinal(wake.rest); else heardEarly(wake.rest); }
         return;
@@ -816,7 +860,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       if (!wake && Date.now() > followUntil) return;
       clearTimeout(wakeAckTimer);
       if (!cmd) {
-        if (wake && final) wakeAckTimer = setTimeout(() => { if (isOpen() && phase === 'listen') talkOnly(line('wakeAck'), 'wave'); }, 1100);
+        if (wake && final) wakeAckTimer = setTimeout(() => { if (isOpen() && phase === 'listen') talkOnly(line('wakeAck', { nm: pref.name ? `, ${pref.name}` : '' }), 'wave'); }, 1100);
         return;
       }
       showHeard(cmd, final);
@@ -888,6 +932,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const feelNow = dlg?.dataset.mood || '';
     const asking = /\?\s*$/.test(plain(text));
     const done = () => {
+      endGreet();
       after?.();
       if (!isOpen()) { if (mode === 'barge') { rec.abort(); mode = 'off'; } return; }
       if (pref.wake && voiceSupport.listen) { follow(asking ? FOLLOW_ASK_MS : FOLLOW_MS); setPhase('listen'); }
@@ -1654,6 +1699,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
 
   async function handle(text, { typed = false, inner = false, loose = false } = {}) {
     const ticket = ++busy;
+    endGreet();
     if (!inner) lastTyped = typed;
     clearTimeout(early.timer);
     clearTimeout(autoTimer);
@@ -1717,7 +1763,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       case 'reactBad':
         if (pending?.ask) { offer = pending; talkOnly(`Iya, betul. ${pending.ask}`, 'worried'); return; }
         offer = { say: 'Kabar buruknya apa?', ask: '' };
-        talkOnly(showing !== '' && lastRegion ? `Iya, ${lastRegion.name} memang perlu perhatian. Mau saya rangkum yang perlu dikejar?` : 'Iya, yang ini perlu dikejar. Mau saya rangkum yang perlu diwaspadai?', 'worried');
+        talkOnly(showing !== '' && lastRegion ? `Iya, ${lastRegion.name} memang perlu perhatian. Mau saya rangkum yang perlu dikejar?` : 'Iya, yang ini perlu dikejar. Mau saya rangkum yang perlu diwaspadai?', 'pout');
         return;
       case 'ack': talkOnly(line('ack'), 'happy'); return;
       case 'present': talkOnly(line('present'), 'happy'); return;
@@ -1741,7 +1787,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       }
       case 'missClear': writeMiss([]); talkOnly('Sudah, catatan belajar saya kosongkan.', 'happy'); return;
       case 'notThat': offer = null; chat(line('notThat'), { mood: 'confused', next: HINTS }); return;
-      case 'salam': chat(`${line('salam')} ${pickOne(['Ada yang bisa saya bantu?', 'Mau lihat apa hari ini?', 'Silakan, mau cek apa?'])}`, { mood: 'love' }); return;
+      case 'salam': chat(`${line('salam')} ${pickOne(['Ada yang bisa Kirana bantu?', 'Ada yang bisa Kirana bantu hari ini?', 'Silakan, mau cek apa?'])}`, { mood: 'love' }); return;
       case 'laugh': talkOnly(line('laugh'), 'laugh'); return;
       case 'wow': {
         if (showing !== '' && lastRegion && trail.at(-1)?.kind === 'region') {
@@ -1940,9 +1986,9 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
           ? `Selamat ${said} juga${nm}. Eh, sekarang ${PARTS.indexOf(said) > PARTS.indexOf(now) ? 'masih' : 'sudah'} ${now} lho, hehe.`
           : `${salam()}${nm}.`;
         const flavor = dayFlavor();
-        const q = ask ? 'Oh iya, mau dipanggil siapa?' : pickOne(['Ada yang bisa saya bantu?', 'Mau lihat data apa hari ini?', 'Senang ketemu lagi. Mau mulai dari mana?']);
+        const q = ask ? 'Ada yang bisa Kirana bantu? Oh iya, Kirana boleh panggil dengan sebutan apa?' : pickOne(['Ada yang bisa Kirana bantu?', 'Ada yang bisa Kirana bantu hari ini?', 'Senang ketemu lagi. Ada yang bisa Kirana bantu?']);
         const greeting = [hello, flavor, q].filter(Boolean).join(' ');
-        reply(esc(greeting), { lines: ask ? [esc('Bilang saja, misalnya, "panggil saya Pak Andi".')] : [], next: HINTS, mood: 'wave', keep: false, speakText: greeting });
+        reply(esc(greeting), { lines: ask ? [esc('Bilang saja, misalnya, "panggil saya Pak Andi" atau "panggil saya Bu Rina".')] : [], next: HINTS, mood: 'wave', keep: false, speakText: greeting });
         return;
       }
       case 'sumber': set({ sumber: cmd.mode === '7' ? '' : cmd.mode }); reply(`Siap, realisasi sekarang memakai ${esc(cmd.mode)} sumber.`, { mood: 'happy', keep: false }); return;
@@ -2046,7 +2092,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     if (e.code === 'Space' && e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       if (isOpen() && phase === 'listen') stopListening();
-      else open({ listenNow: true });
+      else open({ listenNow: true, greet: true });
     }
   }
 
@@ -2068,7 +2114,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         const idle = globalThis.requestIdleCallback || ((fn) => setTimeout(fn, 600));
         setTimeout(() => idle(() => { if (attached) build(); }, { timeout: 3000 }), 2600);
       }
-      button?.addEventListener('click', () => open({ listenNow: true }));
+      button?.addEventListener('click', () => open({ listenNow: true, greet: true }));
       syncPills();
     },
     detach() {
@@ -2080,7 +2126,7 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
       rec.abort();
       launcher = null;
     },
-    openTyped: () => open({ listenNow: false, focusInput: true }),
+    openTyped: () => open({ listenNow: false, focusInput: true, greet: true }),
     run: (text) => handle(text, { typed: true }),
     get state() { return { phase, mode, wake: pref.wake, mute: pref.mute, open: isOpen(), showing, offer: offer?.say || '', trail: trail.length }; },
   };

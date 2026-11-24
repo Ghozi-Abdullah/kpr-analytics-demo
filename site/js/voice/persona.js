@@ -35,8 +35,9 @@ export const LINES = {
   no: ['Baik.', 'Oke, tidak jadi.', 'Siap, lain kali saja.', 'Oke, nggak apa-apa.', 'Baik, saya standby saja.'],
   wait: ['Baik, saya tunggu ya.', 'Siap, santai saja.', 'Oke, saya di sini.', 'Santai{nm}, saya tunggu.', 'Iya, pelan-pelan saja.'],
   present: ['Iya{nm}, saya di sini.', 'Saya dengar kok. Ada apa?', 'Hadir! Mau lihat apa?', 'Iya, masih di sini kok.', 'Selalu standby{nm}.'],
-  wakeAck: ['Iya{nm}? Ada yang bisa saya bantu?', 'Hai{nm}! Mau lihat data apa?', 'Iya, saya di sini. Mau cek apa?', 'Siap{nm}, silakan. Mau mulai dari mana?', 'Hadir! Mau saya briefing atau langsung cek wilayah?'],
-  hello: ['{salam}{nm}! Mau lihat data apa hari ini?', '{salam}{nm}. Saya siap bantu, mau mulai dari mana?', 'Hai{nm}! {salam}. Mau saya briefing dulu, atau langsung cek wilayah?', '{salam}{nm}! Tanya saya soal OS, NPL, atau realisasi ya.'],
+  wakeAck: ['Iya{nm}, Kirana di sini. Ada yang bisa Kirana bantu?', 'Hai{nm}! Ada yang bisa Kirana bantu?', 'Iya{nm}? Silakan, ada yang bisa Kirana bantu?', 'Hadir{nm}! Ada yang bisa Kirana bantu hari ini?', 'Halo{nm}! Kirana siap membantu. Mau mulai dari mana?'],
+  hello: ['{salam}{nm}! Ada yang bisa Kirana bantu hari ini?', '{salam}{nm}! Kirana siap membantu. Ada yang bisa dibantu?', 'Halo{nm}! {salam}. Ada yang bisa Kirana bantu?', '{salam}{nm}! Kirana di sini. Mau mulai dari briefing, atau langsung cek wilayah?'],
+  helloAgain: ['Halo lagi{nm}! Ada yang bisa Kirana bantu?', 'Iya{nm}, Kirana di sini. Ada lagi yang bisa dibantu?', 'Hai lagi{nm}! Mau cek apa lagi?'],
   smalltalk: {
     pagi: ['Kabar baik, makasih sudah tanya. Pagi ini datanya sudah siap. Mau mulai dari mana?', 'Baik sekali{nm}. Semoga pagi ini lancar. Mau saya briefing dulu?', 'Alhamdulillah baik. Pagi-pagi enaknya lihat ringkasan dulu, mau?'],
     siang: ['Baik, makasih. Sudah makan siang? Habis itu yuk lihat angka.', 'Baik sekali{nm}. Siang-siang begini mau cek wilayah mana?', 'Kabar baik. Jangan lupa makan siang ya, habis itu kita cek angka.'],
@@ -122,7 +123,7 @@ export function createPersona(pref) {
       if (out !== last || list.length === 1) break;
     }
     last = out;
-    const nm = out.includes('{nm}') ? nameTag(0.55) : '';
+    const nm = !out.includes('{nm}') ? '' : 'nm' in vars ? vars.nm : nameTag(0.55);
     return tidy(fill(out, { ...vars, nm }));
   }
   return { line, nameTag };

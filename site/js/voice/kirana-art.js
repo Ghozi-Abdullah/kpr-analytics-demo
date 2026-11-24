@@ -12,13 +12,7 @@ export const HALF = {
   wave: 'img/kira-half-wave.webp',
 };
 
-export const FULL = {
-  neutral: 'img/kira-full-neutral.webp',
-  blink: 'img/kira-full-blink.webp',
-  smile: 'img/kira-full-smile.webp',
-  happy: 'img/kira-full-happy.webp',
-  surprised: 'img/kira-full-surprised.webp',
-};
+export const FULL = { neutral: 'img/kira-full-neutral.webp' };
 
 export const FACE = { idle: 'img/kira-face.webp', smile: 'img/kira-face-smile.webp' };
 
@@ -43,7 +37,36 @@ export const FULL_RIG = {
   breath: 0.012,
   sway: 0.012,
   hair: 1.4,
-  closed: ['blink', 'happy'],
+  atlas: {
+    url: 'img/kira-full-faces.webp',
+    rect: [0.33953, 0.04912, 0.35349, 0.09018],
+    cell: [0.16239, 0.24213],
+    pos: {
+      neutral: [0.00214, 0.00394],
+      'neutral.blink': [0.1688, 0.00394],
+      smile: [0.33547, 0.00394],
+      'smile.blink': [0.50214, 0.00394],
+      happy: [0.6688, 0.00394],
+      surprised: [0.83547, 0.00394],
+      'surprised.blink': [0.00214, 0.25394],
+      cheer: [0.1688, 0.25394],
+      shy: [0.33547, 0.25394],
+      sad: [0.50214, 0.25394],
+      pout: [0.6688, 0.25394],
+      gasp: [0.83547, 0.25394],
+      confused: [0.00214, 0.50394],
+      giggle: [0.1688, 0.50394],
+      yawn: [0.33547, 0.50394],
+      wave: [0.50214, 0.50394],
+      'wave.blink': [0.6688, 0.50394],
+      bright: [0.83547, 0.50394],
+      'bright.blink': [0.00214, 0.75394],
+      sorry: [0.1688, 0.75394],
+      'sorry.blink': [0.33547, 0.75394],
+      ponder: [0.50214, 0.75394],
+      'ponder.blink': [0.6688, 0.75394],
+    },
+  },
   geo: { neck: [0.513, 0.1364], chin: 0.1289, shoulder: 0.161, waist: 0.2838, face: [0.5043, 0.0928], base: 0.9932 },
   mouth: { url: 'img/kira-full-mouth.webp', rect: [0.4719, 0.101, 0.0909, 0.0232], hole: [0.4881, 0.4412, 0.2976, 0.2059], home: [0.4881, 0.3676], open: [0.4881, 0.3647], round: [0.4881, 0.3382], roundFit: [2.0, 1.0], tilePx: 32 },
 };
@@ -59,19 +82,29 @@ export const HALF_POSES = {
   confused: { face: 'confused', roll: 0.1, look: [0.35, 0], sway: 0.6 },
   sleepy: { face: 'sleepy', roll: 0.07, look: [0, 0.45], slow: 1 },
   wave: { face: 'wave', hop: 0.6, rock: 0.8 },
-  talk: { face: 'smile', nod: 1, sway: 0.8 },
+  giggle: { face: 'laugh', bounce: 0.4 },
+  pout: { face: 'neutral', roll: -0.05, look: [-0.3, 0.1] },
+  talk: { face: 'smile', nod: 1, sway: 0.8, talk: 1 },
+  talkHappy: { face: 'smile', nod: 1, sway: 0.9, talk: 1 },
+  talkSad: { face: 'smile', nod: 0.7, sway: 0.5, talk: 1 },
+  talkThink: { face: 'smile', nod: 0.8, sway: 0.6, talk: 1 },
 };
 
 export const FULL_POSES = {
   neutral: { face: 'neutral' },
   smile: { face: 'smile', roll: 0.03 },
-  blush: { face: 'smile', roll: -0.06, look: [0.25, 0.3], rock: 0.35 },
-  laugh: { face: 'happy', hop: 0.8, bounce: 0.6 },
-  thinking: { face: 'neutral', roll: -0.09, look: [-0.7, -0.6], sway: 0.5 },
-  surprised: { face: 'surprised', hop: 1, look: [0, -0.35] },
-  worried: { face: 'neutral', roll: 0.07, look: [0, 0.45], sway: 0.5 },
-  confused: { face: 'neutral', roll: 0.14, look: [0.45, 0], sway: 0.6 },
-  sleepy: { face: 'blink', roll: 0.09, look: [0, 0.55], slow: 1 },
-  wave: { face: 'happy', hop: 0.7, rock: 0.8 },
-  talk: { face: 'neutral', nod: 1, sway: 0.8 },
+  blush: { face: 'shy', roll: -0.06, look: [0.25, 0.35], rock: 0.35 },
+  laugh: { face: 'cheer', hop: 0.8, bounce: 0.6 },
+  giggle: { face: 'giggle', roll: 0.05, bounce: 0.35 },
+  thinking: { face: 'ponder', roll: -0.09, look: [-0.6, -0.5], sway: 0.5 },
+  surprised: { face: 'gasp', hop: 1, look: [0, -0.35] },
+  worried: { face: 'sad', roll: 0.07, look: [0, 0.4], sway: 0.5 },
+  confused: { face: 'confused', roll: 0.14, look: [0.45, 0], sway: 0.6 },
+  sleepy: { face: 'yawn', roll: 0.09, look: [0, 0.5], slow: 1 },
+  wave: { face: 'wave', hop: 0.7, rock: 0.8 },
+  pout: { face: 'pout', roll: -0.06, look: [-0.35, 0.1] },
+  talk: { face: 'neutral', nod: 1, sway: 0.8, talk: 1 },
+  talkHappy: { face: 'bright', nod: 1, sway: 0.9, talk: 1 },
+  talkSad: { face: 'sorry', nod: 0.7, sway: 0.5, roll: 0.04, talk: 1 },
+  talkThink: { face: 'ponder', nod: 0.8, sway: 0.6, talk: 1 },
 };

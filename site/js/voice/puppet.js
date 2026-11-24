@@ -38,14 +38,24 @@ vec4 speak(vec4 col, vec2 p) {
   return mix(col, mouthCol, max(hole, lips.a) * talkMix);
 }`;
 
+const atlasPart = (A) => `
+vec4 face(vec2 p) {
+  vec4 base = texture2D(faceA, p);
+  vec2 t = (p - vec2(${g(A.rect[0])}, ${g(A.rect[1])})) / vec2(${g(A.rect[2])}, ${g(A.rect[3])});
+  if (t.x < 0.0 || t.y < 0.0 || t.x > 1.0 || t.y > 1.0) return base;
+  vec2 s = t * vec2(${g(A.cell[0])}, ${g(A.cell[1])});
+  vec4 c = mix(mix(texture2D(atlas, tileA + s), texture2D(atlas, tileB + s), blendAB), texture2D(atlas, tileC + s), blendC);
+  vec2 e = min(t, 1.0 - t);
+  return mix(base, c, smoothstep(0.0, 0.04, min(e.x, e.y)));
+}`;
+
 const frag = (rig) => {
-  const { geo, mouth: M, fade, size } = rig;
+  const { geo, mouth: M, fade, size, atlas: A } = rig;
   const aspect = size[0] / size[1];
   return `precision mediump float;
 varying vec2 uv;
 uniform sampler2D faceA;
-uniform sampler2D faceB;
-uniform sampler2D faceC;
+${A ? 'uniform sampler2D atlas;\nuniform vec2 tileA;\nuniform vec2 tileB;\nuniform vec2 tileC;' : 'uniform sampler2D faceB;\nuniform sampler2D faceC;'}
 uniform sampler2D rigMap;
 uniform float blendAB;
 uniform float blendC;
@@ -59,7 +69,7 @@ uniform float lift;
 uniform vec2 hair;
 uniform vec2 px;
 ${M ? mouthPart(M) : ''}
-vec4 face(vec2 p) { return mix(mix(texture2D(faceA, p), texture2D(faceB, p), blendAB), texture2D(faceC, p), blendC); }
+${A ? atlasPart(A) : 'vec4 face(vec2 p) { return mix(mix(texture2D(faceA, p), texture2D(faceB, p), blendAB), texture2D(faceC, p), blendC); }'}
 
 vec2 turn(vec2 v, float a) {
   v.x *= ${g(aspect)};
@@ -134,7 +144,8 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
   canvas.className = 'kira-gl';
   canvas.setAttribute('aria-hidden', 'true');
   const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: 'low-power' });
-  const units = rig.mouth ? 5 : 4;
+  const SAMPLERS = rig.atlas ? ['faceA', 'atlas', 'rigMap', 'mouthTex'] : ['faceA', 'faceB', 'faceC', 'rigMap', 'mouthTex'];
+  const units = SAMPLERS.length - (rig.mouth ? 0 : 1);
   if (!gl || gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) < units) return null;
   const prog = program(gl, rig);
   if (!prog) return null;
@@ -148,6 +159,8 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
   const faces = new Map();
   let rigTex = null;
   let mouthTex = null;
+  let baseTex = null;
+  let atlasTex = null;
   let ready = false;
   let running = false;
   let raf = 0;
@@ -175,9 +188,9 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
   const at = gl.getAttribLocation(prog, 'pos');
   gl.enableVertexAttribArray(at);
   gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(['faceA', 'faceB', 'faceC', 'rigMap', 'blendAB', 'blendC', 'frame', 'headRoll', 'headShift', 'look', 'breath', 'bodyRoll', 'lift', 'hair', 'px', 'mouthTex', 'mouth', 'talkMix']
+  const u = Object.fromEntries(['faceA', 'faceB', 'faceC', 'atlas', 'tileA', 'tileB', 'tileC', 'rigMap', 'blendAB', 'blendC', 'frame', 'headRoll', 'headShift', 'look', 'breath', 'bodyRoll', 'lift', 'hair', 'px', 'mouthTex', 'mouth', 'talkMix']
     .map((k) => [k, gl.getUniformLocation(prog, k)]));
-  ['faceA', 'faceB', 'faceC', 'rigMap', 'mouthTex'].slice(0, units).forEach((k, i) => gl.uniform1i(u[k], i));
+  SAMPLERS.slice(0, units).forEach((k, i) => gl.uniform1i(u[k], i));
   gl.uniform4f(u.frame, PAD_X / (1 + 2 * PAD_X), PAD_TOP / (1 + PAD_TOP), 1 + 2 * PAD_X, 1 + PAD_TOP);
   gl.clearColor(0, 0, 0, 0);
 
@@ -195,6 +208,18 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
   }
 
   async function load() {
+    if (rig.atlas) {
+      const baseUrl = faceUrls?.[IDLE];
+      if (!rig.map || !baseUrl) return false;
+      const [rigImg, mouthImg, baseImg, atlasImg] = await Promise.all([loadImage(rig.map), rig.mouth ? loadImage(rig.mouth.url) : null, loadImage(baseUrl), loadImage(rig.atlas.url)]);
+      if (gl.isContextLost()) return false;
+      rigTex = texture(rigImg);
+      if (mouthImg) mouthTex = texture(mouthImg);
+      baseTex = texture(baseImg);
+      atlasTex = texture(atlasImg);
+      Object.entries(rig.atlas.pos).forEach(([n, at]) => faces.set(n, at));
+      return true;
+    }
     const names = Object.entries(faceUrls || {});
     if (!rig.map || !names.length) return false;
     const [rigImg, mouthImg, ...imgs] = await Promise.all([loadImage(rig.map), rig.mouth ? loadImage(rig.mouth.url) : null, ...names.map(([, src]) => loadImage(src))]);
@@ -219,7 +244,7 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
     pose = next;
     const body = poseOf(next);
     if (body.hop && !calm.matches) m.lift.v += 4 * body.hop;
-    if (next === 'talk') talkFrom = clock;
+    if (body.talk) talkFrom = clock;
     const face = faceOf(next);
     if (view.fading && view.fade > 0.5) view.a = view.c;
     if (face === view.a && !view.fading) return;
@@ -240,7 +265,7 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
     }
 
     let shape = REST;
-    const talking = pose === 'talk';
+    const talking = !!body.talk;
     if (talking && rig.mouth) {
       const live = voiceLevel();
       const cue = voiceCue();
@@ -263,8 +288,8 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
     talkMix += ((talking && rig.mouth ? 1 : 0) - talkMix) * Math.min(1, (talking ? 14 : 8) * dt);
 
     let blink = 0;
-    const eyesOpen = !shut.has(view.a) && !view.fading;
-    if (eyesOpen && faces.has('blink')) {
+    const eyesOpen = !view.fading && (rig.atlas ? faces.has(`${view.a}.blink`) : !shut.has(view.a) && faces.has('blink'));
+    if (eyesOpen) {
       if (!blinkAt) blinkAt = clock + 1.5 + Math.random() * 3;
       if (blinkStart < 0 && clock >= blinkAt) blinkStart = clock;
       if (blinkStart >= 0) {
@@ -306,10 +331,20 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
   function draw() {
     fit();
     gl.clear(gl.COLOR_BUFFER_BIT);
-    const texA = faces.get(view.a) || faces.get(IDLE);
-    const texB = faces.get('blink') || texA;
-    const texC = faces.get(view.c) || texA;
-    [texA, texB, texC, rigTex, mouthTex].slice(0, units).forEach((tex, i) => {
+    let bound;
+    if (rig.atlas) {
+      const at = faces.get(view.a) || faces.get(IDLE);
+      const shutAt = faces.get(`${view.a}.blink`) || at;
+      const to = faces.get(view.c) || at;
+      gl.uniform2f(u.tileA, at[0], at[1]);
+      gl.uniform2f(u.tileB, shutAt[0], shutAt[1]);
+      gl.uniform2f(u.tileC, to[0], to[1]);
+      bound = [baseTex, atlasTex, rigTex, mouthTex];
+    } else {
+      const texA = faces.get(view.a) || faces.get(IDLE);
+      bound = [texA, faces.get('blink') || texA, faces.get(view.c) || texA, rigTex, mouthTex];
+    }
+    bound.slice(0, units).forEach((tex, i) => {
       gl.activeTexture(gl.TEXTURE0 + i);
       gl.bindTexture(gl.TEXTURE_2D, tex);
     });
