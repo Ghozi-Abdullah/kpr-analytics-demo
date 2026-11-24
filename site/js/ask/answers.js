@@ -11,6 +11,7 @@ import { provinceName } from '../map/indonesia-map.js';
 import { kancaLabel } from '../map/branch-locations.js';
 import { preparePf } from '../services/datasets.js';
 import { outlook, simulate, simulateCurrent, simulateYear } from '../analytics/outlook.js';
+import { periodRows } from '../analytics/period.js';
 import { outlookText, roRows, liftText, tierOf, yearLabel } from '../analytics/outlook-text.js';
 import {
   perfScope, growthEngine, realFilter, realTotals, realGroup, workdaysOf, pfLabels, pfSums, pfGroup,
@@ -1265,6 +1266,54 @@ function wantsYearPlan(q, D) {
   return !!year && (String(q.norm).match(/\b20\d\d\b/g) || []).some((y) => Number(y) > year);
 }
 
+const YEAR_END = /\b(akhir tahun|akhir desember|tutup tahun|year end|akhir 20\d\d)\b/;
+const PROJECTING = /\b(proyeksi|perkiraan|prediksi|estimasi|forecast|tercapai|capai|kecapai|kekejar|terkejar|tembus|bakal|akan)\b/;
+
+function wantsYearEnd(q, D) {
+  if (!D.pm || ['realisasi', 'realdeb', 'npl', 'sml', 'debitur'].includes(q.metric) || pickSource(q) === 'real' || wantsYearPlan(q, D)) return false;
+  const latest = String(D.perfLatest || '');
+  const year = latest.slice(0, 4);
+  if (!year || latest.slice(5, 7) === '12') return false;
+  if ((String(q.norm).match(/\b20\d\d\b/g) || []).some((y) => y !== year)) return false;
+  return YEAR_END.test(q.norm) || (/\bdesember\b/.test(q.norm) && PROJECTING.test(q.norm));
+}
+
+function answerYearEnd(q, D) {
+  const ros = rosOf(q, D);
+  const ro = ros.length === 1 ? ros[0] : '';
+  const rows = periodRows(D.pm, ro, '6');
+  const last = rows.at(-1);
+  if (!last?.month) return null;
+  const year = last.month.slice(0, 4);
+  const dec = `${year}-12`;
+  const o = outlook(D.pm, { ro, real: D.real, perRo: false });
+  const at = (path) => path?.find((x) => x.month === dec)?.os;
+  const base = at(o?.year?.base?.path);
+  if (!ok(base)) return null;
+  const low = at(o.year.low?.path);
+  const high = at(o.year.cap?.path);
+  const rk = rows.filter((r) => ok(r.rkaOs)).slice(-4);
+  const steps = rk.slice(1).map((x, i) => x.rkaOs - rk[i].rkaOs).sort((x, y) => x - y);
+  const step = steps.length ? steps[Math.floor(steps.length / 2)] : null;
+  const left = Math.max(0, 12 - Number(last.month.slice(5, 7)));
+  const rkaDec = ok(last.rkaOs) && ok(step) ? last.rkaOs + step * left : null;
+  const ach = ok(rkaDec) && rkaDec > 0 ? base / rkaDec : null;
+  const where = ro ? roName(ro) : 'nasional';
+  return {
+    ok: true,
+    title: `Dengan laju biasa, OS ${where} akhir Desember ${year} diperkirakan ${b(rpM(base))}${ok(ach) ? `, sekitar ${b(pct(ach, 1))} dari perkiraan RKA Desember ${rpM(rkaDec)}` : ''}.`,
+    lines: [
+      ok(last.os) ? `Posisi ${monthName(last.month)} ${rpM(last.os)}; tambahan sampai Desember sekitar ${rpM(base - last.os)} dalam ${left} bulan.` : '',
+      ok(step) ? `Perkiraan RKA Desember memakai kenaikan RKA bulanan median 3 bulan terakhir (${rpM(step)} per bulan).` : '',
+      ok(low) && ok(high) && high - low > Math.abs(base) * 0.001 ? `Rentangnya ${rpM(low)} sampai ${rpM(high)}, tergantung laju penyaluran.` : '',
+      ok(ach) ? (ach < 1 ? `Untuk mengejar RKA perlu tambahan pertumbuhan sekitar ${rpM(rkaDec - base)} di atas laju biasa sampai Desember.` : 'Arahnya sudah aman untuk melewati RKA.') : '',
+    ].filter(Boolean),
+    chips: chips([['Wilayah', roName(ro || NASIONAL)], ['Metode', 'laju biasa (Outlook) sampai Desember'], ['Sumber', 'Performance']]),
+    link: { view: 'ringkasan', params: { ro }, widget: 'outlook', label: 'Buka panel Outlook' },
+    followups: [`Strategi ${Number(year) + 1}`, 'Disburse bulan depan harus naik berapa persen?', 'RO mana yang paling butuh dorongan?'],
+  };
+}
+
 async function answerForecast(q, D) {
   const ros = rosOf(q, D);
   const ro = ros.length === 1 ? ros[0] : '';
@@ -1972,6 +2021,7 @@ export async function answer(q, D, vocab, memory = null) {
   }
   if (q.unresolved) return answerUnresolved(q, vocab);
   if (q.domain === 'sla') return slaAnswer(q, D, KIT);
+  if (q.intent === 'compare' && !q.metric && !q.domain && !q.groupBy && (q.time2 || q.time?.kind)) q = { ...q, metric: 'os', metrics: ['os'], assumedMetric: true };
   if (q.intent === 'attention') return answerAttention(q, D);
   if (q.metric === 'quality') return answerQuality(q, D);
   if (q.intent === 'zero') return answerZero(q, D);
@@ -1987,6 +2037,10 @@ export async function answer(q, D, vocab, memory = null) {
     }
   }
   if (q.intent === 'coverage') return answerCoverage(q, D);
+  if (wantsYearEnd(q, D) && !['define', 'help', 'talk', 'compare', 'rank', 'filter'].includes(q.intent)) {
+    const ye = answerYearEnd(q, D);
+    if (ye) return ye;
+  }
   if (q.intent === 'plan') return answerPlan(q, D);
   if (q.intent === 'anomaly') return answerAnomaly(q, D);
   if (q.intent === 'why') return answerWhy(q, D);

@@ -239,8 +239,8 @@ function stageAnswer(q, D, kit, sel, ids) {
   };
 }
 
-const DIM_KEY = { ro: 'ro', kanca: 'kanca', fi: 'pendapatan', putusan: 'putusan' };
-const DIM_WORD = { ro: 'RO', kanca: 'kanca', fi: 'jenis pendapatan', putusan: 'jenis putusan', tahap: 'tahap' };
+const DIM_KEY = { ro: 'ro', kanca: 'kanca', fi: 'pendapatan', putusan: 'putusan', pekerjaan: 'pekerjaan' };
+const DIM_WORD = { ro: 'RO', kanca: 'kanca', fi: 'jenis pendapatan', putusan: 'jenis putusan', tahap: 'tahap', pekerjaan: 'jenis pekerjaan' };
 
 function metricSpec(m, useMax) {
   switch (m) {
@@ -275,7 +275,7 @@ function rankAnswer(q, D, kit, sel) {
     const st = byStage(base);
     groups = SLA_STAGES.filter((s) => base.some((r) => r.stage === s.id)).map((s) => [s.id, st.get(s.id)]);
   } else groups = [...groupTally(base, DIM_KEY[dim])].filter(([k]) => k);
-  const nameOf = (k) => (dim === 'tahap' ? label(k) : dim === 'ro' ? roName(k) : esc(dim === 'putusan' ? putusanLabel(k) : k));
+  const nameOf = (k) => (dim === 'tahap' ? label(k) : dim === 'ro' ? roName(k) : esc(dim === 'putusan' ? putusanLabel(k) : dim === 'pekerjaan' ? k.replace(/^KPR Perorangan\s+/i, '') : k));
   const items = groups.filter(([, t]) => M.min(t, dim) && ok(M.get(t))).map(([k, t]) => ({ key: k, label: nameOf(k), v: M.get(t), text: M.text(t), sub: M.sub(t), t }));
   if (!items.length) return { ok: false, title: `Belum ada data ${M.word} yang cukup untuk diurutkan per ${DIM_WORD[dim]}.` };
   let dir = 'desc';
@@ -284,7 +284,7 @@ function rankAnswer(q, D, kit, sel) {
   else if (q.order === 'worst') dir = M.better === 'down' ? 'desc' : 'asc';
   else if (q.order === 'asc') dir = 'asc';
   const sorted = items.sort((a, c) => (dir === 'asc' ? a.v - c.v : c.v - a.v) || c.t.berkas - a.t.berkas);
-  const n = Math.min(q.topN || (dim === 'tahap' || dim === 'fi' || dim === 'putusan' ? sorted.length : 5), sorted.length, 25);
+  const n = Math.min(q.topN || (['tahap', 'fi', 'putusan', 'pekerjaan'].includes(dim) ? sorted.length : 5), sorted.length, 25);
   const top = sorted.slice(0, n);
   const lead = top[0];
   const where = whereOf(sel, kit);

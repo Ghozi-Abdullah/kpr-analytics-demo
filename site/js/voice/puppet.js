@@ -57,7 +57,10 @@ uniform float breath;
 uniform float bodyRoll;
 uniform float lift;
 uniform vec2 hair;
+uniform vec2 px;
 ${M ? mouthPart(M) : ''}
+vec4 face(vec2 p) { return mix(mix(texture2D(faceA, p), texture2D(faceB, p), blendAB), texture2D(faceC, p), blendC); }
+
 vec2 turn(vec2 v, float a) {
   v.x *= ${g(aspect)};
   float s = sin(a);
@@ -81,7 +84,9 @@ void main() {
   q -= look * r.g;
   q.x -= r.r * hair.x * sin(hair.y + q.y * 7.0);
   if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) { gl_FragColor = vec4(0.0); return; }
-  vec4 col = mix(mix(texture2D(faceA, q), texture2D(faceB, q), blendAB), texture2D(faceC, q), blendC);
+  vec2 o1 = vec2(0.125, 0.375) * px;
+  vec2 o2 = vec2(0.375, -0.125) * px;
+  vec4 col = (face(q + o1) + face(q - o1) + face(q + o2) + face(q - o2)) * 0.25;
   ${M ? 'col = speak(col, q);' : ''}
   gl_FragColor = ${fade ? `col * smoothstep(1.0, ${g(1 - fade)}, q.y)` : 'col'};
 }`;
@@ -122,7 +127,7 @@ async function loadImage(src) {
   return img;
 }
 
-export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLevel = () => -1, voiceCue = () => null, lite = () => false } = {}) {
+export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLevel = () => -1, voiceCue = () => null } = {}) {
   const blob = host?.querySelector('.blob');
   if (!blob || host.querySelector('.kira-gl') || !rig) return null;
   const canvas = document.createElement('canvas');
@@ -170,7 +175,7 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
   const at = gl.getAttribLocation(prog, 'pos');
   gl.enableVertexAttribArray(at);
   gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(['faceA', 'faceB', 'faceC', 'rigMap', 'blendAB', 'blendC', 'frame', 'headRoll', 'headShift', 'look', 'breath', 'bodyRoll', 'lift', 'hair', 'mouthTex', 'mouth', 'talkMix']
+  const u = Object.fromEntries(['faceA', 'faceB', 'faceC', 'rigMap', 'blendAB', 'blendC', 'frame', 'headRoll', 'headShift', 'look', 'breath', 'bodyRoll', 'lift', 'hair', 'px', 'mouthTex', 'mouth', 'talkMix']
     .map((k) => [k, gl.getUniformLocation(prog, k)]));
   ['faceA', 'faceB', 'faceC', 'rigMap', 'mouthTex'].slice(0, units).forEach((k, i) => gl.uniform1i(u[k], i));
   gl.uniform4f(u.frame, PAD_X / (1 + 2 * PAD_X), PAD_TOP / (1 + PAD_TOP), 1 + 2 * PAD_X, 1 + PAD_TOP);
@@ -201,11 +206,12 @@ export function mountPuppet(host, { faces: faceUrls, rig, poses: POSES, voiceLev
   }
 
   function fit() {
-    const dpr = Math.min(2, globalThis.devicePixelRatio || 1) * (lite() ? 0.75 : 1);
+    const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
     const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
     const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     gl.viewport(0, 0, w, h);
+    gl.uniform2f(u.px, (1 + 2 * PAD_X) / w, (1 + PAD_TOP) / h);
   }
 
   function show(next) {

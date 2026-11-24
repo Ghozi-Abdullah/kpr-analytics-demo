@@ -120,7 +120,8 @@
   .voice-assistant[data-layout="chat"][open], .voice-assistant[data-layout="chat"][data-stage="empty"][open] {
     grid-template-columns: minmax(0, 1fr) clamp(360px, 28vw, 440px); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "top top" "stage panel";
   }
-  .voice-assistant[data-layout="chat"] .va-stage, .voice-assistant[data-layout="chat"][data-stage="empty"] .va-stage { display: grid; padding: 0 12px 24px clamp(14px, 2.4vw, 32px); }
+  .voice-assistant[data-layout="chat"] .va-stage, .voice-assistant[data-layout="chat"][data-stage="empty"] .va-stage { display: grid; padding: 0 12px clamp(14px, 2.6vh, 26px) clamp(14px, 2.4vw, 32px); }
+  .voice-assistant[data-layout="chat"] :is(.va-show, .va-compare) { max-height: none; }
   .voice-assistant[data-layout="chat"] .va-panel {
     gap: 10px; margin: 0 clamp(14px, 2vw, 28px) clamp(14px, 2.6vh, 26px) 4px; padding: 14px; border-radius: 26px;
     box-shadow: inset 0 0 0 1px rgb(11 33 71 / .07), 0 24px 48px -30px rgb(11 33 71 / .5);

@@ -328,9 +328,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
     const log = $('va-log');
     log.addEventListener('scroll', () => { logStick = log.scrollHeight - log.scrollTop - log.clientHeight < 40; }, { passive: true });
     new ResizeObserver(() => { if (logStick) log.scrollTop = log.scrollHeight; }).observe(log);
-    const lite = () => document.documentElement.classList.contains('fx-lite');
-    avatar = mountPuppet(orbEl, { faces: HALF, rig: HALF_RIG, poses: HALF_POSES, voiceLevel, voiceCue, lite });
-    figure = mountPuppet($('va-full'), { faces: FULL, rig: FULL_RIG, poses: FULL_POSES, voiceLevel, voiceCue, lite });
+    avatar = mountPuppet(orbEl, { faces: HALF, rig: HALF_RIG, poses: HALF_POSES, voiceLevel, voiceCue });
+    figure = mountPuppet($('va-full'), { faces: FULL, rig: FULL_RIG, poses: FULL_POSES, voiceLevel, voiceCue });
     suggest(HINTS);
     dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
     dlg.addEventListener('click', onClick);
@@ -2066,6 +2065,8 @@ export function createAssistant({ engine, getContext, set, openDetail, closeDeta
         document.addEventListener('visibilitychange', onVisible);
         if (pref.wake) startWake();
         setTimeout(() => { engine.ensure?.().catch(() => null); }, 1500);
+        const idle = globalThis.requestIdleCallback || ((fn) => setTimeout(fn, 600));
+        setTimeout(() => idle(() => { if (attached) build(); }, { timeout: 3000 }), 2600);
       }
       button?.addEventListener('click', () => open({ listenNow: true }));
       syncPills();

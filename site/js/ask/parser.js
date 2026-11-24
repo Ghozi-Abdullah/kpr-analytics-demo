@@ -489,7 +489,7 @@ function refine(q, { tokens, hits, pick, metrics, intents, groups, vocab, normRa
   const groupIds = groups.map((g) => g.value);
   const nonSla = metrics.filter((m) => !(m.value === 'disburse' && CAIR_WORDS.has(m.text)) && !['quality'].includes(m.value));
   const cues = [...slaM, ...stageH];
-  const strong = cues.filter((h) => !WEAK_SLA.has(h.text)).length + groupIds.filter((g) => g === 'tahap' || g === 'putusan').length + putH.length
+  const strong = cues.filter((h) => !WEAK_SLA.has(h.text)).length + groupIds.filter((g) => g === 'tahap' || g === 'putusan' || g === 'pekerjaan').length + putH.length
     + (/\bbelum (di ?putus|cair)\b/.test(norm) ? 1 : 0);
   const weak = cues.filter((h) => WEAK_SLA.has(h.text));
   const extra = (q.speed ? 1 : 0) + (q.threshold?.unit === 'hari' ? 1 : 0) + (slaM.some((h) => ['umur', 'lama'].includes(h.value)) ? 1 : 0);
@@ -614,9 +614,14 @@ const FOLLOW_WORDS = new Set(['kalau', 'kalo', 'klo', 'bagaimana', 'gimana', 'gm
 
 export function mergeFollowUp(q, prev) {
   if (!prev || ['help', 'define', 'unknown', 'talk'].includes(prev.intent)) return q;
+  if (/\b(strategi|rencana|tahun depan|tahunan)\b/.test(q.norm)) return q;
   const hasEntity = Object.values(q.entities).some((v) => (Array.isArray(v) ? v.length : v));
   const followWord = FOLLOW_WORDS.has(q.tokens[0]);
   if (['talk', 'help', 'define'].includes(q.intent)) return q;
+  if (/\b(akhir tahun|akhir desember|tutup tahun)\b/.test(q.norm) && !hasEntity && !q.metric && (followWord || q.tokens.length <= 4)) {
+    const metric = prev.metric && !['npl', 'sml', 'realisasi', 'realdeb', 'debitur'].includes(prev.metric) ? prev.metric : 'os';
+    return { ...q, intent: 'forecast', followUp: true, metric, entities: prev.entities, unknown: [] };
+  }
   if (['why', 'forecast', 'attention', 'anomaly'].includes(q.intent) && !q.metric && !q.domain && !hasEntity) {
     if (q.intent === 'attention' && prev.intent !== 'attention') return q;
     const time = q.time.kind ? q.time : prev.intent === 'compare' ? (prev.time2 ? prev.time : { kind: null, label: '' }) : prev.time;
